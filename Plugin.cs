@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using CUCoreLib.Data;
@@ -10,7 +11,7 @@ using UnityEngine.EventSystems;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.0.0")]
+[BepInPlugin(Guid, "Not Enough Items", "1.0.1")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -155,10 +156,17 @@ public sealed class Plugin : BaseUnityPlugin
         bool recipes = Pressed(_recipes), usages = Pressed(_usages), bookmark = Pressed(_bookmark);
         if (!recipes && !usages && !bookmark) return;
         var id = _window.ItemAt(mouse);
-        if (id == null && !_window.Hit(mouse) && _surface.HoveredItem(_active) is { } native) id = "item:" + native.id;
+        string[]? contents = null;
+        if (id == null && !_window.Hit(mouse) && _surface.HoveredItem(_active) is { } native)
+        {
+            id = "item:" + native.id;
+            if (!bookmark && native.TryGetComponent<WaterContainerItem>(out var container) && container.stack != null)
+                contents = container.stack.Where(stack => stack != null && stack.amount > 0 && !string.IsNullOrWhiteSpace(stack.liquidId))
+                    .Select(stack => "liquid:" + stack.liquidId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
         if (string.IsNullOrEmpty(id)) return;
         if (bookmark) _window.ToggleBookmark(id);
-        else _window.Lookup(id, usages);
+        else _window.Lookup(id, usages, contents);
         CaptureKey();
     }
 

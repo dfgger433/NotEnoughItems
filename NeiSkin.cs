@@ -6,20 +6,15 @@ namespace NotEnoughItems;
 internal static class NeiSkin
 {
     private static readonly Color32 Ink = Rgb(0x282A38);
-    private static readonly Color32 MutedInk = Rgb(0x505367);
+    private static readonly Color32 OverlayInk = Rgb(0xF4F2FB);
+    private static readonly Color32 OverlayMuted = Rgb(0xC3C6D8);
+    private static readonly Color32 Shadow = Rgb(0x191827);
     private static readonly Color32 TooltipInk = Rgb(0xF4F2FB);
     private static readonly Color32 TooltipAccent = Rgb(0xBDB4E1);
 
     private static SkinStyles? _styles;
 
-    /// <summary>Paints a raised panel. Does not clip or consume input.</summary>
-    internal static void Panel(Rect rect)
-    {
-        if (CanPaint(rect))
-            Paint(Styles.Panel, rect);
-    }
-
-    /// <summary>Paints a recessed item slot. The caller controls its hover, selection and clicks.</summary>
+    /// <summary>Paints only an interactive slot's border or hover state; its interior is transparent at rest.</summary>
     internal static void Slot(Rect rect, bool hovered = false, bool selected = false)
     {
         if (!CanPaint(rect))
@@ -61,7 +56,24 @@ internal static class NeiSkin
 
         SkinStyles styles = Styles;
         styles.LabelContent.text = text;
+        Paint(styles.LabelShadow(alignment), Offset(rect), styles.LabelContent);
         Paint(styles.Label(alignment, muted), rect, styles.LabelContent);
+    }
+
+    /// <summary>Draws wrapping, legible description text without a panel fill.</summary>
+    internal static void Text(Rect rect, string text)
+    {
+        if (!CanPaint(rect) || string.IsNullOrWhiteSpace(text)) return;
+        var styles = Styles;
+        styles.LabelContent.text = text;
+        Paint(styles.WrappedShadow, Offset(rect), styles.LabelContent);
+        Paint(styles.Wrapped, rect, styles.LabelContent);
+    }
+
+    private static Rect Offset(Rect rect)
+    {
+        rect.position += Vector2.one;
+        return rect;
     }
 
     /// <summary>Draws a non-interactive tooltip; call last, outside any clipping groups.</summary>
@@ -107,13 +119,18 @@ internal static class NeiSkin
             y = mousePosition.y - height - 8f;
         y = Mathf.Clamp(y, viewMin.y + margin, viewMax.y - height - margin);
 
-        Paint(styles.Tooltip, new Rect(x, y, width, height));
         float textBottom = y + height - pad;
         float titleY = y + pad;
-        Paint(styles.TooltipTitle, new Rect(x + pad, titleY, textWidth, Mathf.Min(titleHeight, textBottom - titleY)), title);
+        var titleRect = new Rect(x + pad, titleY, textWidth, Mathf.Min(titleHeight, textBottom - titleY));
+        Paint(styles.WrappedShadow, Offset(titleRect), title);
+        Paint(styles.TooltipTitle, titleRect, title);
         float detailY = titleY + titleHeight + gap;
         if (hasDetail && detailY < textBottom)
-            Paint(styles.TooltipDetail, new Rect(x + pad, detailY, textWidth, textBottom - detailY), detail);
+        {
+            var detailRect = new Rect(x + pad, detailY, textWidth, textBottom - detailY);
+            Paint(styles.TooltipDetailShadow, Offset(detailRect), detail);
+            Paint(styles.TooltipDetail, detailRect, detail);
+        }
     }
 
     /// <summary>Releases generated Unity textures on the main thread, for example during plug-in teardown.</summary>
@@ -154,7 +171,9 @@ internal static class NeiSkin
         private readonly System.Collections.Generic.List<Texture2D> _textures = new();
         private readonly GUIStyle?[,] _labels = new GUIStyle[9, 2];
 
-        internal readonly GUIStyle Panel;
+        private readonly GUIStyle?[] _labelShadows = new GUIStyle[9];
+        internal readonly GUIStyle Wrapped;
+        internal readonly GUIStyle WrappedShadow;
         internal readonly GUIStyle Slot;
         internal readonly GUIStyle SlotHovered;
         internal readonly GUIStyle SlotSelected;
@@ -164,18 +183,19 @@ internal static class NeiSkin
         internal readonly GUIStyle Tab;
         internal readonly GUIStyle TabSelected;
         internal readonly GUIStyle TextField;
-        internal readonly GUIStyle Tooltip;
         internal readonly GUIStyle TooltipTitle;
         internal readonly GUIStyle TooltipDetail;
+        internal readonly GUIStyle TooltipDetailShadow;
         internal readonly GUIContent LabelContent = new();
         internal readonly GUIContent TooltipTitleContent = new();
         internal readonly GUIContent TooltipDetailContent = new();
 
         internal SkinStyles()
         {
-            // Silver shell, slate controls and sky-blue focus. The patches are geometry, not imported art.
-            Panel = FrameStyle(Patch(0xC9CAD3, 0xFBFBFD, 0x858896, 0x656874, cutCorners: true));
-            Slot = FrameStyle(Patch(0xA5A9BD, 0x767B91, 0xE5E7EF, 0xB8BBC9));
+            // Only controls paint a surface. Inline text uses a one-pixel shadow over the game.
+            Wrapped = TextStyle(TextAnchor.UpperLeft, OverlayInk, 13, wrap: true);
+            WrappedShadow = TextStyle(TextAnchor.UpperLeft, Shadow, 13, wrap: true);
+            Slot = FrameStyle(Patch(0xA5A9BD, 0x767B91, 0xE5E7EF, 0xB8BBC9, faceAlpha: 0));
             SlotHovered = FrameStyle(Patch(0xC1D8EE, 0x6689A7, 0xF3FAFF, 0x819FB7));
             SlotSelected = FrameStyle(Patch(0xA4C8EA, 0x4F779B, 0xE4F6FF, 0x587A99));
 
@@ -197,16 +217,19 @@ internal static class NeiSkin
             Texture2D fieldFocus = Patch(0x161528, 0x37638D, 0xC2E7FF, 0x8EBBE4);
             TextField = ControlStyle(field, fieldHover, fieldFocus, fieldFocus, TextAnchor.MiddleLeft, TooltipInk, 7);
 
-            Tooltip = FrameStyle(Patch(0x171120, 0x67508A, 0x3F2C58, 0x100B18, cutCorners: true));
             TooltipTitle = TextStyle(TextAnchor.UpperLeft, TooltipInk, 13, wrap: true);
             TooltipDetail = TextStyle(TextAnchor.UpperLeft, TooltipAccent, 12, wrap: true);
+            TooltipDetailShadow = TextStyle(TextAnchor.UpperLeft, Shadow, 12, wrap: true);
         }
 
         internal GUIStyle Label(TextAnchor alignment, bool muted)
         {
             int row = muted ? 1 : 0;
-            return _labels[(int)alignment, row] ??= TextStyle(alignment, muted ? MutedInk : Ink, 13);
+            return _labels[(int)alignment, row] ??= TextStyle(alignment, muted ? OverlayMuted : OverlayInk, 13);
         }
+
+        internal GUIStyle LabelShadow(TextAnchor alignment) =>
+            _labelShadows[(int)alignment] ??= TextStyle(alignment, Shadow, 13);
 
         internal void Release()
         {
@@ -263,9 +286,10 @@ internal static class NeiSkin
             state.textColor = color;
         }
 
-        private Texture2D Patch(uint center, uint topLeft, uint bottomRight, uint outline, bool cutCorners = false)
+        private Texture2D Patch(uint center, uint topLeft, uint bottomRight, uint outline, bool cutCorners = false, byte faceAlpha = 255)
         {
             Color32 face = Rgb(center);
+            face.a = faceAlpha;
             Color32 light = Rgb(topLeft);
             Color32 dark = Rgb(bottomRight);
             Color32 rim = Rgb(outline);

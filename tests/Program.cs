@@ -22,6 +22,7 @@ static int RunTests()
         ("recipe inspector is clamped to screen margins", InspectorLayout),
 #if RECIPE_TESTS
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
+        ("usage queries share ingredient matching semantics without false positives", RecipeUsageMatching),
         ("source replacement clears stale recipes without affecting other sources", RecipeSourceReplacement),
 #endif
     ];
@@ -191,11 +192,110 @@ static void RecipeRegistration()
         Check(catalog.GetRecipesProducing("test.ingot").Single() == recipe, "Primary output must be indexed.");
         Check(catalog.GetRecipesProducing("test.byproduct").Single() == recipe, "Additional outputs must be indexed.");
         Check(catalog.GetItemUsages("test.tongs").Single() == recipe, "Catalysts must count as usages.");
+        Check(catalog.GetItemUsages(category.MachineId).Single() == recipe, "Machine IDs must remain discoverable without a loaded machine.");
+        var inherited = new ProviderRecipe("test.inherited-machine", category.Id, [], [new RecipeOutput("test.other-output")], source: source);
+        RecipeApi.RegisterRecipe(inherited);
+        Check(catalog.GetItemUsages(category.MachineId).Contains(inherited), "Recipes inherit their registered category's machine requirement when no machine ID was specified.");
         Check(!catalog.TryGetNativeRecipeIndex(recipe.Id, out _), "A provider recipe is not a live game recipe.");
     }
     finally
     {
         RecipeApi.ClearSource(source);
+    }
+}
+
+static void RecipeUsageMatching()
+{
+    var catalog = new Catalog();
+    var qualityItem = new global::CraftingQuality("test.fabric", 3f);
+    var insufficientQuality = new global::CraftingQuality("test.fabric", 1f);
+    var items = new[]
+    {
+        new CatalogItem("test.material", "Material", qualities: [new global::CraftingQuality("test.fabric", 3f)]),
+        new CatalogItem("test.tool", "Retained tool"),
+        new CatalogItem("test.fiber", "Fabric fiber", tags: ["cloth"], qualities: [qualityItem]),
+        new CatalogItem("test.low-quality", "Insufficient fabric", tags: ["cloth"], qualities: [insufficientQuality]),
+        new CatalogItem("test.wrong-tag", "Wrong tag", qualities: [new global::CraftingQuality("test.metal", 3f)]),
+        new CatalogItem("test.ignored", "Ignored cloth", tags: ["cloth"], qualities: [qualityItem]),
+        new CatalogItem("test.liquid", "Test liquid", kind: CatalogItemKind.Liquid,
+            qualities: [new global::CraftingQuality("test.fabric", 3f)])
+    };
+    foreach (CatalogItem item in items)
+        catalog.RegisterItem(item);
+
+    var category = new ProviderCategory("test.usage-category");
+    var exactInput = new RecipeIngredient("test.material");
+    var toolInput = new RecipeIngredient("test.tool", isCatalyst: true);
+    var qualityInput = new RecipeIngredient(string.Empty, amount: 2f, qualityId: "test.fabric");
+    var tagInput = new RecipeIngredient(string.Empty, requiredTag: "cloth", ignoredItemId: "test.ignored");
+    var liquidQualityInput = new RecipeIngredient(string.Empty, amount: 2f, isLiquid: true, qualityId: "test.fabric");
+    var recipes = new[]
+    {
+        new ProviderRecipe("test.use-material", category.Id, [exactInput], [new RecipeOutput("test.output-material")]),
+        new ProviderRecipe("test.use-tool", category.Id, [toolInput], [new RecipeOutput("test.output-tool")]),
+        new ProviderRecipe("test.use-quality", category.Id, [qualityInput], [new RecipeOutput("test.output-quality")]),
+        new ProviderRecipe("test.use-tag", category.Id, [tagInput], [new RecipeOutput("test.output-tag")]),
+        new ProviderRecipe("test.use-liquid-quality", category.Id, [liquidQualityInput], [new RecipeOutput("test.output-liquid")])
+    };
+    foreach (ProviderRecipe recipe in recipes)
+        catalog.RegisterRecipe(recipe);
+
+    IReadOnlyList<CatalogItem> Matches(RecipeIngredient ingredient, bool includeBelowRequirement = false) =>
+        catalog.GetMatchingItems(ingredient, includeBelowRequirement);
+    IReadOnlyList<ProviderRecipe> Uses(string id) => catalog.GetRecipesUsing(id);
+    void HasMatch(RecipeIngredient ingredient, string browseId, string message) =>
+        Check(Matches(ingredient).Any(item => string.Equals(item.BrowseId, browseId, StringComparison.OrdinalIgnoreCase)), message);
+    void LacksMatch(RecipeIngredient ingredient, string browseId, string message) =>
+        Check(Matches(ingredient).All(item => !string.Equals(item.BrowseId, browseId, StringComparison.OrdinalIgnoreCase)), message);
+    void HasUse(string itemId, ProviderRecipe recipe, string message) =>
+        Check(Uses(itemId).Contains(recipe), message);
+    void LacksUse(string itemId, ProviderRecipe recipe, string message) =>
+        Check(!Uses(itemId).Contains(recipe), message);
+
+    HasMatch(exactInput, "item:test.material", "A concrete ingredient must match its exact item type.");
+    LacksMatch(exactInput, "item:test.tool", "A concrete ingredient must not match unrelated items.");
+    HasMatch(toolInput, "item:test.tool", "A non-consumed catalyst must still be a valid matching item.");
+    HasMatch(qualityInput, "item:test.fiber", "A quality wildcard must include items meeting the requested amount.");
+    LacksMatch(qualityInput, "item:test.low-quality", "A quality wildcard must reject insufficient quality amount by default.");
+    Check(Matches(qualityInput, includeBelowRequirement: true).Any(item => item.BrowseId == "item:test.low-quality"),
+        "Expanded quality matching must include same-quality types below the amount threshold.");
+    LacksMatch(qualityInput, "item:test.wrong-tag", "A quality wildcard must not accept items solely due to a different property.");
+    LacksMatch(qualityInput, "liquid:test.liquid", "An item quality wildcard must not match a liquid with the same quality ID.");
+    HasMatch(tagInput, "item:test.fiber", "A property wildcard must include items with the required tag.");
+    LacksMatch(tagInput, "item:test.ignored", "A property wildcard must exclude its ignored item ID.");
+    LacksMatch(tagInput, "item:test.wrong-tag", "A property wildcard must reject items missing the required tag.");
+    HasMatch(liquidQualityInput, "liquid:test.liquid", "A liquid quality wildcard must use the liquid catalog type.");
+    LacksMatch(liquidQualityInput, "item:test.material", "A liquid quality wildcard must not produce item candidates.");
+
+    HasUse("TEST.MATERIAL", recipes[0], "Concrete uses must be case-insensitive.");
+    LacksUse("test.tool", recipes[0], "A concrete use must not become a false-positive usage.");
+    HasUse("item:test.tool", recipes[1], "Catalysts are still recipe uses.");
+    HasUse("item:test.fiber", recipes[2], "Quality matches must appear in reverse-use queries.");
+    HasUse("item:test.low-quality", recipes[2], "Reverse usage is a type predicate and must not impose candidate amount filtering.");
+    LacksUse("item:test.wrong-tag", recipes[2], "Quality uses must not include an item lacking the quality.");
+    HasUse("item:test.fiber", recipes[3], "Required-tag inputs must appear as usages for matching items.");
+    LacksUse("item:test.ignored", recipes[3], "Required-tag reverse usage must exclude ignored item types.");
+    LacksUse("item:test.wrong-tag", recipes[3], "Required-tag reverse usage must reject items without the tag.");
+    HasUse("liquid:test.liquid", recipes[4], "Liquid quality uses must preserve liquid type.");
+    LacksUse("item:test.material", recipes[4], "Liquid quality uses must not match same-quality item types.");
+
+    foreach (var (ingredient, recipe) in new[]
+    {
+        (exactInput, recipes[0]), (toolInput, recipes[1]), (qualityInput, recipes[2]),
+        (tagInput, recipes[3]), (liquidQualityInput, recipes[4])
+    })
+    {
+        foreach (CatalogItem item in items)
+        {
+            bool expectedUse = ingredient.Matches(item);
+            bool indexedUse = Uses(item.BrowseId).Contains(recipe);
+            if (ingredient.MatchesAny && ingredient.QualityId.Length > 0 && !ingredient.IsLiquid && item.Id == "test.low-quality")
+                Check(indexedUse && !expectedUse,
+                    "Reverse uses intentionally follow native type/quality-ID semantics rather than candidate amount requirements.");
+            else
+                Check(indexedUse == expectedUse,
+                    $"Usage index and ingredient matching must agree for {recipe.Id} / {item.BrowseId}.");
+        }
     }
 }
 

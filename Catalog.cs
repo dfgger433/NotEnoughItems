@@ -207,6 +207,8 @@ namespace NotEnoughItems
         public float MinimumCondition { get; }
         /// <summary>Native recipe item ID that is ignored when selecting candidates.</summary>
         public string IgnoredItemId { get; }
+        /// <summary>Whether a native non-liquid candidate must be below 99.1% condition.</summary>
+        public bool NoMaxCondition { get; internal set; }
         /// <summary>Optional provider display label.</summary>
         public string DisplayName { get; }
         /// <summary>Required native item tag for a tag-matched process input.</summary>
@@ -214,22 +216,51 @@ namespace NotEnoughItems
         /// <summary>True when this ingredient is consumed by the recipe.</summary>
         public bool IsConsumed => !IsCatalyst;
 
-        /// <summary>Returns whether this ingredient can use the supplied catalog entry.</summary>
-        public bool Matches(CatalogItem item)
+        /// <summary>
+        /// Returns whether this ingredient can use the supplied catalog entry. A catalog describes
+        /// item types, not live item condition, container contents, or the player's exclusions.
+        /// </summary>
+        public bool Matches(CatalogItem item) => Matches(item, false);
+
+        internal bool Matches(CatalogItem item, bool includeBelowRequirement)
         {
-            if (item == null || item.IsLiquid != IsLiquid || (!IsLiquid && Catalog.SameId(IgnoredItemId, item.Id)))
+            if (item == null || item.IsLiquid != IsLiquid ||
+                (!IsLiquid && Catalog.SameId(IgnoredItemId, item.Id)))
                 return false;
             if (!MatchesAny)
                 return Catalog.SameId(BrowseId, item.BrowseId);
             if (item.IsVirtual)
                 return false;
-            bool hasTag = RequiredTag.Length > 0 && item.Tags.Contains(RequiredTag, StringComparer.OrdinalIgnoreCase);
-            if (RequiredTag.Length > 0 && !hasTag)
+
+            if (RequiredTag.Length > 0 && !HasTag(item, RequiredTag))
                 return false;
-            return QualityId.Length > 0
-                ? item.Qualities.Any(q => Catalog.SameId(q.id, QualityId) && (IsLiquid ? q.amount > 0f : q.amount >= Amount))
-                : RequiredTag.Length > 0;
+            if (QualityId.Length == 0)
+                return RequiredTag.Length > 0;
+
+            // RecipeItem.DoesUseItemType is intentionally broader than GetMatchingItem:
+            // usage/expanded queries show every matching quality kind, regardless of strength.
+            return item.Qualities.Any(q => Catalog.SameId(q.id, QualityId) &&
+                (includeBelowRequirement || (IsLiquid ? q.amount > 0f : q.amount >= Amount)));
         }
+
+        private static bool HasTag(CatalogItem item, string tag)
+        {
+            if (item.NativeItemInfo == null)
+                return item.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase);
+
+            // Native ItemInfo.HasTag uses Enumerable.Contains(string), which is ordinal and
+            // case-sensitive. Keep that rule rather than broadening native tag matches.
+            try
+            {
+                return item.NativeItemInfo.HasTag(tag);
+            }
+            catch
+            {
+                return (item.NativeItemInfo.tags ?? string.Empty).Split(',').Contains(tag, StringComparer.Ordinal);
+            }
+        }
+
+
     }
 
     /// <summary>An output item or liquid produced by a recipe.</summary>
@@ -413,13 +444,16 @@ namespace NotEnoughItems
 
                     inputs.Add(new RecipeIngredient(
                         item.specific ? item.specificId : string.Empty,
-                        amount,
+                        item.isLiquid && item.specific ? item.minimumCondition : amount,
                         item.isLiquid,
-                        !item.destroyItem,
+                        !item.isLiquid && !item.destroyItem,
                         !item.specific,
                         qualityId,
                         item.minimumCondition,
-                        item.ignoredId));
+                        item.ignoredId)
+                    {
+                        NoMaxCondition = item.noMaxCondition
+                    });
                 }
             }
 
@@ -547,7 +581,7 @@ namespace NotEnoughItems
                 }
             }
             foreach (Recipe recipe in _recipes)
-                IndexRecipe(recipe);
+                IndexRecipe(recipe, categoriesById.TryGetValue(recipe.CategoryId, out var category) ? category.MachineId : string.Empty);
             _categories.AddRange(categoriesById.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase));
             _itemSnapshot = Array.AsReadOnly(_items.ToArray());
             _recipeSnapshot = Array.AsReadOnly(_recipes.ToArray());
@@ -663,7 +697,9 @@ namespace NotEnoughItems
             return GetIndexed(_producedBy, ResolveIndexKey(itemId), itemId);
         }
 
-        /// <summary>Gets recipes that use an item, including catalyst and generic-quality uses.</summary>
+        /// <summary>Gets recipes requiring an item as material, catalyst, or machine, including every matching property type.</summary>
+        /// <param name="itemId">A raw or type-qualified catalog ID.</param>
+        /// <returns>All indexed recipes that use the type, independent of available inventory or unlocked recipes.</returns>
         public IReadOnlyList<Recipe> GetRecipesUsing(string itemId)
         {
             EnsureFresh();
@@ -674,6 +710,23 @@ namespace NotEnoughItems
         public IReadOnlyList<Recipe> GetItemUsages(string itemId)
         {
             return GetRecipesUsing(itemId);
+        }
+
+        /// <summary>
+        /// Gets catalog item types that can satisfy an ingredient. Set includeBelowRequirement to true
+        /// to include same-quality items below the requested amount, as recipe-usage queries do.
+        /// Results describe types only: live condition, containers, exclusions from a player's crafting
+        /// selection, and liquid quantities cannot be established from the catalog.
+        /// </summary>
+        /// <param name="ingredient">The material or tool requirement being inspected.</param>
+        /// <param name="includeBelowRequirement">Include entries sharing the quality even if it is too weak to satisfy the recipe.</param>
+        /// <returns>The matching catalog entries, excluding placeholder entries for generic requirements.</returns>
+        public IReadOnlyList<CatalogItem> GetMatchingItems(RecipeIngredient ingredient, bool includeBelowRequirement = false)
+        {
+            if (ingredient == null)
+                throw new ArgumentNullException(nameof(ingredient));
+            EnsureFresh();
+            return Array.AsReadOnly(_items.Where(item => ingredient.Matches(item, includeBelowRequirement)).ToArray());
         }
 
         /// <summary>Finds the live native recipe index used by the original crafting panel.</summary>
@@ -774,7 +827,6 @@ namespace NotEnoughItems
                     if (recipe == null)
                         continue;
                     _recipes.Add(recipe);
-                    IndexRecipe(recipe);
                     if (!categoriesById.ContainsKey(recipe.CategoryId))
                         categoriesById[recipe.CategoryId] = new RecipeCategory(recipe.CategoryId, recipe.CategoryId, string.Empty, string.Empty, null, NativeSource);
                 }
@@ -832,21 +884,26 @@ namespace NotEnoughItems
                 description: "Place raw meat against a cooking heater. The steak retains 30% of the input's condition.", source: NativeSource));
         }
 
-        private void IndexRecipe(Recipe recipe)
+        private void IndexRecipe(Recipe recipe, string categoryMachineId)
         {
             foreach (RecipeOutput output in recipe.Outputs)
                 AddIndex(_producedBy, ItemKey(output.ItemId, output.IsLiquid), recipe);
+            string machineId = string.IsNullOrWhiteSpace(recipe.MachineId) ? categoryMachineId : recipe.MachineId;
+            if (!string.IsNullOrWhiteSpace(machineId)) AddIndex(_usedIn, ItemKey(machineId, false), recipe);
             foreach (RecipeIngredient input in recipe.Inputs)
             {
                 if (!input.MatchesAny)
                 {
-                    AddIndex(_usedIn, ItemKey(input.ItemId, input.IsLiquid), recipe);
+                    if (input.IsLiquid || !SameId(input.IgnoredItemId, input.ItemId))
+                        AddIndex(_usedIn, input.BrowseId, recipe);
                     continue;
                 }
-                if (!string.IsNullOrWhiteSpace(input.RequiredTag))
-                    AddIndex(_usedIn, input.BrowseId, recipe);
+                // Match the expanded list: every advertised quality type, even when its
+                // strength isn't high enough to craft. Game-defined exclusions still apply.
+                AddIndex(_usedIn, input.BrowseId, recipe);
                 foreach (CatalogItem item in _items)
-                    if (input.Matches(item)) AddIndex(_usedIn, item.BrowseId, recipe);
+                    if (input.Matches(item, includeBelowRequirement: true))
+                        AddIndex(_usedIn, item.BrowseId, recipe);
             }
         }
 
