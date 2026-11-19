@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NuGetAudit>false</NuGetAudit>
+    <GameRoot Condition="'$(GameRoot)' == ''">$(MSBuildProjectDirectory)/../../..</GameRoot>
+    <ManagedDir>$(GameRoot)/CasualtiesUnknown_Data/Managed</ManagedDir>
+    <CUCoreLibPath Condition="'$(CUCoreLibPath)' == ''">$(GameRoot)/BepInEx/plugins/CUCoreLib.dll</CUCoreLibPath>
+    <NeiAssemblyPath Condition="'$(NeiAssemblyPath)' == ''">$(MSBuildProjectDirectory)/../bin/$(Configuration)/netstandard2.1/NotEnoughItems.dll</NeiAssemblyPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(SkipRecipeTests)' == 'true'">
+    <!-- The two configurations have different runtime dependencies and must not share a .deps.json. -->
+    <OutputPath>bin/$(Configuration)/core-only/</OutputPath>
+    <IntermediateOutputPath>obj/$(Configuration)/core-only/</IntermediateOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../NeiSearch.cs;../NeiLayout.cs" />
+    <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)/UnityEngine.CoreModule.dll" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(SkipRecipeTests)' != 'true'">
+    <!-- Exercise the public API in the built plugin; this project does not rebuild or install it. -->
+    <Reference Include="NotEnoughItems" HintPath="$(NeiAssemblyPath)" />
+    <Reference Include="Assembly-CSharp" HintPath="$(ManagedDir)/Assembly-CSharp.dll" />
+    <Reference Include="CUCoreLib" HintPath="$(CUCoreLibPath)" />
+    <Reference Include="BepInEx" HintPath="$(GameRoot)/BepInEx/core/BepInEx.dll" />
+    <Reference Include="0Harmony" HintPath="$(GameRoot)/BepInEx/core/0Harmony.dll" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(SkipRecipeTests)' != 'true'">
+    <DefineConstants>$(DefineConstants);RECIPE_TESTS</DefineConstants>
+  </PropertyGroup>
+  <Target Name="CheckTestReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(ManagedDir)/UnityEngine.CoreModule.dll')" Text="Casualties: Unknown assemblies not found. Set -p:GameRoot=..." />
+    <Error Condition="'$(SkipRecipeTests)' != 'true' and !Exists('$(NeiAssemblyPath)')" Text="Build NotEnoughItems in the same configuration first, set -p:NeiAssemblyPath=..., or pass -p:SkipRecipeTests=true." />
+  </Target>
+</Project>

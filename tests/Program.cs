@@ -1,0 +1,232 @@
+using NotEnoughItems;
+using UnityEngine;
+#if RECIPE_TESTS
+using ProviderRecipe = NotEnoughItems.Recipe;
+using ProviderCategory = NotEnoughItems.RecipeCategory;
+#endif
+
+return RunTests();
+
+static int RunTests()
+{
+    (string Name, Action Check)[] tests =
+    [
+        ("plain search combines case-insensitive terms", PlainSearch),
+        ("prefixes limit search to their corresponding field", PrefixedSearch),
+        ("quotes preserve phrases and can follow a prefix", QuotedSearch),
+        ("minus excludes plain and prefixed terms", ExcludedSearch),
+        ("screen rectangles round-trip between bottom-left and top-left", ScreenConversion),
+        ("wide-screen panels avoid the host and each other", WideLayout),
+        ("off-center host leaves layout asymmetric", OffCenterLayout),
+        ("narrow-screen panels shrink without covering the host", NarrowLayout),
+        ("recipe inspector is clamped to screen margins", InspectorLayout),
+#if RECIPE_TESTS
+        ("public recipe registrations appear in production and use indexes", RecipeRegistration),
+        ("source replacement clears stale recipes without affecting other sources", RecipeSourceReplacement),
+#endif
+    ];
+
+    int failures = 0;
+    foreach (var (name, check) in tests)
+    {
+        try
+        {
+            check();
+            Console.WriteLine($"PASS {name}");
+        }
+        catch (Exception error)
+        {
+            failures++;
+            Console.Error.WriteLine($"FAIL {name}: {error}");
+        }
+    }
+
+    Console.WriteLine($"{tests.Length - failures}/{tests.Length} checks passed.");
+    return failures == 0 ? 0 : 1;
+}
+
+static bool Search(string query) => NeiSearch.Matches(query,
+    text: "Heavy Plate steel armor",
+    source: "Forge Guild",
+    tags: "Metal Tools",
+    tooltip: "heat resistant shell",
+    id: "plate_heavy_02");
+
+static void PlainSearch()
+{
+    Check(Search(""), "An empty query must match.");
+    Check(Search(" \t\n"), "Whitespace-only queries must match.");
+    Check(Search("  HEAVY\tsteel  "), "Plain terms must match regardless of case and whitespace separators.");
+    Check(!Search("steel copper"), "All positive terms must match.");
+}
+
+static void PrefixedSearch()
+{
+    Check(Search("@FORGE $metal #shell &heavy_02"), "Each prefix should find its own matching field.");
+    Check(!Search("@steel"), "A plain-text occurrence cannot satisfy a source term.");
+    Check(!Search("$armor"), "A plain-text occurrence cannot satisfy a tag term.");
+    Check(!Search("#metal"), "A tag cannot satisfy a tooltip term.");
+    Check(!Search("&shell"), "Tooltip text cannot satisfy an ID term.");
+}
+
+static void QuotedSearch()
+{
+    Check(Search("\"heavy plate\" @\"forge guild\" #\"heat resistant\""), "Quoted prefixed terms must keep their spaces.");
+    Check(!Search("\"plate heavy\""), "A phrase is not an unordered collection of words.");
+    Check(!Search("@\"forge plate\""), "A phrase may not combine different fields.");
+    Check(Search("\"heavy plate"), "An unfinished phrase should continue matching while the user types.");
+}
+
+static void ExcludedSearch()
+{
+    Check(Search("steel -brass -@outpost -$wood -#brittle -&plate_light"), "Absent excluded terms must not reject a match.");
+    Check(!Search("steel -armor"), "A present excluded plain term must reject a match.");
+    Check(!Search("steel -@\"forge guild\""), "A present excluded source phrase must reject a match.");
+    Check(!Search("steel -$tools"), "A present excluded tag must reject a match.");
+    Check(!Search("steel -#shell"), "A present excluded tooltip term must reject a match.");
+    Check(!Search("steel -&heavy_02"), "A present excluded ID term must reject a match.");
+}
+
+static void ScreenConversion()
+{
+    var screen = new Rect(124, 73, 397, 184);
+    Rect gui = NeiLayout.FromScreen(screen, 720);
+    RectEqual(new Rect(124, 463, 397, 184), gui, "left and size must stay unchanged; y must use yMax, not yMin");
+    RectEqual(screen, NeiLayout.FromScreen(gui, 720), "flipping twice must restore the original rectangle");
+    RectEqual(new Rect(0, 0, 1280, 720), NeiLayout.FromScreen(new Rect(0, 0, 1280, 720), 720), "full-screen rectangle");
+}
+
+static void WideLayout()
+{
+    var center = new Rect(630, 32, 660, 1016);
+    var (left, right) = NeiLayout.Sides(center, 1920, 1080, 1);
+    RectEqual(new Rect(293, 32, 330, 1016), left, "left side caps its width at scale 1");
+    RectEqual(new Rect(1297, 32, 330, 1016), right, "right side caps its width at scale 1");
+    CheckSides(center, left, right, 1920, 1080);
+
+    var scaled = NeiLayout.Sides(center, 1920, 1080, .75f);
+    Equal(247.5f, scaled.Left.width, "left side width scales");
+    Equal(247.5f, scaled.Right.width, "right side width scales");
+    CheckSides(center, scaled.Left, scaled.Right, 1920, 1080);
+}
+
+static void OffCenterLayout()
+{
+    var center = new Rect(150, 100, 910, 430);
+    var (left, right) = NeiLayout.Sides(center, 1280, 720, 1);
+    Equal(135, left.width, "left side uses only the actual available width");
+    Equal(205, right.width, "right side uses its own separate available width");
+    CheckSides(center, left, right, 1280, 720);
+}
+
+static void NarrowLayout()
+{
+    var center = new Rect(29, 72, 584, 190);
+    var (left, right) = NeiLayout.Sides(center, 640, 360, 1);
+    Equal(14, left.width, "left side shrinks below the UI drawing threshold");
+    Equal(12, right.width, "right side shrinks below the UI drawing threshold");
+    Equal(352, left.yMax, "minimum requested height must not extend beyond the viewport");
+    CheckSides(center, left, right, 640, 360);
+
+    var fillsScreen = new Rect(0, 0, 640, 360);
+    var (noLeft, noRight) = NeiLayout.Sides(fillsScreen, 640, 360, 1);
+    Equal(0, noLeft.width, "left side collapses when no gap remains");
+    Equal(0, noRight.width, "right side collapses when no gap remains");
+}
+
+static void InspectorLayout()
+{
+    var nearCorner = new Rect(540, 330, 80, 30);
+    Rect panel = NeiLayout.Inspector(nearCorner, 640, 360, 1);
+    RectEqual(new Rect(72, 8, 560, 344), panel, "corner anchor is clamped inside the viewport");
+
+    var narrow = new Rect(30, 20, 200, 320);
+    RectEqual(new Rect(8, 8, 244, 344), NeiLayout.Inspector(narrow, 260, 360, 1),
+        "narrow screen constrains both dimensions without a negative rectangle");
+}
+
+static void CheckSides(Rect host, Rect left, Rect right, float width, float height)
+{
+    Check(left.width > 0 && right.width > 0, "Fixture must leave room for both sides.");
+    Check(!left.Overlaps(host) && !right.Overlaps(host) && !left.Overlaps(right),
+        $"Panels overlap: host {host}, left {left}, right {right}.");
+    Check(left.xMin >= 8 && right.xMax <= width - 8, "Panels must stay inside the horizontal screen margins.");
+    Check(left.yMin >= 8 && right.yMin >= 8 && left.yMax <= height - 8 && right.yMax <= height - 8,
+        "Panels must stay inside the vertical screen margins.");
+}
+
+static void RectEqual(Rect expected, Rect actual, string message)
+{
+    Equal(expected.x, actual.x, $"{message} (x)");
+    Equal(expected.y, actual.y, $"{message} (y)");
+    Equal(expected.width, actual.width, $"{message} (width)");
+    Equal(expected.height, actual.height, $"{message} (height)");
+}
+
+static void Equal(float expected, float actual, string message) =>
+    Check(float.IsFinite(actual) && Math.Abs(expected - actual) < .001f, $"{message}: expected {expected}, got {actual}.");
+
+static void Check(bool passed, string message)
+{
+    if (!passed)
+        throw new InvalidOperationException(message);
+}
+
+#if RECIPE_TESTS
+static void RecipeRegistration()
+{
+    const string source = "nei.tests.registration";
+    var category = new ProviderCategory("test.forge", "Test forge", "missing-machine", source: source);
+    var recipe = new ProviderRecipe("test.smelt", category.Id,
+        [new RecipeIngredient("test.ore"), new RecipeIngredient("test.tongs", isCatalyst: true)],
+        [new RecipeOutput("test.ingot", 2), new RecipeOutput("test.byproduct", isLiquid: true)],
+        machineId: category.MachineId, source: source);
+
+    try
+    {
+        RecipeApi.RegisterCategory(category);
+        RecipeApi.RegisterRecipe(recipe);
+        var catalog = RecipeApi.Catalog;
+        Check(catalog.GetRecipesForCategory("TEST.FORGE").Single() == recipe, "Category lookup must be case-insensitive.");
+        Check(catalog.GetRecipesProducing("test.ingot").Single() == recipe, "Primary output must be indexed.");
+        Check(catalog.GetRecipesProducing("test.byproduct").Single() == recipe, "Additional outputs must be indexed.");
+        Check(catalog.GetItemUsages("test.tongs").Single() == recipe, "Catalysts must count as usages.");
+        Check(!catalog.TryGetNativeRecipeIndex(recipe.Id, out _), "A provider recipe is not a live game recipe.");
+    }
+    finally
+    {
+        RecipeApi.ClearSource(source);
+    }
+}
+
+static void RecipeSourceReplacement()
+{
+    const string source = "nei.tests.replace";
+    const string neighboringSource = "nei.tests.neighbor";
+    var oldCategory = new ProviderCategory("test.old-category");
+    var newCategory = new ProviderCategory("test.new-category");
+    var neighboringCategory = new ProviderCategory("test.neighbor-category");
+    var oldRecipe = new ProviderRecipe("test.old", oldCategory.Id, [], [new RecipeOutput("test.old-output")]);
+    var newRecipe = new ProviderRecipe("test.new", newCategory.Id, [], [new RecipeOutput("test.new-output")]);
+    var neighbor = new ProviderRecipe("test.neighbor", neighboringCategory.Id, [], [new RecipeOutput("test.neighbor-output")]);
+
+    try
+    {
+        RecipeApi.ReplaceSource(source, [oldCategory], [oldRecipe]);
+        RecipeApi.ReplaceSource(neighboringSource, [neighboringCategory], [neighbor]);
+        RecipeApi.ReplaceSource(source.ToUpperInvariant(), [newCategory], [newRecipe]);
+        var catalog = RecipeApi.Catalog;
+        Check(catalog.GetRecipesProducing("test.old-output").Count == 0, "Replacing a source must remove stale recipe indexes.");
+        Check(catalog.RecipeCategories.All(c => c.Id != oldCategory.Id), "Replacing a source must remove stale categories.");
+        Check(catalog.GetRecipesProducing("test.new-output").Single() == newRecipe, "Replacement must index the new recipe.");
+        RecipeApi.ClearSource(source);
+        Check(catalog.GetRecipesProducing("test.new-output").Count == 0, "Clearing a source must remove replacement recipes.");
+        Check(catalog.GetRecipesProducing("test.neighbor-output").Single() == neighbor, "Clearing one source must preserve other sources.");
+    }
+    finally
+    {
+        RecipeApi.ClearSource(source);
+        RecipeApi.ClearSource(neighboringSource);
+    }
+}
+#endif
