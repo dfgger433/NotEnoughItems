@@ -23,8 +23,18 @@ internal sealed class GameSurface
     private readonly Func<RectTransform?>? _terminalRoot;
     private readonly Vector3[] _corners = new Vector3[4];
     private readonly List<InvButton> _radialButtons = new();
+    private RectTransform? _radialRoot, _containerRoot;
+    private Transform? _wearablesRoot;
+    private int _radialChildren, _wearableChildren;
+    private Rect _radialOffsets;
+    private Rect? _containerOffsets;
+    private int _inventoryWidth, _inventoryHeight;
+    private float _inventoryScale;
+    private int _terminalWidth, _terminalHeight;
+    private PlayerCamera? _terminalCamera;
     private int _detectedFrame = -1;
     private Kind _detected;
+    private UnityEngine.Object? _detectedHost;
     private Rect _detectedBounds;
     private Canvas? _modalShield;
     internal bool TerminalTextInputFocused => _terminalTyping?.Invoke() == true;
@@ -50,20 +60,23 @@ internal sealed class GameSurface
         }
     }
 
-    internal Kind Detect(out Rect bounds, bool refresh = false)
+    internal Kind Detect(out Rect bounds, out UnityEngine.Object? host, bool refresh = false)
     {
         if (refresh || _detectedFrame != Time.frameCount)
         {
-            _detected = DetectSurface(out _detectedBounds);
+            _detected = DetectSurface(out var nextBounds, out _detectedHost);
+            _detectedBounds = nextBounds;
             _detectedFrame = Time.frameCount;
         }
         bounds = _detectedBounds;
+        host = _detectedHost;
         return _detected;
     }
 
-    private Kind DetectSurface(out Rect bounds)
+    private Kind DetectSurface(out Rect bounds, out UnityEngine.Object? host)
     {
         bounds = default;
+        host = null;
         var camera = PlayerCamera.main;
         if (!camera || !camera.body || !camera.body.alive || !camera.body.conscious || PauseHandler.paused ||
             (ConsoleScript.instance && ConsoleScript.instance.active) || Active(camera.craftingPanel) ||
@@ -72,42 +85,110 @@ internal sealed class GameSurface
             return Kind.Closed;
         if (_terminalOpen?.Invoke() == true)
         {
-            if (_terminalBounds?.Invoke(out var terminal) != true || terminal.width < 1) return Kind.Closed;
+            if (_terminalBounds?.Invoke(out var terminal) != true || !ValidTerminalBounds(terminal)) return Kind.Closed;
             bounds = NeiLayout.FromScreen(terminal, Screen.height);
+            if (_detected == Kind.Terminal && _terminalCamera == camera && _terminalWidth == Screen.width &&
+                _terminalHeight == Screen.height && !TerminalBoundsChanged(_detectedBounds, bounds))
+                bounds = _detectedBounds;
+            _terminalCamera = camera;
+            _terminalWidth = Screen.width;
+            _terminalHeight = Screen.height;
+            host = camera;
             return Kind.Terminal;
         }
         if (!camera.radialOpen || !camera.radialMenu || !camera.radialMenu.gameObject.activeInHierarchy)
             return Kind.Closed;
 
-        // The radial root also contains invisible drag-edge decorations; measure only item surfaces.
-        var radial = camera.radialMenu;
-        float zoom = Mathf.Max(0.08f, Mathf.Abs(radial.localScale.x));
-        var circle = Measure(camera.radialCircle ? camera.radialCircle.rectTransform : radial);
-        float unit = Mathf.Max(.2f, PlayerCamera.uiScale);
-        var pivot = circle.center;
-        bounds = new Rect(pivot.x - 297 * unit, pivot.y - 292 * unit, 594 * unit, 601 * unit);
-        radial.GetComponentsInChildren(false, _radialButtons);
-        foreach (var button in _radialButtons)
-        {
-            if (button.transform is not RectTransform rect) continue;
-            bounds = Union(bounds, Expanded(Measure(rect), pivot, zoom));
-        }
-        if (Active(camera.containerMenu) && camera.containerMenu.transform is RectTransform container)
-        {
-            var other = Expanded(Measure(container), pivot, zoom);
-            var title = container.Find("Top") as RectTransform;
-            if (title != null && title.gameObject.activeInHierarchy) other = Union(other, Expanded(Measure(title), pivot, zoom));
-            bounds = Union(bounds, other);
-        }
+        bounds = InventoryBounds(camera);
+        host = camera.radialMenu;
         return Kind.Inventory;
     }
 
-    private static Rect Expanded(Rect rect, Vector2 pivot, float zoom)
+    private Rect InventoryBounds(PlayerCamera camera)
     {
-        var min = pivot + (rect.min - pivot) / zoom;
-        var max = pivot + (rect.max - pivot) / zoom;
-        return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        var radial = camera.radialMenu;
+        var container = Active(camera.containerMenu) ? camera.containerMenu.transform as RectTransform : null;
+        var wearables = camera.wearPopulate ? camera.wearPopulate.transform : null;
+        int wearableChildren = wearables ? wearables!.childCount : 0;
+        float scale = camera.mainCanvas ? Mathf.Max(.2f, PlayerCamera.uiScale) : 1f;
+
+        // The native camera moves the entire radial in screen space every Update. Only
+        // measure local layout, never the radial's translated/animated world rectangle.
+        if (_detected != Kind.Inventory || _radialRoot != radial || _containerRoot != container || _wearablesRoot != wearables ||
+            _radialChildren != radial.childCount || _wearableChildren != wearableChildren ||
+            _inventoryWidth != Screen.width || _inventoryHeight != Screen.height || _inventoryScale != scale)
+        {
+            _radialRoot = radial;
+            _containerRoot = container;
+            _wearablesRoot = wearables;
+            _radialChildren = radial.childCount;
+            _wearableChildren = wearableChildren;
+            _inventoryWidth = Screen.width;
+            _inventoryHeight = Screen.height;
+            _inventoryScale = scale;
+
+            // The radial's root also owns invisible drag zones and transient actions.
+            // Measure the permanent inventory slots and the visible container frame instead.
+            _radialOffsets = new Rect(-297, -292, 594, 601);
+            radial.GetComponentsInChildren(false, _radialButtons);
+            foreach (var button in _radialButtons)
+            {
+                if (button.transform is not RectTransform rect || (container && rect.IsChildOf(container))) continue;
+                if (TryMeasureLocal(rect, radial, null, out var slot)) _radialOffsets = Union(_radialOffsets, slot);
+            }
+            _radialButtons.Clear();
+            _containerOffsets = null;
+            if (container && TryMeasureLocal(container!, radial, container, out var frame))
+            {
+                var title = container!.Find("Top") as RectTransform;
+                if (title && title!.gameObject.activeInHierarchy && TryMeasureLocal(title, radial, container, out var header))
+                    frame = Union(frame, header);
+                _containerOffsets = frame;
+            }
+        }
+        return AnchorInventory(_radialOffsets, _containerOffsets, _inventoryWidth, _inventoryHeight, _inventoryScale);
     }
+
+    private bool TryMeasureLocal(RectTransform rect, RectTransform radial, RectTransform? animatedContainer, out Rect bounds)
+    {
+        bounds = default;
+        var relative = Matrix4x4.identity;
+        for (Transform current = rect; current != radial; current = current.parent)
+        {
+            if (!current) return false;
+            // The container animates from 0.01 to 1 when opened. Reserve its full size
+            // immediately, or the panels will slide during the animation.
+            var scale = current == animatedContainer ? Vector3.one : current.localScale;
+            relative = Matrix4x4.TRS(current.localPosition, current.localRotation, scale) * relative;
+        }
+
+        rect.GetLocalCorners(_corners);
+        var first = relative.MultiplyPoint3x4(_corners[0]);
+        float left = first.x, top = -first.y, right = first.x, bottom = -first.y;
+        for (int i = 1; i < _corners.Length; i++)
+        {
+            var p = relative.MultiplyPoint3x4(_corners[i]);
+            left = Mathf.Min(left, p.x);
+            top = Mathf.Min(top, -p.y);
+            right = Mathf.Max(right, p.x);
+            bottom = Mathf.Max(bottom, -p.y);
+        }
+        bounds = Rect.MinMaxRect(left, top, right, bottom);
+        return true;
+    }
+
+    internal static Rect AnchorInventory(Rect radialOffsets, Rect? containerOffsets, float width, float height, float unit)
+    {
+        var offsets = containerOffsets.HasValue ? Union(radialOffsets, containerOffsets.Value) : radialOffsets;
+        return new Rect(width * .5f + offsets.x * unit, height * .5f + offsets.y * unit, offsets.width * unit, offsets.height * unit);
+    }
+
+    internal static bool TerminalBoundsChanged(Rect current, Rect next) =>
+        Mathf.Abs(next.xMin - current.xMin) >= 1f || Mathf.Abs(next.yMin - current.yMin) >= 1f ||
+        Mathf.Abs(next.xMax - current.xMax) >= 1f || Mathf.Abs(next.yMax - current.yMax) >= 1f;
+
+    private static bool ValidTerminalBounds(Rect bounds) => bounds.width >= 1f && bounds.height >= 1f &&
+        float.IsFinite(bounds.xMin) && float.IsFinite(bounds.yMin) && float.IsFinite(bounds.xMax) && float.IsFinite(bounds.yMax);
 
     private static Rect Union(Rect a, Rect b) => Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin),
         Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax));
@@ -134,17 +215,6 @@ internal sealed class GameSurface
             image.raycastTarget = true;
         }
         _modalShield!.gameObject.SetActive(enabled);
-    }
-
-    private Rect Measure(RectTransform rect)
-    {
-        rect.GetWorldCorners(_corners);
-        var canvas = rect.GetComponentInParent<Canvas>()?.rootCanvas;
-        var uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
-        var a = RectTransformUtility.WorldToScreenPoint(uiCamera, _corners[0]);
-        var b = RectTransformUtility.WorldToScreenPoint(uiCamera, _corners[2]);
-        return Rect.MinMaxRect(Mathf.Min(a.x, b.x), Screen.height - Mathf.Max(a.y, b.y),
-            Mathf.Max(a.x, b.x), Screen.height - Mathf.Min(a.y, b.y));
     }
 
     internal static bool OtherTextInputFocused()
