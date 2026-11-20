@@ -87,8 +87,14 @@ function Invoke-DotNetCommand {
     if ($null -eq $dotnet) { throw 'dotnet SDK not found on PATH.' }
     $command = Format-DotNetCommand $Arguments
     Write-Host "> $command"
+    # Match PowerShell's native pipe decoder to the child CLI. The host may start
+    # with CP936 (or another code page), even when .NET writes UTF-8 to the pipe.
+    $previousConsoleEncoding = [Console]::OutputEncoding
+    $previousForceUtf8 = [Environment]::GetEnvironmentVariable('DOTNET_CLI_FORCE_UTF8_ENCODING', 'Process')
     Push-Location -LiteralPath $script:ProjectRoot
     try {
+        [Environment]::SetEnvironmentVariable('DOTNET_CLI_FORCE_UTF8_ENCODING', '1', 'Process')
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
         if ($CaptureOutput) {
             $output = & $dotnet.Source @Arguments
         } else {
@@ -97,6 +103,8 @@ function Invoke-DotNetCommand {
         if ($LASTEXITCODE -ne 0) { throw "Command failed (exit $LASTEXITCODE): $command" }
         if ($CaptureOutput) { return $output }
     } finally {
+        [Console]::OutputEncoding = $previousConsoleEncoding
+        [Environment]::SetEnvironmentVariable('DOTNET_CLI_FORCE_UTF8_ENCODING', $previousForceUtf8, 'Process')
         Pop-Location
     }
 }
