@@ -18,7 +18,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="../NeiSearch.cs;../NeiLayout.cs" />
+    <Compile Include="../NeiSearch.cs;../NeiLayout.cs;../BookmarkBook.cs" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)/UnityEngine.CoreModule.dll" />
   </ItemGroup>
   <ItemGroup Condition="'$(SkipRecipeTests)' != 'true'">
@@ -28,6 +28,8 @@
     <Reference Include="CUCoreLib" HintPath="$(CUCoreLibPath)" />
     <Reference Include="BepInEx" HintPath="$(GameRoot)/BepInEx/core/BepInEx.dll" />
     <Reference Include="0Harmony" HintPath="$(GameRoot)/BepInEx/core/0Harmony.dll" />
+    <Reference Include="Unity.TextMeshPro" HintPath="$(ManagedDir)/Unity.TextMeshPro.dll" />
+    <Compile Include="TooltipSmoke.cs" />
   </ItemGroup>
   <PropertyGroup Condition="'$(SkipRecipeTests)' != 'true'">
     <DefineConstants>$(DefineConstants);RECIPE_TESTS</DefineConstants>

@@ -26,7 +26,7 @@ internal static class NeiLayout
     // Like NEI, the lower controls anchor to the screen, not the player or pointer.
     internal static (Rect Tools, Rect Search) BottomRail(float width, float height, Rect center, Rect right)
     {
-        const float margin = 8, toolsWidth = 75, gap = 5, buttonHeight = 23;
+        const float margin = 8, toolsWidth = 49, gap = 5, buttonHeight = 23;
         // Casualties: Unknown keeps its health/crafting HUD in the first 50 logical pixels.
         const float toolsLeft = 54;
         float y = Mathf.Max(margin, height - margin - buttonHeight);

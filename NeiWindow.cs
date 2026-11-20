@@ -18,7 +18,11 @@ internal sealed partial class NeiWindow
     private readonly ConfigEntry<string> _saved;
     private readonly ConfigEntry<bool> _showHistory;
     private readonly ConfigEntry<bool> _showGrid;
-    private readonly List<(string Group, string Id)> _bookmarks = new();
+    private readonly BookmarkBook _book = new();
+    private string? _activeRecipeKey, _chainGroup;
+    private bool _chainDetails;
+    private Vector2 _chainScroll;
+    private readonly HashSet<string> _collapsedGroups = new(StringComparer.Ordinal);
     private readonly List<string> _recent = new();
     private readonly Stack<(string? Item, bool Usage, string? Category, int Index, string[] Contents)> _back = new();
     private string[] _lookupContents = Array.Empty<string>();
@@ -28,12 +32,10 @@ internal sealed partial class NeiWindow
     private float _scale = 1f;
     private float _width, _height;
     private string _query = string.Empty, _group = "0", _editGroup = string.Empty, _recipeQuery = string.Empty;
-    private bool _showPlan, _craftableOnly;
+    private bool _craftableOnly;
     private string? _selectedRecipeBookmark;
-    private float _craftableUntil, _planUntil;
+    private float _craftableUntil;
     private readonly Dictionary<global::Recipe, bool> _craftable = new();
-    private Recipe? _plannedRecipe;
-    private List<(int Depth, string Label, string Amount, string? Item, bool? Available)> _plan = new();
     private int _page, _bookmarkPage, _recipeIndex;
     private string _quantityText = "1";
     private int GiveQuantity => int.TryParse(_quantityText, out int value) ? Mathf.Clamp(value, 1, 64) : 1;
@@ -53,7 +55,7 @@ internal sealed partial class NeiWindow
     private IReadOnlyList<CatalogItem> _filtered = Array.Empty<CatalogItem>();
     private string? _lastError;
     internal bool SearchFocused { get => _searchFocused; set => _searchFocused = value; }
-    internal bool ModalOpen => _open || _options;
+    internal bool ModalOpen => _open || _options || _chainGroup != null;
 
     internal NeiWindow(Plugin plugin, ConfigFile config)
     {
@@ -61,13 +63,7 @@ internal sealed partial class NeiWindow
         _saved = config.Bind("Bookmarks", "Entries", string.Empty, "Bookmarked item ids and their page names. Managed by NEI.");
         _showHistory = config.Bind("NotEnoughItems", "HistoryStrip", true, "Show recently inspected items in the catalog.");
         _showGrid = config.Bind("NotEnoughItems", "ItemList", true, "Show the item catalog.");
-        foreach (var entry in _saved.Value.Split('|'))
-        {
-            var parts = entry.Split(new[] { ':' }, 2);
-            if (parts.Length != 2) continue;
-            try { _bookmarks.Add((Uri.UnescapeDataString(parts[0]), Uri.UnescapeDataString(parts[1]))); }
-            catch (UriFormatException) { /* Ignore malformed persisted entries. */ }
-        }
+        _book.Load(_saved.Value);
     }
 
     private string L(string en, string zh) => _plugin.Chinese ? zh : en;
@@ -86,7 +82,10 @@ internal sealed partial class NeiWindow
     internal void ResetView()
     {
         _open = _options = _groups = _searchFocused = _focusSearch = false;
-        NeiActions.Enabled = false;
+        _chainGroup = null;
+        _bookmarkDrag = null;
+        _dragGroup = null;
+        _activeRecipeKey = null;
         _back.Clear();
         _itemTargets.Clear();
         _expandedRequirement = -1;
@@ -144,17 +143,36 @@ internal sealed partial class NeiWindow
             NeiSearch.Matches(_query, item.SearchText, item.Source, string.Join(" ", item.Tags), item.Description, item.Id)).ToArray();
     }
 
-    internal void ToggleBookmark(string id)
+    internal void ToggleBookmark(string id, int quantity = 1)
     {
-        if (string.IsNullOrWhiteSpace(id)) return;
-        int index = _bookmarks.FindIndex(entry => entry.Group == _group && entry.Id == id);
-        if (index >= 0) _bookmarks.RemoveAt(index);
-        else _bookmarks.Add((_group, id));
-        SaveBookmarks();
+        if (_book.Toggle(_group, id, quantity)) SaveBookmarks();
     }
 
-    private void SaveBookmarks() => _saved.Value = string.Join("|", _bookmarks.Select(entry =>
-        Uri.EscapeDataString(entry.Group) + ":" + Uri.EscapeDataString(entry.Id)));
+    private void SaveBookmarks() => _saved.Value = _book.Serialize();
+
+    internal bool HandleBookmarkShortcut(Vector2 pointer, string? id, bool control, bool shift)
+    {
+        pointer /= Mathf.Max(.01f, _scale);
+        if (shift && !_open)
+        {
+            var header = _bookmarkHeaders.Find(entry => entry.Rect.Contains(pointer));
+            if (header.Group != null && header.Group.Length > 0)
+            {
+                _book.Entries.RemoveAll(entry => entry.Page == _group && entry.Group == header.Group);
+                _collapsedGroups.Remove(header.Group);
+                SaveBookmarks();
+                return true;
+            }
+        }
+        if (shift && _open && _activeRecipeKey != null)
+        {
+            ToggleBookmark(_activeRecipeKey, control ? GiveQuantity : 1);
+            return true;
+        }
+        if (id == null) return false;
+        ToggleBookmark(id, control ? GiveQuantity : 1);
+        return true;
+    }
 
     internal void Lookup(string id, bool usage, string[]? contents = null)
     {
@@ -183,7 +201,9 @@ internal sealed partial class NeiWindow
         _item = id;
         _lookupContents = Array.Empty<string>();
         _selectedRecipeBookmark = null;
-        _showPlan = _craftableOnly = false;
+        _craftableOnly = false;
+        _activeRecipeKey = null;
+        _chainGroup = null;
         _recipeQuery = string.Empty;
         _usage = usage;
         _category = category;
@@ -199,9 +219,11 @@ internal sealed partial class NeiWindow
     internal void Back()
     {
         if (_options) { _options = false; return; }
+        if (_chainGroup != null) { _chainGroup = null; return; }
         if (_expandedRequirement >= 0) { _expandedRequirement = -1; return; }
         if (_back.Count == 0) { _open = false; _itemTargets.Clear(); return; }
-        _recipeQuery = string.Empty; _showPlan = _craftableOnly = false;
+        _recipeQuery = string.Empty; _craftableOnly = false;
+        _activeRecipeKey = null;
         (_item, _usage, _category, _recipeIndex, _lookupContents) = _back.Pop();
         _recipeScroll = Vector2.zero;
     }
@@ -217,7 +239,8 @@ internal sealed partial class NeiWindow
         }
         _tipTitle = _tipBody = null;
         _searchRect = _groupRect = _quantityRect = _compactBar = _compactGrid = _leftTools = default;
-        if (e.type == EventType.Repaint) _itemTargets.Clear();
+        if (e.type == EventType.Repaint) { _itemTargets.Clear(); _bookmarkHeaders.Clear(); }
+        if (e.type == EventType.Repaint && !Input.GetMouseButton(0)) { _bookmarkDrag = null; _dragGroup = null; }
         Matrix4x4 savedMatrix = GUI.matrix;
         try
         {
@@ -226,6 +249,7 @@ internal sealed partial class NeiWindow
             if (ModalOpen)
             {
                 if (_options) DrawOptions(_inspector);
+                else if (_chainGroup != null) DrawChain(_inspector);
                 else DrawInspector(_inspector);
             }
             else

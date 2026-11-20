@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.1.0")]
+[BepInPlugin(Guid, "Not Enough Items", "1.2.0")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -72,6 +72,19 @@ public sealed class Plugin : BaseUnityPlugin
     internal bool AllowCheats => _allowCheats.Value;
     internal float Scale => Mathf.Clamp(_scale.Value, 0.7f, 1.4f);
 
+    /// <summary>Updates the explicit local-cheat opt-in from NEI's own settings screen.</summary>
+    internal void SetAllowCheats(bool value)
+    {
+        _allowCheats.Value = value;
+        if (!value) NeiActions.Enabled = false;
+    }
+
+    /// <summary>Cycles Recipe → Utility → Cheat and returns a localized notice for the UI.</summary>
+    internal bool TryCycleMode(out string notice) => NeiActions.TryCycleMode(out notice);
+
+    /// <summary>Compatibility overload for icon handlers that only need to know whether cycling succeeded.</summary>
+    internal bool TryCycleMode() => NeiActions.TryCycleMode(out _);
+
     private void Awake()
     {
         _enabled = Config.Bind("NotEnoughItems", "Enabled", true, "Show NEI beside inventory and the optional Inventory Terminal. Also changed by Game Settings, the toggle key, and Hide overlay.");
@@ -103,6 +116,14 @@ public sealed class Plugin : BaseUnityPlugin
             Chinese ? "NEI · 显示侧栏" : "NEI · Show overlay",
             Chinese ? "在背包和库存终端显示 NEI；隐藏后可在这里重新开启。" : "Show NEI in inventory and the Inventory Terminal. You can re-enable it here after hiding it.",
             category, _enabled.Value, _ => MirrorVisibility()));
+        ModOptionsRegistry.Register(ModOptionDefinition.Bool("NotEnoughItems.AllowLocalCheats",
+            Chinese ? "NEI · 允许单机作弊" : "NEI · Allow local cheats",
+            Chinese ? "明确启用后，NEI 才能在确认的单机运行中进入实用／作弊模式；多人或未知状态始终拒绝。" : "Explicit opt-in. NEI can enter Utility/Cheat mode only in a confirmed single-player run; multiplayer and unknown states are always refused.",
+            category, _allowCheats.Value, value =>
+            {
+                _allowCheats.Value = value;
+                if (!value) NeiActions.Enabled = false;
+            }));
         ModOptionsRegistry.Register(ModOptionDefinition.Float("NotEnoughItems.Scale", "NEI · Sidebar scale", "Change the size of the item and bookmark panels.", category, _scale.Value, 0.7f, 1.4f, v => _scale.Value = v));
         foreach (var bind in new[] { _toggle, _recipes, _usages, _bookmark, _toggleBookmarks })
             ModOptionsRegistry.Register(ModOptionDefinition.Keybind("NotEnoughItems." + bind.Definition.Key,
@@ -246,9 +267,15 @@ public sealed class Plugin : BaseUnityPlugin
                 contents = container.stack.Where(stack => stack != null && stack.amount > 0 && !string.IsNullOrWhiteSpace(stack.liquidId))
                     .Select(stack => "liquid:" + stack.liquidId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
+        if (bookmark)
+        {
+            bool control = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            if (_window.HandleBookmarkShortcut(mouse, id, control, shift)) CaptureKey();
+            return;
+        }
         if (string.IsNullOrEmpty(id)) return;
-        if (bookmark) _window.ToggleBookmark(id);
-        else _window.Lookup(id, usages, contents);
+        _window.Lookup(id, usages, contents);
         CaptureKey();
     }
 

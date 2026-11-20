@@ -8,7 +8,7 @@ internal sealed partial class NeiWindow
 {
     private void ItemSlot(Rect rect, string id, bool bookmarked = false, Sprite? overrideIcon = null, string? amount = null,
         string? fallback = null, Rect? clipping = null, Vector2? globalOffset = null, string? details = null,
-        int requirement = -1, bool belowRequirement = false, Item? liveItem = null)
+        int requirement = -1, bool belowRequirement = false, Item? liveItem = null, bool catalogSlot = false)
     {
         _catalog.TryGetItem(id, out var item);
         var recipeBookmark = id.StartsWith("recipe/", StringComparison.Ordinal) ? _catalog.Recipes.FirstOrDefault(r => RecipeKey(r) == id) : null;
@@ -43,17 +43,19 @@ internal sealed partial class NeiWindow
                 : L($"{_plugin.RecipeKey} / LMB · Recipes   {_plugin.UsageKey} / RMB · Uses",
                     $"{_plugin.RecipeKey}／左键 · 配方   {_plugin.UsageKey}／右键 · 用途");
             shortcuts += "\n" + L($"{_plugin.BookmarkKey} / MMB / Alt+click · Bookmark", $"{_plugin.BookmarkKey}／中键／Alt+点击 · 书签");
-            if (!ModalOpen && recipeBookmark == null && item is { Kind: CatalogItemKind.Item, IsVirtual: false } && NeiActions.CanGive)
-                shortcuts += "\n" + L($"Cheat · Ctrl+LMB: {GiveQuantity}   Ctrl+RMB: 1   +Shift: 16",
-                    $"作弊 · Ctrl+左键：{GiveQuantity}   Ctrl+右键：1   加 Shift：16");
+            if (catalogSlot && !ModalOpen && item is { Kind: CatalogItemKind.Item, IsVirtual: false } && NeiActions.CanGive)
+                shortcuts = L($"Cheat · LMB: {GiveQuantity}   RMB: 1   Hold Shift for recipes/uses",
+                    $"作弊 · 左键：{GiveQuantity}   右键：1   按住 Shift 查配方／用途") + "\n" +
+                    L($"{_plugin.RecipeKey} · Recipes   {_plugin.UsageKey} · Uses   {_plugin.BookmarkKey} · Bookmark",
+                        $"{_plugin.RecipeKey} · 配方   {_plugin.UsageKey} · 用途   {_plugin.BookmarkKey} · 书签");
             var tooltip = NativeTooltip.ForSlot(title, item, id, details, shortcuts, recipeBookmark != null, liveItem);
             Tip(tooltip.Title, tooltip.Body);
         }
         if (e.type != EventType.MouseDown || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
         if (e.button == 2 || e.alt) ToggleBookmark(id);
         else if (e.button == 0 && requirement >= 0) _expandedRequirement = expanded ? -1 : requirement;
-        else if (!ModalOpen && recipeBookmark == null && item is { Kind: CatalogItemKind.Item, IsVirtual: false } &&
-            NeiActions.Mode == NeiActions.LocalMode.Cheat && e.control &&
+        else if (catalogSlot && !ModalOpen && item is { Kind: CatalogItemKind.Item, IsVirtual: false } &&
+            NeiActions.Mode == NeiActions.LocalMode.Cheat &&
             NeiActions.TryHandleGiveFromSlot(item.Id, e.button, e.shift, GiveQuantity, out var error, out int dropped))
         {
             Status(error ?? (dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品")));

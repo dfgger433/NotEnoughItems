@@ -22,8 +22,12 @@ static int RunTests()
         ("recipe inspector is clamped to screen margins", InspectorLayout),
         ("screen footer never follows a moving inventory", FooterAnchoring),
         ("tall terminals keep search clear of native slots and quantity", TallTerminalFooter),
+        ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
+        ("reordering and clipboard import preserve independent groups", BookmarkGroups),
 #if RECIPE_TESTS
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
+        ("native tooltip markup, glyphs and literal fallbacks", TooltipSmoke.Run),
+        ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
         ("usage queries share ingredient matching semantics without false positives", RecipeUsageMatching),
         ("source replacement clears stale recipes without affecting other sources", RecipeSourceReplacement),
@@ -156,7 +160,7 @@ static void FooterAnchoring()
     var moved = NeiLayout.BottomRail(1280, 720, new Rect(470, 150, 420, 486), default);
     RectEqual(tools, moved.Tools, "The left buttons are anchored to the screen.");
     RectEqual(search, moved.Search, "The normal center search does not follow the inventory.");
-    RectEqual(new Rect(54, 689, 75, 23), tools, "Left rail clears the vanilla HUD and uses a fixed screen margin.");
+    RectEqual(new Rect(54, 689, 49, 23), tools, "Left rail clears the vanilla HUD and uses a fixed screen margin.");
     Equal(640, search.center.x, "The search is centered.");
 }
 
@@ -169,6 +173,41 @@ static void TallTerminalFooter()
     Check(!tools.Overlaps(terminal) && !tools.Overlaps(search), "Left controls are clear of the terminal and search.");
     Check(search.xMin > right.xMin && search.xMax < right.xMax && search.yMax < right.yMax - 30,
         "Tall terminal search is placed  immediately above the right quantity controls.");
+}
+
+static void BookmarkMigration()
+{
+    var book = new BookmarkBook();
+    Check(book.Load("0:item%3Arope|布%3A料:recipe%2Fnative%2Frope|bad"), "Legacy entries load without dropping playable bookmarks.");
+    Check(book.Find("0", "item:rope")?.Quantity == 1, "Legacy entries use amount one.");
+    Check(book.Find("布:料", "recipe/native/rope") != null, "Escaped page names and recipe keys survive.");
+    Check(book.Toggle("0", "item:leaf", 3), "Create a second bookmark.");
+    var leaf = book.Find("0", "item:leaf")!;
+    Check(book.Move(leaf, book.Find("0", "item:rope")!, false) && leaf.Group.Length > 0, "Dragging onto an entry creates a group.");
+    Check(book.Adjust(leaf, 4), "Quantity control updates target amount.");
+    var restored = new BookmarkBook();
+    Check(restored.Load(book.Serialize()) && restored.Entries.Count == 3, "The new format round-trips all entries.");
+    Check(restored.Find("0", "item:leaf")?.Quantity == 7 && restored.Find("0", "item:leaf")?.Group == leaf.Group,
+        "Groups and amounts stay intact after reload.");
+}
+
+static void BookmarkGroups()
+{
+    var book = new BookmarkBook();
+    book.Toggle("0", "item:first", 1);
+    book.Toggle("0", "item:second", 2);
+    var first = book.Find("0", "item:first")!;
+    var second = book.Find("0", "item:second")!;
+    Check(book.Move(first, second, true) && first.Group.Length == 0 && book.Entries[1] == first,
+        "Reordering does not silently create a group.");
+    Check(book.Move(first, second, false) && first.Group == second.Group, "Group creation preserves both entries.");
+    string group = first.Group;
+    Check(book.Load(book.Serialize(book.Page("0")), "Imported"), "Paste a compatible page.");
+    var imported = book.Find("Imported", "item:first")!;
+    Check(imported.Group.Length > 0 && imported.Group != group && imported.Group == book.Find("Imported", "item:second")!.Group,
+        "Imported groups remain separate from the original.");
+    Check(book.Ungroup("0", group) && first.Group == "" && imported.Group != "", "Ungroup only affects the chosen page.");
+    Check(!book.Load("0:item%3Atest", "Imported"), "Clipboard import only accepts the documented format.");
 }
 
 static void CheckSides(Rect host, Rect left, Rect right, float width, float height)
@@ -211,6 +250,40 @@ static void NativeInventoryAnchor()
     var withContainer = Resolve(container, 1280, 720, 1);
     Check(withContainer.xMin <= 343 && withContainer.xMax >= 1230, "The open container reserves the right side at full size.");
     RectEqual(new Rect(514.5f, 102, 891, 901.5f), Resolve(null, 1920, 1080, 1.5f), "Screen/UI scaling");
+}
+
+static void BookmarkChainBalances()
+{
+    var assembly = typeof(Catalog).Assembly;
+    Type TypeOf(string name) => assembly.GetType("NotEnoughItems." + name, throwOnError: true)!;
+    object New(string name, params object?[] args) => Activator.CreateInstance(TypeOf(name),
+        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+        null, args, null)!;
+    object Read(object o, string property) => o.GetType().GetProperty(property)!.GetValue(o)!;
+    object[] Rows(object o, string property) => ((System.Collections.IEnumerable)Read(o, property)).Cast<object>().ToArray();
+    float Amount(object plan, string property, string id, string amount)
+    {
+        var row = Rows(plan, property).SingleOrDefault(item => (string)Read(item, "ItemId") == "item:" + id);
+        return row == null ? 0f : Convert.ToSingle(Read(row, amount));
+    }
+    var catalog = new Catalog();
+    var smelt = new ProviderRecipe("test.smelt", "test.work", [new RecipeIngredient("ore", 2), new RecipeIngredient("tongs", isCatalyst: true)],
+        [new RecipeOutput("ingot", 3), new RecipeOutput("slag", 2)]);
+    var gear = new ProviderRecipe("test.gear", "test.work", [new RecipeIngredient("ingot", 2)], [new RecipeOutput("gear")]);
+    var bricks = new ProviderRecipe("test.bricks", "test.work", [new RecipeIngredient("slag")], [new RecipeOutput("brick")]);
+    var targets = Array.CreateInstance(TypeOf("BookmarkChainTarget"), 2);
+    targets.SetValue(New("BookmarkChainTarget", "item:gear", 1, gear), 0);
+    targets.SetValue(New("BookmarkChainTarget", "item:brick", 1, bricks), 1);
+    var request = New("BookmarkChainRequest", catalog, targets, new[] { smelt, gear, bricks }, null,
+        new Dictionary<string, int> { ["item:ore"] = 1, ["item:tongs"] = 1, ["item:unrelated"] = 7 }, true, null);
+    object plan = TypeOf("BookmarkChain").GetMethod("Plan")!.Invoke(null, [request])!;
+    Equal(2, Amount(plan, "Inputs", "ore", "RequiredQuantity"), "Only one batch of ore should be required.");
+    Equal(1, Amount(plan, "Missing", "ore", "Shortage"), "Missing bill reports only the additional raw ore.");
+    Equal(0, Amount(plan, "Missing", "ingot", "Shortage"), "Intermediate must not be double-consumed or reported missing.");
+    Equal(0, Amount(plan, "Missing", "gear", "Shortage"), "The planned target is not reported as a raw material.");
+    Equal(1, Amount(plan, "Surplus", "ingot", "Surplus"), "Batch rounding leaves one ingot.");
+    Equal(1, Amount(plan, "Surplus", "slag", "Surplus"), "The other target reuses one of the two produced byproducts.");
+    Equal(0, Amount(plan, "Surplus", "unrelated", "Surplus"), "Untouched inventory is not produced surplus.");
 }
 
 static void RecipeRegistration()

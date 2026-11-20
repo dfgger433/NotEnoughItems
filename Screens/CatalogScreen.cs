@@ -61,8 +61,7 @@ internal sealed partial class NeiWindow
             var nav = new Rect(strip.x + 2, strip.y, strip.width - 4, 22);
             if (_compactBookmarks && !ShowLeft)
             {
-                var entries = CurrentBookmarks();
-                DrawGrid(grid, entries.Length, i => entries[i], ref _bookmarkPage, nav);
+                DrawBookmarkEntries(grid, nav, compact: true);
             }
             else DrawGrid(grid, _filtered.Count, i => _filtered[i].BrowseId, ref _page, nav);
         }
@@ -103,7 +102,7 @@ internal sealed partial class NeiWindow
         DrawPageButtons(navigation, ref page, pages);
         int start = page * size;
         for (int i = 0; i < size && start + i < count; i++)
-            ItemSlot(new Rect(rect.x + i % columns * cell, rect.y + i / columns * cell, cell - 1, cell - 1), idAt(start + i));
+            ItemSlot(new Rect(rect.x + i % columns * cell, rect.y + i / columns * cell, cell - 1, cell - 1), idAt(start + i), catalogSlot: true);
     }
 
     private void DrawPageButtons(Rect rect, ref int page, int pages)

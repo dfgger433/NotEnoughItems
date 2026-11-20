@@ -17,10 +17,26 @@ internal sealed partial class NeiWindow
         y += 31;
         if (NeiSkin.Button(new Rect(x, y, w, 27), _showHistory.Value ? L("History strip: On", "浏览记录：开") : L("History strip: Off", "浏览记录：关"))) _showHistory.Value = !_showHistory.Value;
         y += 31;
-        if (NeiSkin.Button(new Rect(x, y, w, 27), NeiActions.Enabled ? L("Mode: Local cheat", "模式：单机作弊") : L("Mode: Recipe", "模式：配方"), NeiActions.CanEnter || NeiActions.Enabled, NeiActions.Enabled))
-            NeiActions.Enabled = !NeiActions.Enabled;
+        string mode = NeiActions.ModeName(NeiActions.Mode);
+        bool modeEnabled = NeiActions.Mode != NeiActions.LocalMode.Recipe;
+        if (NeiSkin.Button(new Rect(x, y, w, 27),
+            L($"Mode: {mode}", $"模式：{mode}"), NeiActions.CanEnter || modeEnabled, modeEnabled))
+        {
+            NeiActions.TryCycleMode(out var notice);
+            Status(notice);
+        }
+        y += 31;
+        if (NeiSkin.Button(new Rect(x, y, w, 27),
+            _plugin.AllowCheats ? L("AllowLocalCheats: On", "AllowLocalCheats：开") : L("AllowLocalCheats: Off", "AllowLocalCheats：关"),
+            selected: _plugin.AllowCheats))
+        {
+            _plugin.SetAllowCheats(!_plugin.AllowCheats);
+            Status(_plugin.AllowCheats
+                ? L("Local cheats enabled; select Utility or Cheat mode.", "已启用单机作弊；请选择实用或作弊模式。")
+                : L("Local cheats disabled.", "已禁用单机作弊。"));
+        }
         y += 32;
-        if (NeiActions.Enabled)
+        if (NeiActions.ShowsUtilities)
         {
             if (NeiSkin.Button(new Rect(x, y, w, 27), L("Heal local character", "治疗本地角色"), NeiActions.CanUse))
                 Status(NeiActions.Heal() ?? L("Character healed", "已治疗角色"));
@@ -35,7 +51,7 @@ internal sealed partial class NeiWindow
             }
         }
         NeiSkin.Label(new Rect(x, y, w, 24), L("Left click: recipes · Right click: uses · Middle: bookmark", "左键查配方 · 右键查用途 · 中键加书签"));
-        NeiSkin.Label(new Rect(x, y + 26, w, 24), L("Cheat mode: Ctrl+click to give; add Shift for 16", "作弊模式：Ctrl+点击给物品；加 Shift 一次给 16 件"));
+        NeiSkin.Label(new Rect(x, y + 26, w, 24), L("Cheat: catalog LMB = quantity · RMB = 1 · Shift = lookup", "作弊：目录左键=数量 · 右键=1 · Shift=查询"));
         if (NeiSkin.Button(new Rect(x, p.yMax - 68, w, 26), L("Hide overlay", "隐藏 NEI"))) { ResetView(); _plugin.HideOverlay(); }
         if (NeiSkin.Button(new Rect(x, p.yMax - 35, w, 26), L("Done", "完成"))) _options = false;
     }

@@ -16,7 +16,8 @@ internal sealed partial class NeiWindow
             all = all.Concat(_lookupContents.SelectMany(_catalog.GetRecipesUsing)).Distinct().ToArray();
         var categories = (_item == null ? _catalog.RecipeCategories : _catalog.RecipeCategories.Where(c => all.Any(r => SameId(r.CategoryId, c.Id)))).ToArray();
         _catalog.TryGetItem(_item ?? string.Empty, out var subject);
-        string name = subject?.DisplayName ?? _item ?? L("All machines", "全部机器");
+        _activeRecipeKey = null;
+        string name = subject?.DisplayName ?? _item ?? L("Bookmarked recipe", "收藏的配方");
         Header(p, name, _item == null ? "NEI" : _usage ? L("Uses", "用途") : L("Recipes", "配方"));
         float x = p.x + 8, w = p.width - 16, y = p.y + 31;
         if (NeiSkin.Button(new Rect(x, y, 64, 23), L("Back", "返回"))) { Back(); return; }
@@ -66,23 +67,20 @@ internal sealed partial class NeiWindow
         if (NeiSkin.IconButton(new Rect(x, y, 24, 23), "previous", L("Previous recipe", "上一条配方"), recipes.Count > 1)) StepRecipe(-1, recipes.Count);
         if (NeiSkin.IconButton(new Rect(p.xMax - 32, y, 24, 23), "next", L("Next recipe", "下一条配方"), recipes.Count > 1)) StepRecipe(1, recipes.Count);
         Recipe recipe = recipes[_recipeIndex];
-        string recipeCategory = categories.FirstOrDefault(c => c.Id == recipe.CategoryId)?.Name ?? recipe.CategoryId;
-        NeiSkin.Label(new Rect(x + 25, y, w - 50, 23), $"{_recipeIndex + 1}/{recipes.Count}  ·  {recipeCategory}", TextAnchor.MiddleCenter);
+        NeiSkin.Label(new Rect(x + 25, y, w - 50, 23), $"{_recipeIndex + 1}/{recipes.Count}  ·  {recipe.Name}", TextAnchor.MiddleCenter);
         y += 27;
-        float quarter = w / 4;
-        if (NeiSkin.Tab(new Rect(x, y, quarter - 2, 22), L("Details", "详情"), !_showPlan)) _showPlan = false;
-        if (NeiSkin.Tab(new Rect(x + quarter, y, quarter - 2, 22), L("Recipe tree", "配方树"), _showPlan)) _showPlan = true;
-        if (NeiSkin.Button(new Rect(x + 2 * quarter, y, quarter - 2, 22), L("Bookmark", "收藏配方"), selected: _bookmarks.Contains((_group, RecipeKey(recipe))))) ToggleBookmark(RecipeKey(recipe));
-        if (NeiSkin.Button(new Rect(x + 3 * quarter, y, quarter, 22), L("Craftable", "可制作"), selected: _craftableOnly)) { _craftableOnly = !_craftableOnly; _recipeIndex = 0; }
+        _activeRecipeKey = RecipeKey(recipe);
+        float third = w / 3;
+        if (NeiSkin.Button(new Rect(x, y, third - 2, 22), L("Bookmark recipe", "收藏配方"), selected: _book.Find(_group, _activeRecipeKey) != null))
+            ToggleBookmark(_activeRecipeKey);
+        if (NeiSkin.Button(new Rect(x + third, y, third - 2, 22), L("Order from bookmarks", "用已收藏配方建组")))
+            BookmarkOrder(recipe, 1);
+        if (NeiSkin.Button(new Rect(x + 2 * third, y, third, 22), L("Craftable", "可制作"), selected: _craftableOnly)) { _craftableOnly = !_craftableOnly; _recipeIndex = 0; }
         y += 27;
         bool native = recipe.IsNative && recipe.NativeIndex >= 0;
         float footer = native ? 33 : 9;
         var viewport = new Rect(x, y, w, p.yMax - y - footer);
-        if (viewport.height >= 35)
-        {
-            if (_showPlan) DrawPlan(viewport, recipe);
-            else DrawRecipeBody(viewport, recipe);
-        }
+        if (viewport.height >= 35) DrawRecipeBody(viewport, recipe);
         if (native && recipe.NativeRecipe is { } definition)
         {
             bool known = _plugin.CanOpenCrafting(definition);
@@ -135,61 +133,6 @@ internal sealed partial class NeiWindow
             _craftable.Add(native, ready);
         }
         return ready;
-    }
-
-    private void DrawPlan(Rect viewport, Recipe recipe)
-    {
-        if (!ReferenceEquals(recipe, _plannedRecipe) || Time.unscaledTime >= _planUntil)
-        {
-            _plannedRecipe = recipe;
-            _planUntil = Time.unscaledTime + .8f;
-            _plan.Clear();
-            BuildPlan(recipe, 0, 1f, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-        }
-        var content = new Rect(0, 0, viewport.width - 18, Mathf.Max(viewport.height, 42 + _plan.Count * 24));
-        _recipeScroll = GUI.BeginScrollView(viewport, _recipeScroll, content, false, content.height > viewport.height);
-        try
-        {
-            NeiSkin.Label(new Rect(4, 0, content.width - 8, 22), L("One route per ingredient · planning only", "每种原料展示一条路径 · 不自动制作"));
-            for (int i = 0; i < _plan.Count; i++)
-            {
-                var node = _plan[i];
-                var row = new Rect(5 + node.Depth * 10, 24 + i * 24, content.width - 10 - node.Depth * 10, 21);
-                string caption = (node.Available == true ? "+ " : node.Available == false ? "– " : "· ") + node.Amount + " " + node.Label;
-                if (node.Item != null)
-                {
-                    if (NeiSkin.Button(row, caption)) { Lookup(node.Item, false); break; }
-                }
-                else NeiSkin.Label(row, caption, muted: true);
-            }
-        }
-        finally { GUI.EndScrollView(); }
-    }
-
-    private void BuildPlan(Recipe recipe, int depth, float batches, HashSet<string> active)
-    {
-        if (depth >= 6 || _plan.Count >= 80 || !active.Add(RecipeKey(recipe))) return;
-        List<Item>? matching = null;
-        if (depth == 0 && recipe.NativeRecipe is { } native)
-        {
-            try { matching = native.GetItemsForRecipeThorough(); }
-            catch (Exception) { /* The plan is available even without a world. */ }
-        }
-        for (int i = 0; i < recipe.Inputs.Count && _plan.Count < 80; i++)
-        {
-            var ingredient = recipe.Inputs[i];
-            float amount = ingredient.Amount * (ingredient.IsCatalyst || ingredient.MatchesAny ? 1 : batches);
-            string name = string.IsNullOrWhiteSpace(ingredient.DisplayName) ? Display(ingredient.ItemId) : ingredient.DisplayName;
-            string? id = ingredient.MatchesAny || string.IsNullOrEmpty(ingredient.ItemId) ? null : ingredient.BrowseId;
-            bool? available = matching != null && i < matching.Count ? matching[i] != null : null;
-            _plan.Add((depth, name, Amount(amount, ingredient.IsLiquid) ?? "×1", id, available));
-            if (id == null || ingredient.IsCatalyst || available == true) continue;
-            var next = _catalog.GetRecipesProducing(id).FirstOrDefault(r => !active.Contains(RecipeKey(r)));
-            if (next == null) continue;
-            int yield = next.Outputs.FirstOrDefault(output => SameId(output.BrowseId, id))?.Amount ?? 1;
-            BuildPlan(next, depth + 1, Mathf.Ceil(amount / Mathf.Max(1, yield)), active);
-        }
-        active.Remove(RecipeKey(recipe));
     }
 
     private void DrawRecipeBody(Rect viewport, Recipe recipe)
