@@ -1,6 +1,6 @@
 # Not Enough Items — Casualties: Unknown
 
-NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时，左侧显示书签，右侧显示物品目录。原生背包侧栏基于固定屏幕锚点，不随鼠标或镜头漂移；终端侧栏避让终端边界。视口太窄时，退回屏幕底部的紧凑面板。默认界面背景像素为全透明，只绘制按钮、交互高亮、图标和文字。界面采用按 [Modernity-GTNH-UI](https://github.com/ModernityGTNH/Modernity-GTNH-UI/tree/29x/assets/nei/textures) 参考独立重绘的银灰／灰紫像素风格，不包含 Minecraft、Modernity 原贴图或字体。
+NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时，左侧显示书签，右侧显示物品目录。原生背包侧栏基于固定屏幕锚点，不随鼠标或镜头漂移；终端侧栏避让终端边界。视口太窄时，退回屏幕底部的紧凑面板。默认界面背景像素为全透明，只绘制按钮、交互高亮、图标和文字。按钮、槽位、标签、书签和扳手使用 [Modernity-GTNH-UI 原贴图](<assets/notenoughitems/textures/gui/modernity/SOURCES.md>)，不再读取自绘控件图集。
 
 ## 编译、打包和部署
 
@@ -10,7 +10,7 @@ NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时
 # 编译并运行回归检查，不写入游戏安装目录
 pwsh -File ./scripts/Build.ps1
 
-# 同时构建可分发 ZIP
+# 同时构建本地使用 ZIP（包含附许可的 Modernity 原贴图）
 pwsh -File ./scripts/Build.ps1 -Package
 
 # 预览部署；不编译、不写文件
@@ -42,11 +42,10 @@ pwsh -File ./scripts/Deploy.ps1
 
 本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。布局代码仍在 [Screens](<Screens>)，物品图标仍由游戏或内容 Mod 提供。
 
-- [独立图标与按钮](<assets/notenoughitems/textures/gui/sprites>)：比如资源 ID `notenoughitems:gui/sprites/icons/bookmark` 对应 `assets/notenoughitems/textures/gui/sprites/icons/bookmark.png`。
-- [屏幕背景](<assets/notenoughitems/textures/gui/backgrounds>)和[预切片图集 PNG](<assets/notenoughitems/textures/gui/atlas>)：保持原文件尺寸、坐标、Alpha 通道；默认背景全透明。
-- [图集来源描述](<assets/notenoughitems/atlases/nei_gui.json>)使用 Minecraft/NeoForge 图集格式；[预切片坐标](<assets/notenoughitems/gui/atlas_frames.json>)单独保存。Unity 插件读取 PNG，并不会调用 Minecraft 图集装载器。
+- [Modernity 原贴图](<assets/notenoughitems/textures/gui/modernity>)保持上游 PNG 原样，用 [ModernityFrames.cs](<ModernityFrames.cs>) 中的坐标读取子区域。主材质包没有 NEI 贴图，使用它在 README 中链接的官方 UI 包同分支。此素材随本地包保留[来源和署名](<assets/notenoughitems/textures/gui/modernity/SOURCES.md>)、[原始许可](<assets/notenoughitems/textures/gui/modernity/LICENSE.txt>)；请按许可处理，不视为可用于商业分发。
+- [屏幕背景](<assets/notenoughitems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖。[图集来源描述](<assets/notenoughitems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
 
-要换肤，请在 DLL 旁放置同样的 `assets/notenoughitems/…` 路径，重启后生效。独立 PNG 优先于整张图集；要用整张图集覆盖某个图标，须让该图标的旁置独立 PNG 不存在。部署时只补缺失资源，先迁移旧 `Textures` 中的同类 PNG，再补默认文件；不会删除旧目录，也不覆盖新路径已有的自定义文件。运行时如新路径没有可加载文件，仍兼容旧路径并以内嵌 PNG 兜底。
+换肤时在 DLL 旁放置同路径的 PNG，保留图集尺寸和坐标，重启后生效。部署只补缺失资源；旧 `Textures` 背景仍兼容，但旧自绘控制和图标不再读取。悬浮物品信息由游戏原版绘制；存在真实物品实例时直接读取它的耐久、液体等信息，只有目录类型时显示类型描述，不生成临时物品。
 
 ## 机器扩展接口
 

@@ -26,8 +26,8 @@ internal sealed partial class NeiWindow
         if (_item != null && w >= 245)
         {
             float half = (w - 138) / 2;
-            if (NeiSkin.Tab(new Rect(mid, y, half, 23), L("Recipes", "配方"), !_usage)) { Lookup(_item, false, _lookupContents); return; }
-            if (NeiSkin.Tab(new Rect(mid + half + 4, y, half, 23), L("Uses", "用途"), _usage)) { Lookup(_item, true, _lookupContents); return; }
+            if (NeiSkin.Tab(new Rect(mid, y, half, 23), L("Recipes", "配方"), !_usage)) { Lookup(_item, false, _lookupContents, _lookupItem); return; }
+            if (NeiSkin.Tab(new Rect(mid + half + 4, y, half, 23), L("Uses", "用途"), _usage)) { Lookup(_item, true, _lookupContents, _lookupItem); return; }
         }
         y += 28;
         int categoryIndex = Array.FindIndex(categories, c => SameId(c.Id, _category));
@@ -231,10 +231,11 @@ internal sealed partial class NeiWindow
                 detail = (detail == null ? "" : detail + "\n") + L("Minimum condition: ", "最低耐久：") + ingredient.MinimumCondition.ToString("P0", CultureInfo.InvariantCulture);
             if (ingredient.NoMaxCondition && !ingredient.IsLiquid)
                 detail = (detail == null ? "" : detail + "\n") + L("Must not be at full condition", "不可为满耐久");
+            Item? selectedInstance = !ingredient.IsLiquid && _nativePreview != null && i < _nativePreview.Count ? _nativePreview[i] : null;
             if (!ingredient.MatchesAny)
             {
                 ItemSlot(rect, ingredient.BrowseId, false, amount: Amount(ingredient.Amount, ingredient.IsLiquid),
-                    fallback: ingredient.DisplayName, clipping: viewport, globalOffset: offset, details: detail);
+                    fallback: ingredient.DisplayName, clipping: viewport, globalOffset: offset, details: detail, liveItem: selectedInstance);
                 continue;
             }
 
@@ -247,7 +248,7 @@ internal sealed partial class NeiWindow
                 ItemSlot(rect, display.BrowseId, false, clipping: viewport, globalOffset: offset,
                     details: required + "\n" + L($"{matches.Related.Count} items with this property", $"{matches.Related.Count} 个物品具有该性质") +
                         (matches.Eligible.Count == 0 ? "\n" + L("None meet this recipe's requirement", "没有物品达到本配方要求") : "") +
-                        (detail == null ? "" : "\n" + detail), requirement: i, belowRequirement: !ingredient.Matches(display));
+                        (detail == null ? "" : "\n" + detail), requirement: i, belowRequirement: !ingredient.Matches(display), liveItem: selectedInstance);
             }
             else
             {
@@ -287,7 +288,7 @@ internal sealed partial class NeiWindow
             _nativePreview = null;
             _previewUntil = 0;
         }
-        if (Time.unscaledTime < _previewUntil || !recipe.Inputs.Any(input => input.MatchesAny)) return;
+        if (Time.unscaledTime < _previewUntil || recipe.NativeRecipe == null) return;
         _previewUntil = Time.unscaledTime + 1f;
         if (recipe.NativeRecipe is { } native && PlayerCamera.main && PlayerCamera.main.body)
         {

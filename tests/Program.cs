@@ -28,7 +28,7 @@ static int RunTests()
 #if RECIPE_TESTS
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
         ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
-        ("native tooltip markup, glyphs and literal fallbacks", TooltipSmoke.Run),
+        ("native tooltip entry points and original rich text passthrough", TooltipSmoke.Run),
         ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
         ("usage queries share ingredient matching semantics without false positives", RecipeUsageMatching),
@@ -214,13 +214,14 @@ static void BookmarkGroups()
 
 static void TextureLocations()
 {
-    Check(NeiAssets.RelativePath(NeiAssets.Icon("Next")) == "assets/notenoughitems/textures/gui/sprites/icons/next.png",
-        "GUI sprites use lowercase paths below their namespace.");
+    Check(NeiAssets.RelativePath(NeiAssets.Modernity("nei_sprites.png")) == "assets/notenoughitems/textures/gui/modernity/nei_sprites.png",
+        "Modernity uses lowercase paths below the namespace.");
     Check(NeiAssets.ResourceName(NeiAssets.Background("")) == "assets/notenoughitems/textures/gui/backgrounds/default.png",
         "The embedded fallback uses the same resource path as the disk override.");
     Check(NeiAssets.LegacyPath(NeiAssets.Background("recipe")) == "Textures/background-recipe.png" &&
-        NeiAssets.LegacyPath(NeiAssets.Control("button_hover")) == "Textures/surfaces/button_hover.png" &&
-        NeiAssets.LegacyPath(NeiAssets.Atlas("icons")) == "Textures/icons-atlas.png", "Legacy GUI overrides stay readable.");
+        NeiAssets.LegacyPath(NeiAssets.Modernity("widgets.png")) == null, "Legacy backgrounds stay readable, not obsolete control art.");
+    Check(ModernityFrames.Caption("previous") == "<" && ModernityFrames.Caption("next") == ">" &&
+        ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" }, "Official sprite positions and paging glyphs.");
 }
 
 static void CheckSides(Rect host, Rect left, Rect right, float width, float height)
@@ -255,7 +256,8 @@ static void EmbeddedGuiTextures()
 {
     var assembly = typeof(Catalog).Assembly;
     Span<byte> header = stackalloc byte[24];
-    foreach (string path in new[] { NeiAssets.Icon("wrench"), NeiAssets.Control("button"), NeiAssets.Background("recipe"), NeiAssets.Atlas("ui") })
+    foreach (string path in new[] { NeiAssets.Modernity("widgets.png"), NeiAssets.Modernity("nei_tabbed_sprites.png"),
+        NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png") })
     {
         using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
         Check(png != null, "Missing namespaced resource: " + path);

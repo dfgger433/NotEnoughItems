@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.2.1")]
+[BepInPlugin(Guid, "Not Enough Items", "1.2.2")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -52,6 +52,15 @@ public sealed class Plugin : BaseUnityPlugin
     private bool _escapeDown;
     private float _nextRefresh;
     private int _updatedFrame = -1;
+
+    internal bool TryGetItemTooltip(out (string, string) tooltip)
+    {
+        tooltip = default;
+        if (!isActiveAndEnabled || !_enabled.Value || _active == GameSurface.Kind.Closed || PauseHandler.paused ||
+            SettingsMenu.instance || (ConsoleScript.instance && ConsoleScript.instance.active)) return false;
+        var mouse = Input.mousePosition;
+        return _window.TryGetItemTooltip(new Vector2(mouse.x, Screen.height - mouse.y), out tooltip);
+    }
 
     internal bool SuppressDuplicate => isActiveAndEnabled && _enabled.Value && _replaceUei.Value && _active != GameSurface.Kind.Closed;
     internal bool OwnsPointer => isActiveAndEnabled && _enabled.Value && _active != GameSurface.Kind.Closed &&
@@ -260,8 +269,10 @@ public sealed class Plugin : BaseUnityPlugin
         if (!recipes && !usages && !bookmark) return;
         var id = _window.ItemAt(mouse);
         string[]? contents = null;
+        Item? lookupItem = null;
         if (id == null && !_window.Hit(mouse) && _surface.HoveredItem(_active) is { } native)
         {
+            lookupItem = native;
             id = "item:" + native.id;
             if (!bookmark && native.TryGetComponent<WaterContainerItem>(out var container) && container.stack != null)
                 contents = container.stack.Where(stack => stack != null && stack.amount > 0 && !string.IsNullOrWhiteSpace(stack.liquidId))
@@ -275,7 +286,7 @@ public sealed class Plugin : BaseUnityPlugin
             return;
         }
         if (string.IsNullOrEmpty(id)) return;
-        _window.Lookup(id, usages, contents);
+        _window.Lookup(id, usages, contents, lookupItem);
         CaptureKey();
     }
 

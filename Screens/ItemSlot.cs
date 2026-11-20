@@ -36,21 +36,8 @@ internal sealed partial class NeiWindow
         if (e.type == EventType.Repaint && absolute.width > 0 && absolute.height > 0) _itemTargets.Add((absolute, id));
         if (!hover) return;
         if (e.type == EventType.Repaint)
-        {
-            string shortcuts = requirement >= 0
-                ? L(expanded ? "LMB · Collapse" : "LMB · Show matching items", expanded ? "左键 · 收起" : "左键 · 展开匹配物品") + "\n" +
-                    L($"{_plugin.RecipeKey} · Recipes   {_plugin.UsageKey} / RMB · Uses", $"{_plugin.RecipeKey} · 配方   {_plugin.UsageKey}／右键 · 用途")
-                : L($"{_plugin.RecipeKey} / LMB · Recipes   {_plugin.UsageKey} / RMB · Uses",
-                    $"{_plugin.RecipeKey}／左键 · 配方   {_plugin.UsageKey}／右键 · 用途");
-            shortcuts += "\n" + L($"{_plugin.BookmarkKey} / MMB / Alt+click · Bookmark", $"{_plugin.BookmarkKey}／中键／Alt+点击 · 书签");
-            if (catalogSlot && !ModalOpen && item is { Kind: CatalogItemKind.Item, IsVirtual: false } && NeiActions.CanGive)
-                shortcuts = L($"Cheat · LMB: {GiveQuantity}   RMB: 1   Hold Shift for recipes/uses",
-                    $"作弊 · 左键：{GiveQuantity}   右键：1   按住 Shift 查配方／用途") + "\n" +
-                    L($"{_plugin.RecipeKey} · Recipes   {_plugin.UsageKey} · Uses   {_plugin.BookmarkKey} · Bookmark",
-                        $"{_plugin.RecipeKey} · 配方   {_plugin.UsageKey} · 用途   {_plugin.BookmarkKey} · 书签");
-            var tooltip = NativeTooltip.ForSlot(title, item, id, details, shortcuts, recipeBookmark != null, liveItem);
-            Tip(tooltip.Title, tooltip.Body);
-        }
+            _itemTooltip = (absolute, title, item, details,
+                liveItem ?? (SameId(id, _item) ? _lookupItem : null), Time.frameCount);
         if (e.type != EventType.MouseDown || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
         if (e.button == 2 || e.alt) ToggleBookmark(id);
         else if (e.button == 0 && requirement >= 0) _expandedRequirement = expanded ? -1 : requirement;

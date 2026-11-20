@@ -276,6 +276,8 @@ internal sealed class GameSurface
         Patch(harmony, log, typeof(PlayerCamera), "HandleReleaseDragging", nameof(SkipRelease));
         Patch(harmony, log, typeof(PlayerCamera), "HandleWhileDragging", nameof(SkipWhileDragging));
         Patch(harmony, log, typeof(PlayerCamera), "HandleMouseOver", nameof(SkipHover));
+        harmony.Patch(AccessTools.Method(typeof(UIUtil), nameof(UIUtil.GetUITooltip)),
+            postfix: new HarmonyMethod(typeof(GameSurface), nameof(UseOriginalItemTooltip)) { priority = Priority.Last });
         if (Chainloader.PluginInfos.TryGetValue(TerminalGuid, out var terminal) && terminal.Instance != null)
             Patch(harmony, log, terminal.Instance.GetType(), "OnGUI", nameof(ShowTerminalChrome));
         var uei = AccessTools.TypeByName("UeiRuntime");
@@ -293,6 +295,12 @@ internal sealed class GameSurface
         if (method == null) { log.LogWarning($"Optional input patch not found: {type.Name}.{target}"); return; }
         try { harmony.Patch(method, prefix: new HarmonyMethod(typeof(GameSurface), prefix)); }
         catch (Exception error) { log.LogWarning($"Could not patch {type.Name}.{target}: {error.Message}"); }
+    }
+
+    // GlobalDark calls this while choosing which tooltip to show, before the stock renderer lays it out.
+    private static void UseOriginalItemTooltip(ref (string, string) __result)
+    {
+        if (Plugin.Instance?.TryGetItemTooltip(out var itemText) == true) __result = itemText;
     }
 
     private static bool SkipInput(PlayerCamera __instance)
