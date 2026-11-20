@@ -399,11 +399,11 @@ internal static class NeiSkin
     {
         if (Icons.TryGetValue(icon, out Texture2D? cached)) return cached;
         int frame = Array.FindIndex(IconNames, name => string.Equals(icon, name, StringComparison.OrdinalIgnoreCase));
-        string file = "icons/" + icon.ToLowerInvariant() + ".png";
+        string file = NeiAssets.Icon(icon);
         Texture2D? texture = frame < 0 ? null : TryLoadSidecar(file);
         if (frame >= 0 && texture == null)
         {
-            _iconAtlas ??= LoadTexture("icons-atlas.png", readable: true);
+            _iconAtlas ??= LoadTexture(NeiAssets.Atlas("icons"), readable: true);
             texture = Slice(_iconAtlas, frame, 32, 8, icon) ?? TryLoadEmbedded(file);
         }
         Icons.Add(icon, texture);
@@ -435,11 +435,11 @@ internal static class NeiSkin
     {
         if (Surfaces.TryGetValue(name, out Texture2D? cached) && cached != null && cached)
             return cached;
-        string file = "surfaces/" + name + ".png";
+        string file = NeiAssets.Control(name);
         Texture2D? texture = TryLoadSidecar(file);
         if (texture == null)
         {
-            _surfaceAtlas ??= LoadTexture("ui-atlas.png", readable: true);
+            _surfaceAtlas ??= LoadTexture(NeiAssets.Atlas("ui"), readable: true);
             texture = Slice(_surfaceAtlas, Array.IndexOf(SurfaceFrames, name), 16, 4, name) ?? TryLoadEmbedded(file);
         }
         if (texture == null || !texture)
@@ -448,13 +448,13 @@ internal static class NeiSkin
         return texture!;
     }
 
-    private static Texture2D Transparent => _transparent ??= LoadTexture("background.png")!;
+    private static Texture2D Transparent => _transparent ??= TryLoadEmbedded(NeiAssets.Background(string.Empty))!;
 
     private static Texture2D? GetBackground(string screen)
     {
         if (Backgrounds.TryGetValue(screen, out Texture2D? cached))
             return cached;
-        string file = screen.Length == 0 ? "background.png" : "background-" + screen + ".png";
+        string file = NeiAssets.Background(screen);
         Texture2D? texture = LoadTexture(file);
         Backgrounds.Add(screen, texture);
         return texture;
@@ -484,11 +484,19 @@ internal static class NeiSkin
     {
         string? assemblyPath = Assembly.GetExecutingAssembly().Location;
         if (string.IsNullOrEmpty(assemblyPath)) return null;
-        string path = Path.Combine(Path.GetDirectoryName(assemblyPath) ?? string.Empty, "Textures", fileName);
+        string directory = Path.GetDirectoryName(assemblyPath) ?? string.Empty;
+        var canonical = TryLoadFile(Path.Combine(directory, NeiAssets.RelativePath(fileName)), readable);
+        if (canonical != null) return canonical;
+        string? legacy = NeiAssets.LegacyPath(fileName);
+        return legacy == null ? null : TryLoadFile(Path.Combine(directory, legacy), readable);
+    }
+
+    private static Texture2D? TryLoadFile(string path, bool readable)
+    {
         try
         {
             if (!File.Exists(path)) return null;
-            return DecodeTexture(File.ReadAllBytes(path), "NEI " + fileName + " (replaceable)", readable);
+            return DecodeTexture(File.ReadAllBytes(path), "NEI " + Path.GetFileName(path) + " (replaceable)", readable);
         }
         catch (Exception)
         {
@@ -499,7 +507,7 @@ internal static class NeiSkin
 
     private static Texture2D? TryLoadEmbedded(string fileName, bool readable = false)
     {
-        string resource = "NotEnoughItems.Textures." + fileName.Replace('/', '.').Replace('\\', '.');
+        string resource = NeiAssets.ResourceName(fileName);
         try
         {
             using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource);

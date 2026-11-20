@@ -24,8 +24,10 @@ static int RunTests()
         ("tall terminals keep search clear of native slots and quantity", TallTerminalFooter),
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
         ("reordering and clipboard import preserve independent groups", BookmarkGroups),
+        ("GUI texture locations use a namespace and preserve legacy mappings", TextureLocations),
 #if RECIPE_TESTS
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
+        ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
         ("native tooltip markup, glyphs and literal fallbacks", TooltipSmoke.Run),
         ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
@@ -210,6 +212,17 @@ static void BookmarkGroups()
     Check(!book.Load("0:item%3Atest", "Imported"), "Clipboard import only accepts the documented format.");
 }
 
+static void TextureLocations()
+{
+    Check(NeiAssets.RelativePath(NeiAssets.Icon("Next")) == "assets/notenoughitems/textures/gui/sprites/icons/next.png",
+        "GUI sprites use lowercase paths below their namespace.");
+    Check(NeiAssets.ResourceName(NeiAssets.Background("")) == "assets/notenoughitems/textures/gui/backgrounds/default.png",
+        "The embedded fallback uses the same resource path as the disk override.");
+    Check(NeiAssets.LegacyPath(NeiAssets.Background("recipe")) == "Textures/background-recipe.png" &&
+        NeiAssets.LegacyPath(NeiAssets.Control("button_hover")) == "Textures/surfaces/button_hover.png" &&
+        NeiAssets.LegacyPath(NeiAssets.Atlas("icons")) == "Textures/icons-atlas.png", "Legacy GUI overrides stay readable.");
+}
+
 static void CheckSides(Rect host, Rect left, Rect right, float width, float height)
 {
     Check(left.width > 0 && right.width > 0, "Fixture must leave room for both sides.");
@@ -238,6 +251,23 @@ static void Check(bool passed, string message)
 }
 
 #if RECIPE_TESTS
+static void EmbeddedGuiTextures()
+{
+    var assembly = typeof(Catalog).Assembly;
+    Span<byte> header = stackalloc byte[24];
+    foreach (string path in new[] { NeiAssets.Icon("wrench"), NeiAssets.Control("button"), NeiAssets.Background("recipe"), NeiAssets.Atlas("ui") })
+    {
+        using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
+        Check(png != null, "Missing namespaced resource: " + path);
+        png!.ReadExactly(header);
+        Check(header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }), "Fallback is not PNG: " + path);
+        uint width = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[16..]);
+        uint height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[20..]);
+        Check(width > 0 && (width & (width - 1)) == 0 && height > 0 && (height & (height - 1)) == 0,
+            "Texture canvas dimensions must be powers of two: " + path);
+    }
+}
+
 static void NativeInventoryAnchor()
 {
     var adapter = typeof(Catalog).Assembly.GetType("NotEnoughItems.GameSurface", throwOnError: true)!;

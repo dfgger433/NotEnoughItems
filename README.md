@@ -2,12 +2,27 @@
 
 NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时，左侧显示书签，右侧显示物品目录。原生背包侧栏基于固定屏幕锚点，不随鼠标或镜头漂移；终端侧栏避让终端边界。视口太窄时，退回屏幕底部的紧凑面板。默认界面背景像素为全透明，只绘制按钮、交互高亮、图标和文字。界面采用按 [Modernity-GTNH-UI](https://github.com/ModernityGTNH/Modernity-GTNH-UI/tree/29x/assets/nei/textures) 参考独立重绘的银灰／灰紫像素风格，不包含 Minecraft、Modernity 原贴图或字体。
 
-## 安装
+## 编译、打包和部署
 
-- 依赖游戏的 Mono 版、BepInEx 5 和 `net.cucorelib` 1.1+。可选搭配 `com.unknown.inventoryterminal` 0.4.4+。
-- 在此目录运行 `dotnet build -c Release`；构建不会安装插件。运行 `dotnet build -c Release -t:Install` 将 DLL 放进本机游戏的 `BepInEx/plugins/NotEnoughItems/`，然后重启游戏。
-- 如果源码不在游戏的 `mods/NotEnoughItems`，构建时加 `-p:GameRoot="D:\路径\Casualties Unknown"`；CUCoreLib 不在 `BepInEx/plugins/CUCoreLib.dll` 时另设 `-p:CUCoreLibPath=...`。
-- 如果同时装了 **Unknown Enough Items (UEI 1.2.2)**，NEI 默认仅在自己显示时隐藏 UEI 的侧栏，不卸载或修改 UEI。可用 `ReplaceUEIPanel=false` 恢复并排显示。EMI 的原生制作界面模块不受影响。
+需要 PowerShell 7、.NET SDK 8 或更高、Mono 版游戏、BepInEx 5 和 CUCoreLib 1.1+。Unknown Inventory Terminal 0.4.4+ 为可选依赖。
+
+```powershell
+# 编译并运行回归检查，不写入游戏安装目录
+pwsh -File ./scripts/Build.ps1
+
+# 同时构建可分发 ZIP
+pwsh -File ./scripts/Build.ps1 -Package
+
+# 预览部署；不编译、不写文件
+pwsh -File ./scripts/Deploy.ps1 -WhatIf
+
+# 退出游戏后，构建、测试并安装
+pwsh -File ./scripts/Deploy.ps1
+```
+
+[编译脚本](<scripts/Build.ps1>)和[部署脚本](<scripts/Deploy.ps1>)默认使用本项目上两级目录作为游戏根。可用 `-GameRoot 'D:\路径\Casualties Unknown'`、`-CUCoreLibPath 'D:\路径\CUCoreLib.dll'`、`-Configuration Debug` 和 `-SkipTests` 覆盖默认值。部署脚本不启动或关闭游戏；检测到目标游戏正在运行时停止，成功复制后还会比对 DLL 的 SHA-256。部署目录为游戏根下的 `BepInEx/plugins/NotEnoughItems/`。
+
+同时装有 **Unknown Enough Items (UEI 1.2.2)** 时，NEI 默认只在自身显示期间隐藏 UEI 侧栏，不卸载或修改 UEI；将 `ReplaceUEIPanel` 设为 `false` 可恢复并排显示。EMI 的原生制作界面不受影响。
 
 ## 使用
 
@@ -25,7 +40,13 @@ NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时
 
 ## 替换界面资源
 
-布局与交互分在 [Screens](<Screens>)：物品目录、书签、配方、设置和物品格分别维护。默认 PNG 与图集坐标在 [Textures](<Textures>)。发布的 DLL 自带默认资源；可在 DLL 同目录放置 `Textures` 目录中的同名 PNG 来覆盖默认外观，保留图集尺寸、坐标和 Alpha 通道。物品图标仍由游戏或内容 Mod 提供。搜索不再使用物品子集。
+本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。布局代码仍在 [Screens](<Screens>)，物品图标仍由游戏或内容 Mod 提供。
+
+- [独立图标与按钮](<assets/notenoughitems/textures/gui/sprites>)：比如资源 ID `notenoughitems:gui/sprites/icons/bookmark` 对应 `assets/notenoughitems/textures/gui/sprites/icons/bookmark.png`。
+- [屏幕背景](<assets/notenoughitems/textures/gui/backgrounds>)和[预切片图集 PNG](<assets/notenoughitems/textures/gui/atlas>)：保持原文件尺寸、坐标、Alpha 通道；默认背景全透明。
+- [图集来源描述](<assets/notenoughitems/atlases/nei_gui.json>)使用 Minecraft/NeoForge 图集格式；[预切片坐标](<assets/notenoughitems/gui/atlas_frames.json>)单独保存。Unity 插件读取 PNG，并不会调用 Minecraft 图集装载器。
+
+要换肤，请在 DLL 旁放置同样的 `assets/notenoughitems/…` 路径，重启后生效。独立 PNG 优先于整张图集；要用整张图集覆盖某个图标，须让该图标的旁置独立 PNG 不存在。部署时只补缺失资源，先迁移旧 `Textures` 中的同类 PNG，再补默认文件；不会删除旧目录，也不覆盖新路径已有的自定义文件。运行时如新路径没有可加载文件，仍兼容旧路径并以内嵌 PNG 兜底。
 
 ## 机器扩展接口
 
@@ -45,9 +66,8 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
 
 `ReplaceSource` 与 `ClearSource` 分别替换／清除同一来源的类别和配方。请为类别、配方及虚拟物品使用自己的前缀，避免与游戏或其他模组冲突。完整类型见 [Catalog.cs](<Catalog.cs>)。查询可从 `Catalog.Shared` 获取按产物、用途及分类的索引。
 
-## 1.1 资源与设置
+## 游戏内设置
 
-- 资源覆盖目录是插件旁置的 `BepInEx/plugins/NotEnoughItems/Textures/`；只替换已有 PNG/JSON，不需要重新编译，也不会被后续 `Install` 覆盖。
 - 在原生游戏设置的「游戏」分类中，`NEI · 显示侧栏` 是持久开关。按 `O` 或设置页隐藏后，仍能在此行重新开启；设置文件是 `BepInEx/config/casualtiesunknown.notenoughitems.cfg`。
 - 物品子集已移除，搜索只处理物品文本、来源、标签和 ID。背包的侧栏锚点不会读取鼠标位置；终端侧栏只根据 `TerminalApi.TryGetBounds` 避让终端。
 

@@ -3,7 +3,7 @@
   "origin": "top-left pixel coordinates",
   "atlases": [
     {
-      "file": "ui-atlas.png",
+      "file": "notenoughitems:textures/gui/atlas/ui.png",
       "width": 64,
       "height": 64,
       "frames": [
@@ -138,7 +138,7 @@
       ]
     },
     {
-      "file": "icons-atlas.png",
+      "file": "notenoughitems:textures/gui/atlas/icons.png",
       "width": 256,
       "height": 64,
       "frames": [

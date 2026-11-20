@@ -1,76 +1,76 @@
 {
   "previous": {
-    "file": "previous.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/previous.png",
     "x": 0,
     "y": 0,
     "w": 32,
     "h": 32
   },
   "next": {
-    "file": "next.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/next.png",
     "x": 32,
     "y": 0,
     "w": 32,
     "h": 32
   },
   "options": {
-    "file": "options.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/options.png",
     "x": 64,
     "y": 0,
     "w": 32,
     "h": 32
   },
   "bookmark": {
-    "file": "bookmark.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/bookmark.png",
     "x": 96,
     "y": 0,
     "w": 32,
     "h": 32
   },
   "add": {
-    "file": "add.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/add.png",
     "x": 128,
     "y": 0,
     "w": 32,
     "h": 32
   },
   "remove": {
-    "file": "remove.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/remove.png",
     "x": 160,
     "y": 0,
     "w": 32,
     "h": 32
   },
   "search": {
-    "file": "search.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/search.png",
     "x": 192,
     "y": 0,
     "w": 32,
     "h": 32
   },
   "close": {
-    "file": "close.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/close.png",
     "x": 224,
     "y": 0,
     "w": 32,
     "h": 32
   },
   "machines": {
-    "file": "machines.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/machines.png",
     "x": 0,
     "y": 32,
     "w": 32,
     "h": 32
   },
   "history": {
-    "file": "history.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/history.png",
     "x": 32,
     "y": 32,
     "w": 32,
     "h": 32
   },
   "wrench": {
-    "file": "wrench.png",
+    "file": "notenoughitems:textures/gui/sprites/icons/wrench.png",
     "x": 64,
     "y": 32,
     "w": 32,
