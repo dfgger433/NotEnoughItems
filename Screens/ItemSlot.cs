@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
@@ -10,7 +8,7 @@ internal sealed partial class NeiWindow
 {
     private void ItemSlot(Rect rect, string id, bool bookmarked = false, Sprite? overrideIcon = null, string? amount = null,
         string? fallback = null, Rect? clipping = null, Vector2? globalOffset = null, string? details = null,
-        int requirement = -1, bool belowRequirement = false)
+        int requirement = -1, bool belowRequirement = false, Item? liveItem = null)
     {
         _catalog.TryGetItem(id, out var item);
         var recipeBookmark = id.StartsWith("recipe/", StringComparison.Ordinal) ? _catalog.Recipes.FirstOrDefault(r => RecipeKey(r) == id) : null;
@@ -37,19 +35,27 @@ internal sealed partial class NeiWindow
         if (!string.IsNullOrEmpty(amount)) NeiSkin.Label(new Rect(rect.x + 2, rect.yMax - 14, rect.width - 4, 13), amount!, TextAnchor.MiddleRight);
         if (e.type == EventType.Repaint && absolute.width > 0 && absolute.height > 0) _itemTargets.Add((absolute, id));
         if (!hover) return;
-        var detail = string.IsNullOrEmpty(details) ? item?.Description : details;
-        var shortcuts = requirement >= 0
-            ? L(expanded ? "Left click · Collapse" : "Left click · Show all matching items", expanded ? "左键 · 收起" : "左键 · 展开全部匹配物品") + "\n" +
-                L($"{_plugin.RecipeKey} · Recipes   {_plugin.UsageKey} / RMB · Uses", $"{_plugin.RecipeKey} · 配方   {_plugin.UsageKey}／右键 · 用途")
-            : L($"{_plugin.RecipeKey} / LMB · Recipes   {_plugin.UsageKey} / RMB · Uses   {_plugin.BookmarkKey} · Bookmark",
-                $"{_plugin.RecipeKey}／左键 · 配方   {_plugin.UsageKey}／右键 · 用途   {_plugin.BookmarkKey} · 书签");
-        Tip(title, $"{id}{(string.IsNullOrWhiteSpace(detail) ? "" : "\n" + detail)}\n" + shortcuts);
+        if (e.type == EventType.Repaint)
+        {
+            string shortcuts = requirement >= 0
+                ? L(expanded ? "LMB · Collapse" : "LMB · Show matching items", expanded ? "左键 · 收起" : "左键 · 展开匹配物品") + "\n" +
+                    L($"{_plugin.RecipeKey} · Recipes   {_plugin.UsageKey} / RMB · Uses", $"{_plugin.RecipeKey} · 配方   {_plugin.UsageKey}／右键 · 用途")
+                : L($"{_plugin.RecipeKey} / LMB · Recipes   {_plugin.UsageKey} / RMB · Uses",
+                    $"{_plugin.RecipeKey}／左键 · 配方   {_plugin.UsageKey}／右键 · 用途");
+            shortcuts += "\n" + L($"{_plugin.BookmarkKey} / MMB / Alt+click · Bookmark", $"{_plugin.BookmarkKey}／中键／Alt+点击 · 书签");
+            if (!ModalOpen && recipeBookmark == null && item is { Kind: CatalogItemKind.Item, IsVirtual: false } && NeiActions.CanGive)
+                shortcuts += "\n" + L($"Cheat · Ctrl+LMB: {GiveQuantity}   Ctrl+RMB: 1   +Shift: 16",
+                    $"作弊 · Ctrl+左键：{GiveQuantity}   Ctrl+右键：1   加 Shift：16");
+            var tooltip = NativeTooltip.ForSlot(title, item, id, details, shortcuts, recipeBookmark != null, liveItem);
+            Tip(tooltip.Title, tooltip.Body);
+        }
         if (e.type != EventType.MouseDown || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
         if (e.button == 2 || e.alt) ToggleBookmark(id);
         else if (e.button == 0 && requirement >= 0) _expandedRequirement = expanded ? -1 : requirement;
-        else if (!ModalOpen && recipeBookmark == null && item is { Kind: CatalogItemKind.Item } && NeiActions.CanUse && e.control && (e.button == 0 || e.button == 1))
+        else if (!ModalOpen && recipeBookmark == null && item is { Kind: CatalogItemKind.Item, IsVirtual: false } &&
+            NeiActions.Mode == NeiActions.LocalMode.Cheat && e.control &&
+            NeiActions.TryHandleGiveFromSlot(item.Id, e.button, e.shift, GiveQuantity, out var error, out int dropped))
         {
-            var error = NeiActions.Give(item.Id, e.shift ? 16 : e.button == 1 ? 1 : GiveQuantity, out int dropped);
             Status(error ?? (dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品")));
         }
         else if (e.button == 0 || e.button == 1) Lookup(id, e.button == 1);

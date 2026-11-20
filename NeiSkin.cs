@@ -146,6 +146,11 @@ internal static class NeiSkin
     {
         if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(text))
             return;
+        if (NativeTooltip.TryGetParts(subtitle, out var native) && native != null)
+        {
+            DrawNativeTooltip(mousePosition, native);
+            return;
+        }
 
         const float margin = 4f;
         const float pad = 7f;
@@ -196,6 +201,174 @@ internal static class NeiSkin
             Paint(styles.TooltipDetailShadow, Offset(detailRect), detail);
             Paint(styles.TooltipDetail, detailRect, detail);
         }
+    }
+
+    private static void DrawNativeTooltip(Vector2 mouse, NativeTooltip.Parts tip)
+    {
+        const float pad = 7f, gap = 3f, margin = 4f;
+        var min = GUIUtility.ScreenToGUIPoint(Vector2.zero) + Vector2.one * margin;
+        var max = GUIUtility.ScreenToGUIPoint(new Vector2(Screen.width, Screen.height)) - Vector2.one * margin;
+        float availableWidth = Mathf.Min(380f, max.x - min.x) - 2 * pad;
+        float availableHeight = max.y - min.y - 2 * pad;
+        if (availableWidth <= 0 || availableHeight <= 0) return;
+
+        var styles = Styles;
+        var title = new TooltipLayout(tip.Title, styles.TooltipTitle, availableWidth, true);
+        var detail = new TooltipLayout(tip.Body, styles.TooltipDetail, availableWidth, false);
+        var footer = new TooltipLayout(tip.Shortcuts, styles.TooltipDetail, availableWidth, false);
+        float width = Mathf.Min(availableWidth, Mathf.Max(44, title.Width, detail.Width, footer.Width)) + 2 * pad;
+        float height = Mathf.Min(availableHeight, title.Height + detail.Height + footer.Height + 2 * gap) + 2 * pad;
+        float x = mouse.x + 12, y = mouse.y + 15;
+        if (x + width > max.x) x = mouse.x - width - 8;
+        if (y + height > max.y) y = mouse.y - height - 8;
+        x = Mathf.Clamp(x, min.x, max.x - width);
+        y = Mathf.Clamp(y, min.y, max.y - height);
+        var origin = new Vector2(x + pad, y + pad);
+        float footerY = y + height - pad - footer.Height;
+        float titleHeight = Mathf.Min(title.Height, footerY - origin.y - gap);
+        float detailY = origin.y + Mathf.Max(0, titleHeight) + gap;
+        title.Draw(origin, width - 2 * pad, titleHeight);
+        detail.Draw(new Vector2(origin.x, detailY), width - 2 * pad, footerY - detailY - gap);
+        footer.Draw(new Vector2(origin.x, Mathf.Max(origin.y, footerY)), width - 2 * pad,
+            Mathf.Min(footer.Height, height - 2 * pad));
+    }
+
+    private sealed class TooltipLayout
+    {
+        private readonly List<(Rect Rect, NativeTooltip.Run Run, Texture? Atlas, Rect Uv)> _glyphs = new();
+        private readonly GUIStyle _baseStyle;
+        internal readonly float Width, Height;
+
+        internal TooltipLayout(IReadOnlyList<NativeTooltip.Run> runs, GUIStyle baseStyle, float maxWidth, bool title)
+        {
+            _baseStyle = baseStyle;
+            var content = new GUIContent();
+            float x = 0, y = 0, widest = 0, row = baseStyle.lineHeight;
+            void NewLine()
+            {
+                x = 0;
+                y += row;
+                row = baseStyle.lineHeight;
+            }
+            void Add(NativeTooltip.Run run, float w, float h, Texture? atlas = null, Rect uv = default)
+            {
+                if (x > 0 && x + w > maxWidth) NewLine();
+                _glyphs.Add((new Rect(x, y, w, h), run, atlas, uv));
+                x += w;
+                row = Mathf.Max(row, h);
+                widest = Mathf.Max(widest, x);
+            }
+
+            foreach (var run in runs)
+            {
+                float height = TooltipRunStyle(baseStyle, run).lineHeight;
+                if (run.SpriteIndex >= 0)
+                {
+                    if (NativeTooltip.TryResolveSprite(run.SpriteIndex, title, out var atlas, out var uv, out float aspect))
+                    {
+                        float iconHeight = Mathf.Max(1f, height - 3f);
+                        Add(run, Mathf.Min(maxWidth, aspect * iconHeight + 2), height, atlas, uv);
+                    }
+                    else
+                    {
+                        var dot = new NativeTooltip.Run("• ", run.Color, run.Alpha);
+                        content.text = dot.Text;
+                        Add(dot, baseStyle.CalcSize(content).x, height);
+                    }
+                    continue;
+                }
+                var measure = TooltipRunStyle(baseStyle, run);
+                // Break at spaces or CJK glyphs; split genuinely overlong words by text
+                // elements, not UTF-16 units (surrogates and combining accents stay intact).
+                foreach (string word in TooltipWords(run.Text))
+                {
+                    if (word == "\r\n" || word == "\n" || word == "\r") { NewLine(); continue; }
+                    string text = word == "\t" ? "    " : word;
+                    if (x == 0 && string.IsNullOrWhiteSpace(text)) continue;
+                    content.text = text;
+                    float width = measure.CalcSize(content).x;
+                    if (width <= maxWidth)
+                    {
+                        if (x + width > maxWidth && string.IsNullOrWhiteSpace(text)) { NewLine(); continue; }
+                        Add(new NativeTooltip.Run(text, run.Color, run.Alpha, run.Font, run.Scale), width, height);
+                        continue;
+                    }
+                    var elements = System.Globalization.StringInfo.GetTextElementEnumerator(text);
+                    while (elements.MoveNext())
+                    {
+                        content.text = elements.GetTextElement();
+                        Add(new NativeTooltip.Run(content.text, run.Color, run.Alpha, run.Font, run.Scale), measure.CalcSize(content).x, height);
+                    }
+                }
+            }
+            Width = widest;
+            Height = runs.Count == 0 ? 0 : y + row;
+        }
+
+        internal void Draw(Vector2 origin, float width, float height)
+        {
+            if (height <= 0 || width <= 0) return;
+            var content = new GUIContent();
+            Color previous = GUI.color;
+            GUI.BeginGroup(new Rect(origin.x, origin.y, width, height));
+            try
+            {
+                foreach (var glyph in _glyphs)
+                {
+                    var rect = glyph.Rect;
+                    if (rect.yMax > height + .1f) continue;
+                    var run = glyph.Run;
+                    Color color = run.Color.HasValue ? run.Color.Value : _baseStyle.normal.textColor;
+                    if (run.Alpha.HasValue) color.a = run.Alpha.Value / 255f;
+                    if (glyph.Atlas)
+                    {
+                        GUI.color = previous * (run.TintSprite ? color : new Color(1, 1, 1, color.a));
+                        GUI.DrawTextureWithTexCoords(new Rect(rect.x, rect.y + 1, Mathf.Max(1, rect.width - 2), Mathf.Max(1, rect.height - 3)), glyph.Atlas!, glyph.Uv, true);
+                        continue;
+                    }
+                    var style = TooltipRunStyle(_baseStyle, run);
+                    content.text = run.Text;
+                    GUI.color = previous;
+                    style.normal.textColor = new Color(Shadow.r / 255f, Shadow.g / 255f, Shadow.b / 255f, color.a);
+                    Paint(style, Offset(rect), content);
+                    style.normal.textColor = color;
+                    Paint(style, rect, content);
+                }
+            }
+            finally { GUI.color = previous; GUI.EndGroup(); }
+        }
+    }
+
+    private static IEnumerable<string> TooltipWords(string text)
+    {
+        int start = 0;
+        var elements = System.Globalization.StringInfo.GetTextElementEnumerator(text);
+        while (elements.MoveNext())
+        {
+            int index = elements.ElementIndex;
+            string element = elements.GetTextElement();
+            char ch = element[0];
+            if (!char.IsWhiteSpace(ch) && ch is not (>= '\u2E80' and <= '\u9FFF') && ch is not (>= '\uAC00' and <= '\uD7AF')) continue;
+            if (index > start) yield return text.Substring(start, index - start);
+            start = index + element.Length;
+            if (ch == '\r' && element.Length == 1 && start < text.Length && text[start] == '\n')
+            {
+                elements.MoveNext();
+                start++;
+                yield return "\r\n";
+            }
+            else yield return element;
+        }
+        if (start < text.Length) yield return text.Substring(start);
+    }
+
+    private static GUIStyle TooltipRunStyle(GUIStyle basis, NativeTooltip.Run run)
+    {
+        var style = Styles.TooltipRun;
+        style.font = basis.font;
+        style.fontSize = Mathf.RoundToInt(basis.fontSize * run.Scale);
+        style.fontStyle = run.Font;
+        return style;
     }
 
     /// <summary>Releases loaded Unity textures on the main thread, for example during plug-in teardown.</summary>
@@ -379,6 +552,7 @@ internal static class NeiSkin
         internal readonly GUIStyle TooltipTitle;
         internal readonly GUIStyle TooltipDetail;
         internal readonly GUIStyle TooltipDetailShadow;
+        internal readonly GUIStyle TooltipRun;
         internal readonly GUIContent LabelContent = new();
         internal readonly GUIContent TooltipTitleContent = new();
         internal readonly GUIContent TooltipDetailContent = new();
@@ -408,6 +582,8 @@ internal static class NeiSkin
             TooltipTitle = TextStyle(TextAnchor.UpperLeft, TooltipInk, 13, wrap: true);
             TooltipDetail = TextStyle(TextAnchor.UpperLeft, TooltipAccent, 12, wrap: true);
             TooltipDetailShadow = TextStyle(TextAnchor.UpperLeft, Shadow, 12, wrap: true);
+            TooltipRun = TextStyle(TextAnchor.UpperLeft, TooltipAccent, 12);
+            TooltipRun.clipping = TextClipping.Overflow; // The tooltip group clips each block as a whole.
         }
 
         internal GUIStyle Label(TextAnchor alignment, bool muted)
