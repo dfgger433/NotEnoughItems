@@ -1,6 +1,6 @@
 # Not Enough Items — Casualties: Unknown
 
-NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时，左侧显示书签，右侧显示物品目录。侧栏按宿主窗口的实际位置布置；视口太窄时，退回屏幕底部的紧凑面板。NEI 的侧栏、配方页和提示没有底板或黑色遮罩，只保留按钮、格框、图标和文字。界面采用按 [Modernity-GTNH-UI](https://github.com/ModernityGTNH/Modernity-GTNH-UI/tree/29x/assets/nei/textures) 参考独立重绘的银灰／灰紫像素风格，不包含 Minecraft、Modernity 原贴图或字体。
+NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时，左侧显示书签，右侧显示物品目录。原生背包侧栏基于固定屏幕锚点，不随鼠标或镜头漂移；终端侧栏避让终端边界。视口太窄时，退回屏幕底部的紧凑面板。默认界面背景像素为全透明，只绘制按钮、交互高亮、图标和文字。界面采用按 [Modernity-GTNH-UI](https://github.com/ModernityGTNH/Modernity-GTNH-UI/tree/29x/assets/nei/textures) 参考独立重绘的银灰／灰紫像素风格，不包含 Minecraft、Modernity 原贴图或字体。
 
 ## 安装
 
@@ -13,14 +13,18 @@ NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时
 
 | 操作 | 默认交互 |
 |---|---|
-| 打开物品索引 | 打开背包或终端；`O` 切换 NEI，`B` 切换书签栏 |
+| 打开或恢复 NEI | 打开背包或终端后按 `O` 切换。即使侧栏已隐藏，也可在游戏原生「设置 → 游戏 → NEI · 显示侧栏」恢复。 |
 | 查配方 / 用途 | 悬停后 `R` / `U`，或点击 NEI 格子的左键 / 右键。用途含直接原料、性质、工具、机器；悬停有内容物的液体容器时也查其液体用途。终端聚合格未公开悬停接口，请从 NEI 目录查询 |
 | 搜索物品 | `Ctrl+F`；普通文字或 `@来源` `$标签` `#描述` `&ID`、`-排除`、`"短语"`，以及 `\|` 分隔的备选词 |
-| 书签 | `A` 或中键添加／移除；左栏的 `+` 可建立命名页。配方详情可以单独收藏配方 |
+| 书签 | `A` 或中键添加／移除；点左下书本或按 `B` 切换书签栏，扳手打开 NEI 设置。点击书签栏底部页名可建立／切换命名页。配方详情可以单独收藏配方。 |
 | 查机器配方 | 左下「机器配方」→ 切换分类／配方；搜索支持 `<输入` `>产物` `^工具或机器` `~名称或说明` |
 | 查看性质与工具 | 详情中，每种性质或工具先显示一个代表物品，优先使用游戏会选中的实际物品。点带 `+` 的格子展开所有具有该性质的物品或工具；`!` 表示未达到本配方的要求。再点 `−` 或按返回收起 |
 | 规划原料 | 配方中的「配方树」提供一条供参考的依赖路线；「可制作」针对原生游戏制作规则查询。已知的原生配方可以跳转到游戏制作页，不会自动消耗物品 |
-| 本地调试工具 | 默认关闭。仅可在确定为单机的运行中使用，并需在 BepInEx 配置打开 `AllowLocalCheats` 后再从 NEI 选项进入本地作弊模式。`Ctrl+左键` 给 1 件、`Ctrl+右键` 给 4 件，加 `Shift` 给 16 件；另有治疗和原生游戏速度工具 |
+| 本地调试工具 | 默认关闭。仅可在确定为单机的运行中使用，并需在 BepInEx 配置打开 `AllowLocalCheats` 后再从 NEI 选项进入本地作弊模式。`Ctrl+左键` 按右下角数量框给 1–64 件，`Ctrl+右键` 给 1 件，加 `Shift` 给 16 件；另有治疗和原生游戏速度工具 |
+
+## 替换界面资源
+
+布局与交互分在 [Screens](<Screens>)：物品目录、书签、配方、设置和物品格分别维护。默认 PNG 与图集坐标在 [Textures](<Textures>)。发布的 DLL 自带默认资源；可在 DLL 同目录放置 `Textures` 目录中的同名 PNG 来覆盖默认外观，保留图集尺寸、坐标和 Alpha 通道。物品图标仍由游戏或内容 Mod 提供。搜索不再使用物品子集。
 
 ## 机器扩展接口
 
@@ -39,6 +43,12 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
 ```
 
 `ReplaceSource` 与 `ClearSource` 分别替换／清除同一来源的类别和配方。请为类别、配方及虚拟物品使用自己的前缀，避免与游戏或其他模组冲突。完整类型见 [Catalog.cs](<Catalog.cs>)。查询可从 `Catalog.Shared` 获取按产物、用途及分类的索引。
+
+## 1.1 资源与设置
+
+- 资源覆盖目录是插件旁置的 `BepInEx/plugins/NotEnoughItems/Textures/`；只替换已有 PNG/JSON，不需要重新编译，也不会被后续 `Install` 覆盖。
+- 在原生游戏设置的「游戏」分类中，`NEI · 显示侧栏` 是持久开关。按 `O` 或设置页隐藏后，仍能在此行重新开启；设置文件是 `BepInEx/config/casualtiesunknown.notenoughitems.cfg`。
+- 物品子集已移除，搜索只处理物品文本、来源、标签和 ID。背包的侧栏锚点不会读取鼠标位置；终端侧栏只根据 `TerminalApi.TryGetBounds` 避让终端。
 
 ## 验证与范围
 

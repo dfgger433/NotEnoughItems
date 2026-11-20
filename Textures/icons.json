@@ -1,0 +1,79 @@
+{
+  "previous": {
+    "file": "previous.png",
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 32
+  },
+  "next": {
+    "file": "next.png",
+    "x": 32,
+    "y": 0,
+    "w": 32,
+    "h": 32
+  },
+  "options": {
+    "file": "options.png",
+    "x": 64,
+    "y": 0,
+    "w": 32,
+    "h": 32
+  },
+  "bookmark": {
+    "file": "bookmark.png",
+    "x": 96,
+    "y": 0,
+    "w": 32,
+    "h": 32
+  },
+  "add": {
+    "file": "add.png",
+    "x": 128,
+    "y": 0,
+    "w": 32,
+    "h": 32
+  },
+  "remove": {
+    "file": "remove.png",
+    "x": 160,
+    "y": 0,
+    "w": 32,
+    "h": 32
+  },
+  "search": {
+    "file": "search.png",
+    "x": 192,
+    "y": 0,
+    "w": 32,
+    "h": 32
+  },
+  "close": {
+    "file": "close.png",
+    "x": 224,
+    "y": 0,
+    "w": 32,
+    "h": 32
+  },
+  "machines": {
+    "file": "machines.png",
+    "x": 0,
+    "y": 32,
+    "w": 32,
+    "h": 32
+  },
+  "history": {
+    "file": "history.png",
+    "x": 32,
+    "y": 32,
+    "w": 32,
+    "h": 32
+  },
+  "wrench": {
+    "file": "wrench.png",
+    "x": 64,
+    "y": 32,
+    "w": 32,
+    "h": 32
+  }
+}

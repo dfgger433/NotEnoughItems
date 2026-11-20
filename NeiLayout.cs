@@ -23,6 +23,22 @@ internal static class NeiLayout
             new Rect(rightEdge, y, rightWidth, bottom - y));
     }
 
+    // Like NEI, the lower controls anchor to the screen, not the player or pointer.
+    internal static (Rect Tools, Rect Search) BottomRail(float width, float height, Rect center, Rect right)
+    {
+        const float margin = 8, toolsWidth = 75, gap = 5, buttonHeight = 23;
+        // Casualties: Unknown keeps its health/crafting HUD in the first 50 logical pixels.
+        const float toolsLeft = 54;
+        float y = Mathf.Max(margin, height - margin - buttonHeight);
+        float searchMin = toolsLeft + toolsWidth + gap;
+        float searchWidth = Mathf.Min(272, Mathf.Max(0, width - margin - searchMin));
+        float searchLeft = Mathf.Max(searchMin, (width - searchWidth) / 2);
+        var search = new Rect(searchLeft, y, searchWidth, buttonHeight);
+        if (search.Overlaps(center) && right.width >= 81 && right.height >= 125)
+            search = new Rect(right.x + 3, right.yMax - 54, right.width - 6, buttonHeight);
+        return (new Rect(toolsLeft, y, toolsWidth, buttonHeight), search);
+    }
+
     internal static Rect Inspector(Rect center, float width, float height, float scale)
     {
         float w = Mathf.Min(width - 16, 560 * scale);

@@ -20,7 +20,10 @@ static int RunTests()
         ("off-center host leaves layout asymmetric", OffCenterLayout),
         ("narrow-screen panels shrink without covering the host", NarrowLayout),
         ("recipe inspector is clamped to screen margins", InspectorLayout),
+        ("screen footer never follows a moving inventory", FooterAnchoring),
+        ("tall terminals keep search clear of native slots and quantity", TallTerminalFooter),
 #if RECIPE_TESTS
+        ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
         ("usage queries share ingredient matching semantics without false positives", RecipeUsageMatching),
         ("source replacement clears stale recipes without affecting other sources", RecipeSourceReplacement),
@@ -146,6 +149,28 @@ static void InspectorLayout()
         "narrow screen constrains both dimensions without a negative rectangle");
 }
 
+static void FooterAnchoring()
+{
+    var center = new Rect(430, 100, 420, 500);
+    var (tools, search) = NeiLayout.BottomRail(1280, 720, center, default);
+    var moved = NeiLayout.BottomRail(1280, 720, new Rect(470, 150, 420, 486), default);
+    RectEqual(tools, moved.Tools, "The left buttons are anchored to the screen.");
+    RectEqual(search, moved.Search, "The normal center search does not follow the inventory.");
+    RectEqual(new Rect(54, 689, 75, 23), tools, "Left rail clears the vanilla HUD and uses a fixed screen margin.");
+    Equal(640, search.center.x, "The search is centered.");
+}
+
+static void TallTerminalFooter()
+{
+    var terminal = new Rect(480, 8, 320, 704);
+    var (_, right) = NeiLayout.Sides(terminal, 1280, 720, 1);
+    var (tools, search) = NeiLayout.BottomRail(1280, 720, terminal, right);
+    Check(!search.Overlaps(terminal), "Search must not cover any part of tall central terminal.");
+    Check(!tools.Overlaps(terminal) && !tools.Overlaps(search), "Left controls are clear of the terminal and search.");
+    Check(search.xMin > right.xMin && search.xMax < right.xMax && search.yMax < right.yMax - 30,
+        "Tall terminal search is placed  immediately above the right quantity controls.");
+}
+
 static void CheckSides(Rect host, Rect left, Rect right, float width, float height)
 {
     Check(left.width > 0 && right.width > 0, "Fixture must leave room for both sides.");
@@ -174,6 +199,20 @@ static void Check(bool passed, string message)
 }
 
 #if RECIPE_TESTS
+static void NativeInventoryAnchor()
+{
+    var adapter = typeof(Catalog).Assembly.GetType("NotEnoughItems.GameSurface", throwOnError: true)!;
+    var anchor = adapter.GetMethod("AnchorInventory", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    var radial = new Rect(-297, -292, 594, 601);
+    var container = new Rect(390, -345, 200, 690);
+    Rect Resolve(Rect? currentContainer, float screenWidth, float screenHeight, float scale) =>
+        (Rect)anchor.Invoke(null, [radial, currentContainer, screenWidth, screenHeight, scale])!;
+    RectEqual(new Rect(343, 68, 594, 601), Resolve(null, 1280, 720, 1), "Centered vanilla inventory");
+    var withContainer = Resolve(container, 1280, 720, 1);
+    Check(withContainer.xMin <= 343 && withContainer.xMax >= 1230, "The open container reserves the right side at full size.");
+    RectEqual(new Rect(514.5f, 102, 891, 901.5f), Resolve(null, 1920, 1080, 1.5f), "Screen/UI scaling");
+}
+
 static void RecipeRegistration()
 {
     const string source = "nei.tests.registration";
