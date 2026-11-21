@@ -1,5 +1,11 @@
 # 更新记录
 
+## 1.2.8
+
+- 按 Unknown Inventory Terminal 的 `VisualLease` 方案提升原版 `GlobalDark.tooltipRect` 子树，而不是提升整个 Canvas。
+- 租约会保存并恢复 Canvas、GraphicRaycaster、Graphic 和排序层设置，提示显示结束或插件卸载后不残留。
+- 继续禁止 RenderTexture、捕获相机和 ScreenSpaceOverlay 渲染模式切换，避免黑屏。
+
 ## 1.2.7
 
 - 修复 1.2.6 的悬浮框 RenderTexture 捕获造成的黑屏：不再切换原版 ScreenSpaceOverlay Canvas、不创建捕获相机或全屏纹理。

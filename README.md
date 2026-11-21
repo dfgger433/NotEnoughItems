@@ -65,6 +65,11 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
 
 `ReplaceSource` 与 `ClearSource` 分别替换／清除同一来源的类别和配方。请为类别、配方及虚拟物品使用自己的前缀，避免与游戏或其他模组冲突。完整类型见 [Catalog.cs](<Catalog.cs>)。查询可从 `Catalog.Shared` 获取按产物、用途及分类的索引。
 
+## 1.2.8 悬浮框层级
+
+- 物品悬浮框现在采用 Unknown Inventory Terminal 相同的可恢复 `VisualLease`：只提升原版 `GlobalDark.tooltipRect`，不提升整张 Canvas。
+- 不创建捕获相机或 RenderTexture，也不修改原版 ScreenSpaceOverlay 模式，避免黑屏和全屏 GUI 叠加。
+
 ## 1.2.7 悬浮框层级
 
 - 物品悬浮框不再使用 RenderTexture、捕获相机或 ScreenSpaceOverlay Canvas 模式切换，避免黑屏。
