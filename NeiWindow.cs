@@ -18,6 +18,7 @@ internal sealed partial class NeiWindow
     private readonly ConfigEntry<string> _saved;
     private readonly ConfigEntry<bool> _showHistory;
     private readonly ConfigEntry<bool> _showGrid;
+    private readonly ConfigEntry<bool> _showInventoryGrid;
     private readonly BookmarkBook _book = new();
     private string? _activeRecipeKey, _chainGroup;
     private bool _chainDetails;
@@ -66,7 +67,8 @@ internal sealed partial class NeiWindow
         _plugin = plugin;
         _saved = config.Bind("Bookmarks", "Entries", string.Empty, "Bookmarked item ids and their page names. Managed by NEI.");
         _showHistory = config.Bind("NotEnoughItems", "HistoryStrip", true, "Show recently inspected items in the catalog.");
-        _showGrid = config.Bind("NotEnoughItems", "ItemList", true, "Show the item catalog.");
+        _showGrid = config.Bind("NotEnoughItems", "ItemList", true, "Show the item catalog outside the native inventory.");
+        _showInventoryGrid = config.Bind("NotEnoughItems", "ItemListInInventory", false, "Show the right-hand item catalog beside the native radial inventory.");
         _book.Load(_saved.Value);
     }
 
@@ -111,7 +113,8 @@ internal sealed partial class NeiWindow
     }
 
     private bool ShowLeft => _bookmarksVisible;
-    private bool ShowRight => _showGrid.Value;
+    private bool ShowRight => CatalogSetting.Value;
+    private ConfigEntry<bool> CatalogSetting => _plugin.IsNativeInventory ? _showInventoryGrid : _showGrid;
 
     internal bool Hit(Vector2 pointer)
     {
@@ -146,8 +149,7 @@ internal sealed partial class NeiWindow
 
     internal bool RequestSearchFocus()
     {
-        if (_options || _chainGroup != null) return false;
-        if (!_open) _showGrid.Value = true;
+        if (_options || _chainGroup != null || (!_open && !ShowRight)) return false;
         _focusSearch = true;
         return true;
     }

@@ -16,7 +16,7 @@ internal sealed class NeiRaycastFilter : MonoBehaviour, ICanvasRaycastFilter
     internal NeiWindow? Window { get; set; }
 
     public bool IsRaycastLocationValid(Vector2 screenPoint, Camera eventCamera) =>
-        Window?.Hit(new Vector2(screenPoint.x, Screen.height - screenPoint.y)) == true;
+        Plugin.Instance?.CanShieldPointer == true && Window?.Hit(new Vector2(screenPoint.x, Screen.height - screenPoint.y)) == true;
 }
 
 internal sealed class GameSurface
@@ -92,7 +92,7 @@ internal sealed class GameSurface
         var camera = PlayerCamera.main;
         var world = WorldGeneration.world;
         if (!camera || !camera.isActiveAndEnabled || !camera.body || !camera.body.alive || !camera.body.conscious ||
-            !world || world.cutsceneActive || PauseHandler.paused || SettingsMenu.instance ||
+            !world || world.cutsceneActive || PauseHandler.paused || SettingsMenu.instance || Active(camera.woundView) ||
             (ConsoleScript.instance && ConsoleScript.instance.active) || (MinigameBase.main && MinigameBase.main.currentMinigame))
             return Kind.Closed;
 
@@ -139,7 +139,6 @@ internal sealed class GameSurface
             return transfer.gameObject;
         if (Active(camera.itemCustomizer)) return camera.itemCustomizer;
         if (Active(camera.tradeMenu)) return camera.tradeMenu;
-        if (Active(camera.woundView)) return camera.woundView;
         if (Active(camera.craftingPanel)) return camera.craftingPanel;
         return null;
     }
@@ -315,7 +314,7 @@ internal sealed class GameSurface
         return (input && input.isFocused) || (tmp && tmp.isFocused);
     }
 
-    internal Item? HoveredItem(Kind kind)
+    internal Item? HoveredItem(Kind kind, bool forDrag = false)
     {
         var camera = PlayerCamera.main;
         if (!EventSystem.current || !camera || !camera.body) return null;
@@ -332,9 +331,9 @@ internal sealed class GameSurface
         foreach (var hit in hits)
         {
             if (!hit.gameObject || !hit.gameObject.transform.IsChildOf(root)) continue;
-            var label = hit.gameObject.GetComponentInParent<ItemLabel>();
+            var label = forDrag ? hit.gameObject.GetComponent<ItemLabel>() : hit.gameObject.GetComponentInParent<ItemLabel>();
             if (label && label.refItem) return label.refItem;
-            var slot = hit.gameObject.GetComponentInParent<InvButton>();
+            var slot = forDrag ? hit.gameObject.GetComponent<InvButton>() : hit.gameObject.GetComponentInParent<InvButton>();
             if (!slot || !slot.Overlaps(hits)) continue;
             if (slot.isBody && (camera.body.slots == null || slot.slot < 0 || slot.slot >= camera.body.slots.Length || !camera.body.slots[slot.slot])) continue;
             if (slot.TryGetItem(out var item) && item) return item;
@@ -363,13 +362,15 @@ internal sealed class GameSurface
     }
 
     private static bool Active(GameObject? go) => go != null && go.activeInHierarchy;
+    internal static bool MedicalPanelOpen => PlayerCamera.main && Active(PlayerCamera.main.woundView);
 
     internal static void InstallPatches(Harmony harmony, ManualLogSource log)
     {
-        Patch(harmony, log, typeof(PlayerCamera), "HandleInput", nameof(SkipInput));
-        Patch(harmony, log, typeof(PlayerCamera), "HandleStartDragging", nameof(SkipPointer));
-        Patch(harmony, log, typeof(PlayerCamera), "HandleReleaseDragging", nameof(SkipRelease));
+        Patch(harmony, log, typeof(PlayerCamera), "HandleInput", nameof(SkipInput), nameof(CancelOnInventoryClose));
+        Patch(harmony, log, typeof(PlayerCamera), "HandleDragging", nameof(FilterNativeDrag), priority: Priority.First);
+        Patch(harmony, log, typeof(PlayerCamera), "HandleStartDragging", nameof(SkipPointer), nameof(RecordNativeDrag));
         Patch(harmony, log, typeof(PlayerCamera), "HandleWhileDragging", nameof(SkipWhileDragging));
+        Patch(harmony, log, typeof(PlayerCamera), "TryPerformWorldActions", nameof(SkipWorldDropThroughOverlay));
         Patch(harmony, log, typeof(PlayerCamera), "HandleMouseOver", nameof(SkipHover));
         var tooltipMethod = AccessTools.Method(typeof(UIUtil), nameof(UIUtil.GetUITooltip));
         if (tooltipMethod != null)
@@ -389,11 +390,17 @@ internal sealed class GameSurface
         }
     }
 
-    private static void Patch(Harmony harmony, ManualLogSource log, Type type, string target, string prefix)
+    private static void Patch(Harmony harmony, ManualLogSource log, Type type, string target, string prefix,
+        string? postfix = null, int priority = Priority.Normal)
     {
         var method = AccessTools.Method(type, target);
         if (method == null) { log.LogWarning($"Optional input patch not found: {type.Name}.{target}"); return; }
-        try { harmony.Patch(method, prefix: new HarmonyMethod(typeof(GameSurface), prefix)); }
+        try
+        {
+            var before = priority == Priority.First ? new[] { TerminalGuid } : null;
+            harmony.Patch(method, prefix: new HarmonyMethod(typeof(GameSurface), prefix) { priority = priority, before = before },
+                postfix: postfix == null ? null : new HarmonyMethod(typeof(GameSurface), postfix));
+        }
         catch (Exception error) { log.LogWarning($"Could not patch {type.Name}.{target}: {error.Message}"); }
     }
 
@@ -423,8 +430,10 @@ internal sealed class GameSurface
         _neiTooltipFrame = -1;
     }
 
-    private static bool SkipInput(PlayerCamera __instance)
+    private static bool SkipInput(PlayerCamera __instance, out bool __state)
     {
+        __state = __instance == PlayerCamera.main && __instance.radialOpen && __instance.dragItem &&
+            (Input.GetKeyDown(KeyBinds.GetBind("toggleinventory")) || Input.GetKeyDown(KeyBinds.GetBind("pause")));
         if (__instance != PlayerCamera.main) return true;
         var plugin = Plugin.Instance;
         plugin?.ReadInput();
@@ -438,26 +447,78 @@ internal sealed class GameSurface
         return false;
     }
 
+    private static void CancelOnInventoryClose(PlayerCamera __instance, bool __state)
+    {
+        if (DragInputPolicy.CancelOnClose(__state, __instance.radialOpen) &&
+            Plugin.Instance is { } plugin && plugin.TracksNativeDrag(__instance))
+            plugin.CancelNativeDrag(__instance);
+    }
+
     private static bool SkipPointer(PlayerCamera __instance) =>
         __instance != PlayerCamera.main || Plugin.Instance?.OwnsPointer != true;
 
-    private static bool SkipWhileDragging(PlayerCamera __instance)
+    private static void RecordNativeDrag(PlayerCamera __instance)
     {
-        if (__instance != PlayerCamera.main) return true;
-        var plugin = Plugin.Instance;
-        // A native drag may continue outside NEI, but NEI owns the frame while its
-        // sidebar or text editor is under the pointer so favourite/customize input
-        // cannot leak through to the game.
-        return plugin?.OwnsPointer != true && plugin?.OwnsKeyboard != true;
+        if (__instance == PlayerCamera.main) Plugin.Instance?.ObserveNativeDrag(__instance);
     }
 
-    private static bool SkipRelease(PlayerCamera __instance)
+    private static bool FilterNativeDrag(PlayerCamera __instance, List<RaycastResult> uiCasts)
     {
-        if (SkipPointer(__instance)) return true;
-        // Cancel a native drag released over NEI without moving or destroying its item.
-        __instance.dragItem = null;
-        if (__instance.dragImage) __instance.dragImage.enabled = false;
+        if (__instance != PlayerCamera.main || Plugin.Instance is not { } plugin) return true;
+        if (plugin.NativeDragCancelledThisFrame) return false;
+        if (!Input.GetKeyUp(KeyBinds.GetBind("iteminteract")) || !plugin.PointerOverOverlay) return true;
+
+        // Real inventory slots are still valid where the layout overlaps. Over a
+        // NEI-only control, do not call native release: it can fall back to dropping.
+        bool dragging = __instance.dragItem;
+        if (!DragInputPolicy.CancelRelease(dragging, plugin.OwnsPointer,
+                dragging && HasNativeDropTarget(__instance, uiCasts))) return true;
+        plugin.CancelNativeDrag(__instance);
         return false;
+    }
+
+    private static bool HasNativeDropTarget(PlayerCamera camera, List<RaycastResult> hits)
+    {
+        foreach (var hit in hits)
+        {
+            var target = hit.gameObject;
+            if (!Active(target)) continue;
+            if (target.TryGetComponent<InvButton>(out var slot) && slot.Overlaps(hits) ||
+                target == camera.craftButton || target == camera.customizeOpenObject || target.GetComponent<WoundViewLimb>() ||
+                (camera.currentContainer && target.CompareTag("ContainerBack")) || (camera.currentTrader && target.CompareTag("TradeThing")))
+                return true;
+            if (target.CompareTag("RadialCenter") && camera.radialOpen && camera.radialMenu.localScale.x > PlayerCamera.inventoryUseLeniency &&
+                Vector2.Distance(Input.mousePosition, camera.radialCircle.transform.position) / PlayerCamera.uiScale < camera.radialCircle.rectTransform.sizeDelta.x * .5f)
+                return true;
+        }
+        return false;
+    }
+
+    private static bool SkipWhileDragging(PlayerCamera __instance, List<RaycastResult> uiCasts)
+    {
+        if (__instance != PlayerCamera.main || Plugin.Instance is not { } plugin) return true;
+        if (plugin.OwnsPointer || plugin.OwnsKeyboard) return false;
+        if (!__instance.dragItem || !plugin.PointerOverOverlay || HasNativeDropTarget(__instance, uiCasts)) return true;
+        // Keep the drag preview moving without interacting with the world behind NEI.
+        if (__instance.dragImage)
+        {
+            var preview = __instance.dragImage.rectTransform;
+            preview.position = Input.mousePosition;
+            preview.localScale = Vector2.Lerp(preview.localScale, Vector2.one, Time.unscaledDeltaTime * 10f);
+        }
+        return false;
+    }
+
+    // Some real slots only accept certain items. If the native handler rejects a
+    // slot below NEI, it must not turn that rejection into a world drop instead.
+    private static bool SkipWorldDropThroughOverlay(PlayerCamera __instance) =>
+        __instance != PlayerCamera.main || Plugin.Instance?.PointerOverOverlay != true;
+
+    internal static void ClearNativeDrag(PlayerCamera camera)
+    {
+        // Beginning a drag reads the original slot, it does not detach the item.
+        camera.dragItem = null!;
+        if (camera.dragImage) camera.dragImage.enabled = false;
     }
 
     private static bool SkipHover(PlayerCamera __instance)

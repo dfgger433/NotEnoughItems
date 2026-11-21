@@ -26,10 +26,14 @@ static int RunTests()
         ("reordering and clipboard import preserve independent groups", BookmarkGroups),
         ("GUI texture locations use a namespace and preserve legacy mappings", TextureLocations),
         ("full-width hosts retain both side grids and a separate inspector", FullWidthHostLayout),
+        ("native drag releases over NEI cancel only without a real drop target", DragReleaseOwnership),
+        ("closing the inventory cancels a drag without cancelling ordinary radial transitions", DragInventoryClose),
+        ("missed native release is cleared without stealing the release frame", MissedDragRelease),
 #if RECIPE_TESTS
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
         ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
         ("native tooltip entry points and original rich text passthrough", TooltipSmoke.Run),
+        ("drag hooks match the installed game's native entry points", TooltipSmoke.DragEndpoints),
         ("bookmark cheat clicks preserve lookup, drag modifiers and recipe bookmarks", BookmarkCheatClicks),
         ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
@@ -224,6 +228,28 @@ static void TextureLocations()
         NeiAssets.LegacyPath(NeiAssets.Modernity("widgets.png")) == null, "Legacy backgrounds stay readable, not obsolete control art.");
     Check(ModernityFrames.Caption("previous") == "<" && ModernityFrames.Caption("next") == ">" &&
         ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" }, "Official sprite positions and paging glyphs.");
+}
+
+static void DragReleaseOwnership()
+{
+    Check(!DragInputPolicy.CancelRelease(true, false, true), "A real native drop target at an overlapping rectangle still receives the original release.");
+    Check(DragInputPolicy.CancelRelease(true, false, false), "A preview over a NEI-only field is cancelled, not dropped into the world.");
+    Check(DragInputPolicy.CancelRelease(false, true, false), "A NEI click release must not close the radial menu.");
+    Check(!DragInputPolicy.CancelRelease(false, false, false), "A completed native click must not be mistaken for a NEI click.");
+}
+
+static void DragInventoryClose()
+{
+    Check(DragInputPolicy.CancelOnClose(true, false), "An explicit close clears the original drag before the release handler.");
+    Check(!DragInputPolicy.CancelOnClose(true, true), "An ignored close key cannot interrupt a held item.");
+    Check(!DragInputPolicy.CancelOnClose(false, false), "The radial menu can still auto-close while dragging outside its normal bounds.");
+}
+
+static void MissedDragRelease()
+{
+    Check(!DragInputPolicy.IsStale(true, false), "An ordinary drag remains live across frames.");
+    Check(!DragInputPolicy.IsStale(false, true), "The native and terminal release handlers keep the original release edge.");
+    Check(DragInputPolicy.IsStale(false, false), "An unhandled release or focus loss cannot leave a stale preview next frame.");
 }
 
 static void FullWidthHostLayout()

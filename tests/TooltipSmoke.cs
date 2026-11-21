@@ -4,6 +4,22 @@ using UnityEngine.EventSystems;
 
 internal static class TooltipSmoke
 {
+    internal static void DragEndpoints()
+    {
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        Type[] raycasts = [typeof(List<RaycastResult>)];
+        Type[] withUsable = [typeof(List<RaycastResult>), typeof(UsableObject).MakeByRefType()];
+        foreach (var (name, parameters) in new (string, Type[])[]
+        {
+            ("HandleInput", Type.EmptyTypes), ("HandleDragging", withUsable), ("HandleStartDragging", withUsable),
+            ("HandleWhileDragging", raycasts), ("TryPerformWorldActions", Type.EmptyTypes)
+        })
+        {
+            if (typeof(PlayerCamera).GetMethod(name, instance, null, parameters, null)?.ReturnType != typeof(void))
+                throw new InvalidOperationException($"The installed game does not expose the expected drag hook: {name}.");
+        }
+    }
+
     internal static void Run()
     {
         var assembly = typeof(CatalogItem).Assembly;

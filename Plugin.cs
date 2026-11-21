@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.2.9")]
+[BepInPlugin(Guid, "Not Enough Items", "1.2.10")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -47,7 +47,11 @@ public sealed class Plugin : BaseUnityPlugin
     private bool _positioned;
     private Toggle? _visibilityToggle;
     private int _capturedFrame = -1;
+    private int _nativePressFrame = -1;
+    private int _nativeCancelFrame = -1;
     private bool _pointerCapture;
+    private int _ownedHotControl;
+    private PlayerCamera? _observedDragCamera;
     private bool _clearFocus;
     private bool _escapeDown;
     private float _nextRefresh;
@@ -56,20 +60,59 @@ public sealed class Plugin : BaseUnityPlugin
     internal bool TryGetItemTooltip(out (string, string) tooltip)
     {
         tooltip = default;
-        if (!isActiveAndEnabled || !_enabled.Value || _active == GameSurface.Kind.Closed || PauseHandler.paused ||
+        if (!OverlayActive || NativePointerActive || PauseHandler.paused ||
             SettingsMenu.instance || (ConsoleScript.instance && ConsoleScript.instance.active)) return false;
         var mouse = Input.mousePosition;
         return _window.TryGetItemTooltip(new Vector2(mouse.x, Screen.height - mouse.y), out tooltip);
     }
 
-    internal bool SuppressDuplicate => isActiveAndEnabled && _enabled.Value && _replaceUei.Value && _active != GameSurface.Kind.Closed;
-    internal bool OwnsPointer => isActiveAndEnabled && _enabled.Value && _active != GameSurface.Kind.Closed &&
+    internal bool SuppressDuplicate => OverlayActive && _replaceUei.Value;
+    private bool OverlayActive => isActiveAndEnabled && _enabled.Value && _active != GameSurface.Kind.Closed && !GameSurface.MedicalPanelOpen;
+    internal bool NativePointerActive => _nativePressFrame == Time.frameCount ||
+        (PlayerCamera.main && PlayerCamera.main.dragItem);
+    internal bool CanShieldPointer => OverlayActive && !NativePointerActive;
+    internal bool OwnsPointer => CanShieldPointer &&
         (_pointerCapture || _window.Hit(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)));
-    internal bool OwnsKeyboard => isActiveAndEnabled && _enabled.Value && _active != GameSurface.Kind.Closed &&
+    internal bool OwnsKeyboard => OverlayActive && !NativePointerActive &&
         (_window.SearchFocused || _capturedFrame == Time.frameCount);
     internal bool IsNativeInventory => _active == GameSurface.Kind.Inventory;
-    internal bool ShouldBlockInput => isActiveAndEnabled && (_capturedFrame == Time.frameCount ||
-        (_active is GameSurface.Kind.Inventory or GameSurface.Kind.NativePanel && (OwnsKeyboard || OwnsPointer && AnyInteractTransition())));
+    internal bool NativeDragCancelledThisFrame => _nativeCancelFrame == Time.frameCount;
+    internal bool TracksNativeDrag(PlayerCamera camera) => OverlayActive || _observedDragCamera == camera;
+    internal bool PointerOverOverlay
+    {
+        get
+        {
+            if (!OverlayActive) return false;
+            var point = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+            return _window.Hit(point) && (_active != GameSurface.Kind.Terminal || !_bounds.Contains(point));
+        }
+    }
+
+    internal void ObserveNativeDrag(PlayerCamera camera)
+    {
+        if (!OverlayActive || !camera.dragItem) return;
+        _observedDragCamera = camera;
+        YieldToNativePointer();
+    }
+
+    internal void CancelNativeDrag(PlayerCamera camera)
+    {
+        YieldToNativePointer();
+        _nativeCancelFrame = Time.frameCount;
+        GameSurface.ClearNativeDrag(camera);
+        _observedDragCamera = null;
+    }
+    internal bool ShouldBlockInput => isActiveAndEnabled && !GameSurface.MedicalPanelOpen && !NativePointerActive &&
+        (_capturedFrame == Time.frameCount ||
+         (_active is GameSurface.Kind.Inventory or GameSurface.Kind.NativePanel && (OwnsKeyboard || OwnsPointer && AnyInteractTransition())));
+
+    internal void YieldToNativePointer()
+    {
+        _nativePressFrame = Time.frameCount;
+        _pointerCapture = false;
+        _clearFocus = true;
+        _window.SearchFocused = false;
+    }
     internal string RecipeKey => _recipes.Value.ToString();
     internal string UsageKey => _usages.Value.ToString();
     internal string BookmarkKey => _bookmark.Value.ToString();
@@ -231,6 +274,13 @@ public sealed class Plugin : BaseUnityPlugin
             _nextRefresh = Time.unscaledTime + 1.3f;
             _window.RefreshCatalog(Logger);
         }
+        if (NativePointerActive || NativeSlotPress())
+        {
+            var camera = PlayerCamera.main;
+            if (camera && camera.dragItem) ObserveNativeDrag(camera);
+            else YieldToNativePointer();
+            return;
+        }
         var mouse = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
         if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.GetMouseButtonDown(2) ||
             Input.GetKeyDown(KeyBinds.GetBind("iteminteract")))
@@ -292,7 +342,17 @@ public sealed class Plugin : BaseUnityPlugin
     {
         if (_window == null) return;
         if (_enabled.Value) DetectSurface(refresh: true);
-        _surface.SetInputShield(transform, _enabled.Value && _active != GameSurface.Kind.Closed, _window);
+        var dragCamera = _observedDragCamera;
+        if (!dragCamera || dragCamera != PlayerCamera.main || (!dragCamera!.dragItem && (!dragCamera.dragImage || !dragCamera.dragImage.enabled)))
+            _observedDragCamera = null;
+        else
+        {
+            var interact = KeyBinds.GetBind("iteminteract");
+            // Let native/terminal/multiplayer consumers finish on KeyUp. A remaining
+            // preview on a subsequent unheld frame is stale, not a pending drop.
+            if (DragInputPolicy.IsStale(Input.GetKey(interact), Input.GetKeyUp(interact))) CancelNativeDrag(dragCamera);
+        }
+        _surface.SetInputShield(transform, OverlayActive, _window);
         if (_pointerCapture && !Input.GetMouseButton(0) && !Input.GetMouseButton(1) && !Input.GetMouseButton(2) &&
             !Input.GetKey(KeyBinds.GetBind("iteminteract"))) _pointerCapture = false;
     }
@@ -331,12 +391,18 @@ public sealed class Plugin : BaseUnityPlugin
         if (_clearFocus)
         {
             if (NeiWindow.IsTextControl(GUI.GetNameOfFocusedControl())) GUI.FocusControl(null);
+            if (_ownedHotControl != 0 && GUIUtility.hotControl == _ownedHotControl) GUIUtility.hotControl = 0;
+            _ownedHotControl = 0;
             _window.SearchFocused = false;
             _clearFocus = false;
         }
         if (_escapeDown && Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyBinds.GetBind("pause")) Event.current.Use();
-        if (!_enabled.Value || _active == GameSurface.Kind.Closed) return;
+        if (!OverlayActive) return;
+        var guiEvent = Event.current;
+        if (NativePointerActive && guiEvent.type is not (EventType.Layout or EventType.Repaint)) return;
         int originalDepth = GUI.depth;
+        int previousControl = GUIUtility.hotControl;
+        bool mouseDown = guiEvent.type == EventType.MouseDown;
         // Unity renders smaller IMGUI depths on top. Keep NEI behind the stock
         // UGUI tooltip and other native IMGUI surfaces instead of covering them.
         GUI.depth = 100;
@@ -344,8 +410,17 @@ public sealed class Plugin : BaseUnityPlugin
         {
             _window.Draw();
         }
-        finally { GUI.depth = originalDepth; }
+        finally
+        {
+            GUI.depth = originalDepth;
+            int control = GUIUtility.hotControl;
+            if (mouseDown && control != 0 && control != previousControl) _ownedHotControl = control;
+            else if (_ownedHotControl != control) _ownedHotControl = 0;
+        }
     }
+
+    private bool NativeSlotPress() => Input.GetKeyDown(KeyBinds.GetBind("iteminteract")) &&
+        _active != GameSurface.Kind.Terminal && _surface.HoveredItem(_active, forDrag: true) != null;
 
     private static bool Pressed(ConfigEntry<KeyCode> key) => key.Value != KeyCode.None && Input.GetKeyDown(key.Value);
     private static bool AnyInteractTransition() => Input.GetKeyDown(KeyBinds.GetBind("iteminteract")) ||

@@ -13,7 +13,10 @@ internal sealed partial class NeiWindow
         NeiSkin.Background(p, "options");
         Header(p, L("NEI options", "NEI 选项"), "NEI");
         float x = p.x + 12, w = p.width - 24, y = p.y + 38;
-        if (NeiSkin.Button(new Rect(x, y, w, 27), _showGrid.Value ? L("Item catalog: On", "物品目录：开") : L("Item catalog: Off", "物品目录：关"))) _showGrid.Value = !_showGrid.Value;
+        var catalog = CatalogSetting;
+        string catalogLabel = _plugin.IsNativeInventory ? L("Inventory catalog", "背包右侧目录") : L("Item catalog", "物品目录");
+        if (NeiSkin.Button(new Rect(x, y, w, 27), catalogLabel + (catalog.Value ? L(": On", "：开") : L(": Off", "：关"))))
+            catalog.Value = !catalog.Value;
         y += 31;
         if (NeiSkin.Button(new Rect(x, y, w, 27), _showHistory.Value ? L("History strip: On", "浏览记录：开") : L("History strip: Off", "浏览记录：关"))) _showHistory.Value = !_showHistory.Value;
         y += 31;

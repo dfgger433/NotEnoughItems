@@ -18,7 +18,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="../NeiSearch.cs;../NeiLayout.cs;../BookmarkBook.cs;../NeiAssets.cs;../ModernityFrames.cs" />
+    <Compile Include="../NeiSearch.cs;../NeiLayout.cs;../BookmarkBook.cs;../NeiAssets.cs;../ModernityFrames.cs;../DragInputPolicy.cs" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)/UnityEngine.CoreModule.dll" />
   </ItemGroup>
   <ItemGroup Condition="'$(SkipRecipeTests)' != 'true'">
