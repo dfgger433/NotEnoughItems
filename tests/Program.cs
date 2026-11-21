@@ -25,7 +25,7 @@ static int RunTests()
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
         ("reordering and clipboard import preserve independent groups", BookmarkGroups),
         ("GUI texture locations use a namespace and preserve legacy mappings", TextureLocations),
-        ("native tooltips stay inside the viewport and avoid active overlay controls", TooltipAvoidsControls),
+        ("full-width hosts retain both side grids and a separate inspector", FullWidthHostLayout),
 #if RECIPE_TESTS
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
         ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
@@ -226,18 +226,21 @@ static void TextureLocations()
         ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" }, "Official sprite positions and paging glyphs.");
 }
 
-static void TooltipAvoidsControls()
+static void FullWidthHostLayout()
 {
-    var screen = new Rect(6, 6, 1268, 708);
-    var right = new Rect(975, 80, 285, 575);
-    var search = new Rect(500, 685, 280, 24);
-    var nearCursor = new Rect(961, 610, 300, 135);
-    var placed = TooltipPlacement.Place(nearCursor, screen, [right, search]);
-    Check(!placed.Overlaps(right) && !placed.Overlaps(search), "Use available free space rather than painting below overlay controls.");
-    Check(placed.xMin >= screen.xMin && placed.yMin >= screen.yMin && placed.xMax <= screen.xMax && placed.yMax <= screen.yMax,
-        "The popup stays within the viewport margins.");
-    var alreadyClear = new Rect(45, 73, 130, 80);
-    RectEqual(alreadyClear, TooltipPlacement.Place(alreadyClear, screen, [right, search]), "Unobstructed tooltips retain the vanilla placement.");
+    foreach (var host in new[] { new Rect(0, 0, 480, 410), new Rect(280, 36, 200, 400), new Rect(0, 115, 290, 380) })
+    {
+        var (left, right) = NeiLayout.VisibleSides(host, 480, 410);
+        var inspector = NeiLayout.InspectorBetween(host, left, right, 480, 410);
+        Check(left.width >= 104 && right.width >= 104 && left.height >= 180 && right.height >= 180,
+            "A wide or off-center native panel must not make either grid collapse.");
+        Check(!left.Overlaps(right) && !inspector.Overlaps(left) && !inspector.Overlaps(right) && inspector.width >= 245,
+            "Both grids and recipe controls remain visible independently.");
+        Check(left.xMin >= 8 && right.xMax <= 472 && right.yMax <= 402, "All controls remain inside the viewport.");
+    }
+    var normal = new Rect(410, 260, 460, 400);
+    var panels = NeiLayout.VisibleSides(normal, 1280, 720);
+    CheckSides(normal, panels.Left, panels.Right, 1280, 720);
 }
 
 static void CheckSides(Rect host, Rect left, Rect right, float width, float height)

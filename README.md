@@ -1,6 +1,6 @@
 # Not Enough Items — Casualties: Unknown
 
-NEI 的本地 BepInEx 移植版。背包或 Unknown Inventory Terminal 打开时，左侧显示书签，右侧显示物品目录。原生背包侧栏基于固定屏幕锚点，不随鼠标或镜头漂移；终端侧栏避让终端边界。视口太窄时，退回屏幕底部的紧凑面板。默认界面背景像素为全透明，只绘制按钮、交互高亮、图标和文字。按钮、槽位、标签、书签和扳手使用 [Modernity-GTNH-UI 原贴图](<assets/notenoughitems/textures/gui/modernity/SOURCES.md>)，不再读取自绘控件图集。
+NEI 的本地 BepInEx 移植版。背包、容器、制作、交易、伤势、物品自定义、液体转移或 Unknown Inventory Terminal 打开时，左侧显示书签，右侧显示物品目录。原生背包侧栏基于固定屏幕锚点，不随鼠标或镜头漂移。空间不足时保留两侧物品格，优先使用宿主界面外的空余位置。默认界面背景像素为全透明，只绘制按钮、交互高亮、图标和文字。按钮、槽位、标签、书签和扳手使用 [Modernity-GTNH-UI 原贴图](<assets/notenoughitems/textures/gui/modernity/SOURCES.md>)，不再读取自绘控件图集。
 
 ## 编译、打包和部署
 

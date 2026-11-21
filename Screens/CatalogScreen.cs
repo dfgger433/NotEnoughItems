@@ -48,26 +48,12 @@ internal sealed partial class NeiWindow
             _quantityText = GiveQuantity.ToString(CultureInfo.InvariantCulture);
     }
 
-    private void DrawCompactBar()
+    private void DrawBottomRail(bool showSearch)
     {
         var layout = NeiLayout.BottomRail(_width, _height, _center, ShowRight ? _right : default);
-        _compactBar = layout.Search;
-        if (!ShowRight && _showGrid.Value || _compactBookmarks && !ShowLeft)
+        if (showSearch)
         {
-            var stripBase = NeiLayout.BottomRail(_width, _height, default, default).Search;
-            var strip = _compactGrid = new Rect(stripBase.x, stripBase.y - 58, stripBase.width, 54);
-            NeiSkin.Background(strip, "catalog");
-            var grid = new Rect(strip.x + 2, strip.y + 26, strip.width - 4, 26);
-            var nav = new Rect(strip.x + 2, strip.y, strip.width - 4, 22);
-            if (_compactBookmarks && !ShowLeft)
-            {
-                DrawBookmarkEntries(grid, nav, compact: true);
-            }
-            else DrawGrid(grid, _filtered.Count, i => _filtered[i].BrowseId, ref _page, nav);
-        }
-        if (_showGrid.Value)
-        {
-            _searchRect = _compactBar;
+            _searchRect = layout.Search;
             DrawSearch(_searchRect);
         }
         DrawLeftTools(layout.Tools);

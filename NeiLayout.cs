@@ -23,6 +23,30 @@ internal static class NeiLayout
             new Rect(rightEdge, y, rightWidth, bottom - y));
     }
 
+    // Keep both grids available even when a large host leaves no complete side gutter.
+    internal static (Rect Left, Rect Right) VisibleSides(Rect center, float width, float height)
+    {
+        var (left, right) = Sides(center, width, height, 1f);
+        float margin = Mathf.Min(8f, width * .04f);
+        float maxSide = Mathf.Max(0, (width - 2 * margin - 255f) / 2);
+        float minSide = Mathf.Min(108f, maxSide);
+        float top = Mathf.Clamp(center.yMin, 8, Mathf.Max(8, height - 190));
+        float bottom = Mathf.Min(height - 8, Mathf.Max(center.yMax, top + 310));
+        float panelHeight = Mathf.Max(0, bottom - top);
+        if (left.width < minSide) left = new Rect(margin, top, minSide, panelHeight);
+        else left = new Rect(left.xMax - Mathf.Min(left.width, maxSide), top, Mathf.Min(left.width, maxSide), panelHeight);
+        if (right.width < minSide) right = new Rect(width - margin - minSide, top, minSide, panelHeight);
+        else right = new Rect(right.xMin, top, Mathf.Min(right.width, maxSide), panelHeight);
+        // If the host is off-center, move both grids to the edges to leave room for recipe controls.
+        if (right.xMin - left.xMax < 255f)
+        {
+            left = new Rect(margin, top, Mathf.Clamp(left.width, minSide, maxSide), panelHeight);
+            right = new Rect(width - margin - Mathf.Clamp(right.width, minSide, maxSide), top,
+                Mathf.Clamp(right.width, minSide, maxSide), panelHeight);
+        }
+        return (left, right);
+    }
+
     // Like NEI, the lower controls anchor to the screen, not the player or pointer.
     internal static (Rect Tools, Rect Search) BottomRail(float width, float height, Rect center, Rect right)
     {
@@ -37,6 +61,19 @@ internal static class NeiLayout
         if (search.Overlaps(center) && right.width >= 81 && right.height >= 125)
             search = new Rect(right.x + 3, right.yMax - 54, right.width - 6, buttonHeight);
         return (new Rect(toolsLeft, y, toolsWidth, buttonHeight), search);
+    }
+
+    internal static Rect InspectorBetween(Rect center, Rect left, Rect right, float width, float height)
+    {
+        var inspector = Inspector(center, width, height, 1f);
+        float start = left.xMax + 5;
+        float end = right.xMin - 5;
+        if (end - start >= 245)
+        {
+            inspector.width = Mathf.Min(inspector.width, end - start);
+            inspector.x = Mathf.Clamp(center.center.x - inspector.width / 2, start, end - inspector.width);
+        }
+        return inspector;
     }
 
     internal static Rect Inspector(Rect center, float width, float height, float scale)

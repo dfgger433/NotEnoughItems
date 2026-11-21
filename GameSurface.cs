@@ -11,10 +11,18 @@ using UnityEngine.UI;
 
 namespace NotEnoughItems;
 
+internal sealed class NeiRaycastFilter : MonoBehaviour, ICanvasRaycastFilter
+{
+    internal NeiWindow? Window { get; set; }
+
+    public bool IsRaycastLocationValid(Vector2 screenPoint, Camera eventCamera) =>
+        Window?.Hit(new Vector2(screenPoint.x, Screen.height - screenPoint.y)) == true;
+}
+
 internal sealed class GameSurface
 {
     internal const string TerminalGuid = "com.unknown.inventoryterminal";
-    internal enum Kind { Closed, Inventory, Terminal }
+    internal enum Kind { Closed, Inventory, Terminal, NativePanel }
     private delegate bool ReadBounds(out Rect rect);
     private readonly Func<bool>? _terminalOpen;
     private readonly ReadBounds? _terminalBounds;
@@ -37,6 +45,7 @@ internal sealed class GameSurface
     private UnityEngine.Object? _detectedHost;
     private Rect _detectedBounds;
     private Canvas? _modalShield;
+    private NeiRaycastFilter? _inputFilter;
     internal bool TerminalTextInputFocused => _terminalTyping?.Invoke() == true;
 
     internal GameSurface(ManualLogSource log)
@@ -47,12 +56,15 @@ internal sealed class GameSurface
             var type = terminal.Instance?.GetType();
             var api = type?.Assembly.GetType("UnknownInventoryTerminal.TerminalApi");
             _terminalTyping = (Func<bool>?)type?.GetProperty("SearchFocused", BindingFlags.NonPublic | BindingFlags.Static)?.GetGetMethod(true)?.CreateDelegate(typeof(Func<bool>));
-            _terminalOpen = (Func<bool>?)api?.GetProperty("IsOpen")?.GetMethod?.CreateDelegate(typeof(Func<bool>));
+            var terminalOpen = api?.GetProperty("IsOpen")?.GetMethod ??
+                type?.GetProperty("IsVisible", BindingFlags.NonPublic | BindingFlags.Static)?.GetGetMethod(true);
+            _terminalOpen = (Func<bool>?)terminalOpen?.CreateDelegate(typeof(Func<bool>));
             _terminalBounds = (ReadBounds?)api?.GetMethod("TryGetBounds")?.CreateDelegate(typeof(ReadBounds));
             _closeTerminal = (Func<bool>?)api?.GetMethod("TryClose")?.CreateDelegate(typeof(Func<bool>));
             _terminalRoot = (Func<RectTransform?>?)api?.GetProperty("ExtensionRoot")?.GetMethod?.CreateDelegate(typeof(Func<RectTransform?>));
-            log.LogInfo(_terminalBounds != null ? "Unknown Inventory Terminal bounds API connected." :
-                "Unknown Inventory Terminal is installed but does not expose the bounds API; update it to 0.4.4 or newer.");
+            if (_terminalOpen == null) log.LogWarning("Unknown Inventory Terminal does not expose its visibility state.");
+            else log.LogInfo(_terminalBounds != null ? "Unknown Inventory Terminal bounds API connected." :
+                "Unknown Inventory Terminal bounds API unavailable. Using fallback bounds when the terminal is open.");
         }
         catch (Exception error) when (error is ArgumentException || error is MemberAccessException)
         {
@@ -78,15 +90,26 @@ internal sealed class GameSurface
         bounds = default;
         host = null;
         var camera = PlayerCamera.main;
-        if (!camera || !camera.body || !camera.body.alive || !camera.body.conscious || PauseHandler.paused ||
-            (ConsoleScript.instance && ConsoleScript.instance.active) || Active(camera.craftingPanel) ||
-            Active(camera.woundView) || Active(camera.tradeMenu) || Active(camera.itemCustomizer) ||
-            (MinigameBase.main && MinigameBase.main.currentMinigame) || LiquidTransfer.instance)
+        var world = WorldGeneration.world;
+        if (!camera || !camera.isActiveAndEnabled || !camera.body || !camera.body.alive || !camera.body.conscious ||
+            !world || world.cutsceneActive || PauseHandler.paused || SettingsMenu.instance ||
+            (ConsoleScript.instance && ConsoleScript.instance.active) || (MinigameBase.main && MinigameBase.main.currentMinigame))
             return Kind.Closed;
+
+        bool radialVisible = camera.radialOpen && camera.radialMenu && Active(camera.radialMenu.gameObject);
+        var panel = NativePanel(camera);
+        if (panel != null)
+        {
+            bounds = PanelBounds(panel);
+            host = panel;
+            return Kind.NativePanel;
+        }
         if (_terminalOpen?.Invoke() == true)
         {
-            if (_terminalBounds?.Invoke(out var terminal) != true || !ValidTerminalBounds(terminal)) return Kind.Closed;
-            bounds = NeiLayout.FromScreen(terminal, Screen.height);
+            if (_terminalBounds?.Invoke(out var terminal) == true && TryClipScreenBounds(terminal, out var visible))
+                bounds = NeiLayout.FromScreen(visible, Screen.height);
+            else
+                bounds = PanelBounds(_terminalRoot?.Invoke()?.parent?.gameObject);
             if (_detected == Kind.Terminal && _terminalCamera == camera && _terminalWidth == Screen.width &&
                 _terminalHeight == Screen.height && !TerminalBoundsChanged(_detectedBounds, bounds))
                 bounds = _detectedBounds;
@@ -96,12 +119,74 @@ internal sealed class GameSurface
             host = camera;
             return Kind.Terminal;
         }
-        if (!camera.radialOpen || !camera.radialMenu || !camera.radialMenu.gameObject.activeInHierarchy)
-            return Kind.Closed;
+        if (!radialVisible)
+        {
+            if (!Active(camera.containerMenu)) return Kind.Closed;
+            bounds = PanelBounds(camera.containerMenu);
+            host = camera.containerMenu;
+            return Kind.NativePanel;
+        }
 
         bounds = InventoryBounds(camera);
         host = camera.radialMenu;
         return Kind.Inventory;
+    }
+
+    private static GameObject? NativePanel(PlayerCamera camera)
+    {
+        var transfer = LiquidTransfer.instance;
+        if (transfer && transfer.isActiveAndEnabled && camera.mainCanvas && transfer.transform.IsChildOf(camera.mainCanvas.transform))
+            return transfer.gameObject;
+        if (Active(camera.itemCustomizer)) return camera.itemCustomizer;
+        if (Active(camera.tradeMenu)) return camera.tradeMenu;
+        if (Active(camera.woundView)) return camera.woundView;
+        if (Active(camera.craftingPanel)) return camera.craftingPanel;
+        return null;
+    }
+
+    private Rect PanelBounds(GameObject? panel)
+    {
+        if (Active(panel) && panel!.transform is RectTransform rect && TryProjectPanel(rect, out var screen))
+        {
+            var title = rect.Find("Top") as RectTransform;
+            if (title && Active(title!.gameObject) && TryProjectPanel(title, out var header))
+                screen = Union(screen, header);
+            return NeiLayout.FromScreen(screen, Screen.height);
+        }
+
+        // Keep a usable center reservation if a modal is opening or its geometry is unavailable.
+        float width = Mathf.Min(640f, Screen.width * .62f);
+        float height = Mathf.Min(560f, Screen.height * .72f);
+        return new Rect((Screen.width - width) * .5f, (Screen.height - height) * .5f, width, height);
+    }
+
+    private bool TryProjectPanel(RectTransform rect, out Rect screen)
+    {
+        var canvas = rect.GetComponentInParent<Canvas>();
+        var rootCanvas = canvas ? canvas.rootCanvas : null;
+        Camera? renderCamera = null;
+        if (rootCanvas != null && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            renderCamera = rootCanvas.worldCamera ? rootCanvas.worldCamera : Camera.main;
+
+        rect.GetWorldCorners(_corners);
+        var min = RectTransformUtility.WorldToScreenPoint(renderCamera, _corners[0]);
+        var max = min;
+        for (int i = 1; i < _corners.Length; i++)
+        {
+            var corner = RectTransformUtility.WorldToScreenPoint(renderCamera, _corners[i]);
+            min = Vector2.Min(min, corner);
+            max = Vector2.Max(max, corner);
+        }
+        return TryClipScreenBounds(Rect.MinMaxRect(min.x, min.y, max.x, max.y), out screen);
+    }
+
+    private static bool TryClipScreenBounds(Rect bounds, out Rect visible)
+    {
+        visible = default;
+        if (!ValidBounds(bounds)) return false;
+        visible = Rect.MinMaxRect(Mathf.Max(0, bounds.xMin), Mathf.Max(0, bounds.yMin),
+            Mathf.Min(Screen.width, bounds.xMax), Mathf.Min(Screen.height, bounds.yMax));
+        return ValidBounds(visible);
     }
 
     private Rect InventoryBounds(PlayerCamera camera)
@@ -187,14 +272,15 @@ internal sealed class GameSurface
         Mathf.Abs(next.xMin - current.xMin) >= 1f || Mathf.Abs(next.yMin - current.yMin) >= 1f ||
         Mathf.Abs(next.xMax - current.xMax) >= 1f || Mathf.Abs(next.yMax - current.yMax) >= 1f;
 
-    private static bool ValidTerminalBounds(Rect bounds) => bounds.width >= 1f && bounds.height >= 1f &&
+    private static bool ValidBounds(Rect bounds) => bounds.width >= 1f && bounds.height >= 1f &&
         float.IsFinite(bounds.xMin) && float.IsFinite(bounds.yMin) && float.IsFinite(bounds.xMax) && float.IsFinite(bounds.yMax);
 
     private static Rect Union(Rect a, Rect b) => Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin),
         Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax));
 
-    internal void SetModalShield(Transform parent, bool enabled)
+    internal void SetInputShield(Transform parent, bool enabled, NeiWindow? window = null)
     {
+        enabled = enabled && window != null;
         if (!enabled && !_modalShield) return;
         if (!_modalShield)
         {
@@ -203,8 +289,9 @@ internal sealed class GameSurface
             _modalShield = root.GetComponent<Canvas>();
             _modalShield.renderMode = RenderMode.ScreenSpaceOverlay;
             _modalShield.sortingOrder = short.MaxValue;
-            var target = new GameObject("NEI.ModalInputTarget", typeof(RectTransform), typeof(Image));
-            target.layer = LayerMask.NameToLayer("UI");
+            var target = new GameObject("NEI.InputTarget", typeof(RectTransform), typeof(Image), typeof(NeiRaycastFilter));
+            var uiLayer = LayerMask.NameToLayer("UI");
+            if (uiLayer >= 0) target.layer = uiLayer;
             var rect = (RectTransform)target.transform;
             rect.SetParent(root.transform, false);
             rect.anchorMin = Vector2.zero;
@@ -213,7 +300,9 @@ internal sealed class GameSurface
             var image = target.GetComponent<Image>();
             image.color = Color.clear;
             image.raycastTarget = true;
+            _inputFilter = target.GetComponent<NeiRaycastFilter>();
         }
+        _inputFilter!.Window = enabled ? window : null;
         _modalShield!.gameObject.SetActive(enabled);
     }
 
@@ -230,7 +319,13 @@ internal sealed class GameSurface
     {
         var camera = PlayerCamera.main;
         if (!EventSystem.current || !camera || !camera.body) return null;
-        Transform? root = kind == Kind.Terminal ? _terminalRoot?.Invoke()?.parent : camera.radialMenu;
+        Transform? root = kind switch
+        {
+            Kind.Terminal => _terminalRoot?.Invoke()?.parent,
+            Kind.NativePanel when _detected == Kind.NativePanel && _detectedHost is GameObject panel && Active(panel) => panel.transform,
+            Kind.Inventory => camera.radialMenu,
+            _ => null
+        };
         if (!root) return null;
         var hits = new List<RaycastResult>();
         EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = Input.mousePosition }, hits);
@@ -276,13 +371,15 @@ internal sealed class GameSurface
         Patch(harmony, log, typeof(PlayerCamera), "HandleReleaseDragging", nameof(SkipRelease));
         Patch(harmony, log, typeof(PlayerCamera), "HandleWhileDragging", nameof(SkipWhileDragging));
         Patch(harmony, log, typeof(PlayerCamera), "HandleMouseOver", nameof(SkipHover));
-        harmony.Patch(AccessTools.Method(typeof(UIUtil), nameof(UIUtil.GetUITooltip)),
-            postfix: new HarmonyMethod(typeof(GameSurface), nameof(UseOriginalItemTooltip)) { priority = Priority.Last });
-        harmony.Patch(AccessTools.Method(typeof(GlobalDark), nameof(GlobalDark.HandleTooltip)),
-            prefix: new HarmonyMethod(typeof(GameSurface), nameof(FeedNeiTooltip)) { priority = Priority.First },
-            postfix: new HarmonyMethod(typeof(GameSurface), nameof(PlaceNeiTooltip)) { priority = Priority.Last });
-        if (Chainloader.PluginInfos.TryGetValue(TerminalGuid, out var terminal) && terminal.Instance != null)
-            Patch(harmony, log, terminal.Instance.GetType(), "OnGUI", nameof(ShowTerminalChrome));
+        var tooltipMethod = AccessTools.Method(typeof(UIUtil), nameof(UIUtil.GetUITooltip));
+        if (tooltipMethod != null)
+            harmony.Patch(tooltipMethod,
+                postfix: new HarmonyMethod(typeof(GameSurface), nameof(UseOriginalItemTooltip)) { priority = Priority.Last });
+        var darkMethod = AccessTools.Method(typeof(GlobalDark), nameof(GlobalDark.HandleTooltip));
+        if (darkMethod != null)
+            harmony.Patch(darkMethod,
+                prefix: new HarmonyMethod(typeof(GameSurface), nameof(FeedNeiTooltip)) { priority = Priority.First },
+                postfix: new HarmonyMethod(typeof(GameSurface), nameof(PlaceNeiTooltip)) { priority = Priority.Last });
         var uei = AccessTools.TypeByName("UeiRuntime");
         if (Chainloader.PluginInfos.ContainsKey("casualtiesunknown.uei") && uei != null)
         {
@@ -321,8 +418,8 @@ internal sealed class GameSurface
 
     private static void PlaceNeiTooltip(GlobalDark __instance)
     {
-        if (_neiTooltipFrame == Time.frameCount && Plugin.Instance is { } plugin)
-            NativeTooltipLayer.MoveClearOfOverlay(__instance, plugin);
+        if (_neiTooltipFrame == Time.frameCount) NativeTooltipLayer.Raise(__instance);
+        else NativeTooltipLayer.Restore();
         _neiTooltipFrame = -1;
     }
 
@@ -340,9 +437,6 @@ internal sealed class GameSurface
         __instance.wantsJumpInput = false;
         return false;
     }
-
-    // Unity GUI.Window chrome is composed above ordinary IMGUI regardless of GUI.depth.
-    private static bool ShowTerminalChrome() => Plugin.Instance?.CoversTerminal != true;
 
     private static bool SkipPointer(PlayerCamera __instance) =>
         __instance != PlayerCamera.main || Plugin.Instance?.OwnsPointer != true;

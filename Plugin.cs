@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.2.4")]
+[BepInPlugin(Guid, "Not Enough Items", "1.2.5")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -53,8 +53,6 @@ public sealed class Plugin : BaseUnityPlugin
     private float _nextRefresh;
     private int _updatedFrame = -1;
 
-    internal IReadOnlyList<Rect> TooltipObstacles() => _window.TooltipObstacles();
-
     internal bool TryGetItemTooltip(out (string, string) tooltip)
     {
         tooltip = default;
@@ -68,11 +66,10 @@ public sealed class Plugin : BaseUnityPlugin
     internal bool OwnsPointer => isActiveAndEnabled && _enabled.Value && _active != GameSurface.Kind.Closed &&
         (_pointerCapture || _window.Hit(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)));
     internal bool OwnsKeyboard => isActiveAndEnabled && _enabled.Value && _active != GameSurface.Kind.Closed &&
-        (_window.SearchFocused || _window.ModalOpen || _capturedFrame == Time.frameCount);
+        (_window.SearchFocused || _capturedFrame == Time.frameCount);
     internal bool IsNativeInventory => _active == GameSurface.Kind.Inventory;
-    internal bool CoversTerminal => isActiveAndEnabled && _enabled.Value && _active == GameSurface.Kind.Terminal && _window.ModalOpen;
     internal bool ShouldBlockInput => isActiveAndEnabled && (_capturedFrame == Time.frameCount ||
-        (_active == GameSurface.Kind.Inventory && (OwnsKeyboard || OwnsPointer && AnyInteractTransition())));
+        (_active is GameSurface.Kind.Inventory or GameSurface.Kind.NativePanel && (OwnsKeyboard || OwnsPointer && AnyInteractTransition())));
     internal string RecipeKey => _recipes.Value.ToString();
     internal string UsageKey => _usages.Value.ToString();
     internal string BookmarkKey => _bookmark.Value.ToString();
@@ -203,7 +200,7 @@ public sealed class Plugin : BaseUnityPlugin
             _window.ResetView();
             _window.Hide();
             _positioned = false;
-            _surface.SetModalShield(transform, false);
+            _surface.SetInputShield(transform, false);
         }
     }
 
@@ -245,7 +242,7 @@ public sealed class Plugin : BaseUnityPlugin
             }
             if (!_window.SearchHit(mouse) && !_window.GroupHit(mouse) && _window.SearchFocused) _clearFocus = true;
         }
-        _escapeDown = _active == GameSurface.Kind.Inventory && Input.GetKeyDown(KeyBinds.GetBind("pause")) &&
+        _escapeDown = _active is GameSurface.Kind.Inventory or GameSurface.Kind.NativePanel && Input.GetKeyDown(KeyBinds.GetBind("pause")) &&
             (_window.ModalOpen || _window.SearchFocused);
         if (_escapeDown)
         {
@@ -295,7 +292,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         if (_window == null) return;
         if (_enabled.Value) DetectSurface(refresh: true);
-        _surface.SetModalShield(transform, _enabled.Value && _active != GameSurface.Kind.Closed && _window.ModalOpen);
+        _surface.SetInputShield(transform, _enabled.Value && _active != GameSurface.Kind.Closed, _window);
         if (_pointerCapture && !Input.GetMouseButton(0) && !Input.GetMouseButton(1) && !Input.GetMouseButton(2) &&
             !Input.GetKey(KeyBinds.GetBind("iteminteract"))) _pointerCapture = false;
     }
@@ -355,7 +352,8 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDisable()
     {
-        _surface?.SetModalShield(transform, false);
+        NativeTooltipLayer.Restore();
+        _surface?.SetInputShield(transform, false);
         _window?.ResetView();
         _window?.Hide();
         _positioned = false;
@@ -369,6 +367,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         if (_enabled != null) _enabled.SettingChanged -= OnVisibilityChanged;
         _harmony?.UnpatchSelf();
+        NativeTooltipLayer.Release();
         NeiSkin.Release();
         NeiActions.Enabled = false;
         if (Instance == this) Instance = null;

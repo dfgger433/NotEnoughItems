@@ -31,8 +31,8 @@ internal sealed partial class NeiWindow
     private int _tooltipFrame = -1;
     private bool _hoveringItemSlot;
     private Item? _lookupItem;
-    private Rect _left, _right, _center, _inspector, _searchRect, _groupRect, _quantityRect, _compactBar, _compactGrid, _leftTools;
-    private bool _compactBookmarks, _bookmarksVisible = true;
+    private Rect _left, _right, _center, _inspector, _searchRect, _groupRect, _quantityRect, _leftTools;
+    private bool _bookmarksVisible = true;
     private float _scale = 1f;
     private float _width, _height;
     private string _query = string.Empty, _group = "0", _editGroup = string.Empty, _recipeQuery = string.Empty;
@@ -73,16 +73,26 @@ internal sealed partial class NeiWindow
     private string L(string en, string zh) => _plugin.Chinese ? zh : en;
     internal void Position(Rect center, float scale)
     {
-        _scale = Mathf.Clamp(Screen.height / 720f, 0.9f, 2f) * scale;
+        float preferredScale = Mathf.Clamp(Screen.height / 720f, .9f, 2f) * scale;
+        // Preserve enough logical width and height for two grids and the recipe controls.
+        _scale = Mathf.Max(.01f, Mathf.Min(preferredScale, Mathf.Min(Screen.width / 480f, Screen.height / 410f)));
         _width = Screen.width / _scale;
         _height = Screen.height / _scale;
         _center = new Rect(center.position / _scale, center.size / _scale);
-        (_left, _right) = NeiLayout.Sides(_center, _width, _height, 1f);
-        _inspector = NeiLayout.Inspector(_center, _width, _height, 1f);
+        (_left, _right) = NeiLayout.VisibleSides(_center, _width, _height);
+        _inspector = NeiLayout.InspectorBetween(_center, _left, _right, _width, _height);
     }
 
-    internal void Hide() { _left = _right = _inspector = _searchRect = _groupRect = _quantityRect = _compactBar = _compactGrid = _leftTools = default; _itemTargets.Clear(); _tooltipSlots.Clear(); _tooltipFrame = -1; _lookupItem = null; }
-    internal void ToggleBookmarks() { _bookmarksVisible = !_bookmarksVisible; _compactBookmarks = false; }
+    internal void Hide()
+    {
+        _left = _right = _inspector = _searchRect = _groupRect = _quantityRect = _leftTools = default;
+        _itemTargets.Clear();
+        _tooltipSlots.Clear();
+        _tooltipFrame = -1;
+        _lookupItem = null;
+    }
+
+    internal void ToggleBookmarks() => _bookmarksVisible = !_bookmarksVisible;
     internal void ResetView()
     {
         _open = _options = _groups = _searchFocused = _focusSearch = false;
@@ -100,13 +110,14 @@ internal sealed partial class NeiWindow
         _alternatives.Clear();
     }
 
-    private bool ShowLeft => _bookmarksVisible && _left.width >= 35 && _left.height >= 100;
-    private bool ShowRight => _right.width >= 35 && _right.height >= 100 && _showGrid.Value;
+    private bool ShowLeft => _bookmarksVisible;
+    private bool ShowRight => _showGrid.Value;
+
     internal bool Hit(Vector2 pointer)
     {
         pointer /= Mathf.Max(.01f, _scale);
-        return ModalOpen || (ShowLeft && _left.Contains(pointer)) ||
-            (ShowRight && _right.Contains(pointer)) || _searchRect.Contains(pointer) || _compactGrid.Contains(pointer) || _leftTools.Contains(pointer);
+        return (ModalOpen && _inspector.Contains(pointer)) || (ShowLeft && _left.Contains(pointer)) ||
+            (ShowRight && _right.Contains(pointer)) || _searchRect.Contains(pointer) || _leftTools.Contains(pointer);
     }
     internal bool SearchHit(Vector2 pointer) => _searchRect.Contains(pointer / Mathf.Max(.01f, _scale));
     internal bool GroupHit(Vector2 pointer) => _groupRect.Contains(pointer / Mathf.Max(.01f, _scale)) || _quantityRect.Contains(pointer / Mathf.Max(.01f, _scale));
@@ -118,22 +129,6 @@ internal sealed partial class NeiWindow
             if (_itemTargets[i].Rect.Contains(pointer)) return _itemTargets[i].Id;
         return null;
     }
-    internal IReadOnlyList<Rect> TooltipObstacles()
-    {
-        var logical = new List<Rect>();
-        if (ModalOpen) logical.Add(_inspector);
-        else
-        {
-            if (ShowLeft) logical.Add(_left);
-            if (ShowRight) logical.Add(_right);
-            if (_compactGrid.width > 0) logical.Add(_compactGrid);
-            if (_searchRect.width > 0) logical.Add(_searchRect);
-            if (_leftTools.width > 0) logical.Add(_leftTools);
-            if (!_plugin.IsNativeInventory) logical.Add(_center);
-        }
-        return logical.Select(rect => new Rect(rect.position * _scale, rect.size * _scale)).ToArray();
-    }
-
     internal bool TryGetItemTooltip(Vector2 pointer, out (string, string) result)
     {
         result = default;
@@ -284,7 +279,7 @@ internal sealed partial class NeiWindow
             _skipFocusFrame = false;
         }
         _tipTitle = _tipBody = null;
-        _searchRect = _groupRect = _quantityRect = _compactBar = _compactGrid = _leftTools = default;
+        _searchRect = _groupRect = _quantityRect = _leftTools = default;
         if (e.type == EventType.Repaint)
         {
             _itemTargets.Clear(); _bookmarkHeaders.Clear(); _tooltipSlots.Clear();
@@ -297,17 +292,15 @@ internal sealed partial class NeiWindow
         {
             // IMGUI's clip stack maps mouse events into the scaled GUI coordinate system.
             if (_scale != 1f) GUIUtility.ScaleAroundPivot(Vector2.one * _scale, Vector2.zero);
-            if (ModalOpen)
+            bool modalAtStart = ModalOpen;
+            if (ShowLeft) DrawBookmarkPanel(_left);
+            if (ShowRight) DrawCatalog(_right);
+            DrawBottomRail(showSearch: !modalAtStart && ShowRight);
+            if (modalAtStart && ModalOpen)
             {
                 if (_options) DrawOptions(_inspector);
                 else if (_chainGroup != null) DrawChain(_inspector);
                 else DrawInspector(_inspector);
-            }
-            else
-            {
-                if (ShowLeft) DrawBookmarkPanel(_left);
-                if (ShowRight) DrawCatalog(_right);
-                DrawCompactBar();
             }
             if (e.type == EventType.Repaint && !_hoveringItemSlot)
             {

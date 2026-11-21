@@ -199,11 +199,7 @@ internal sealed partial class NeiWindow
         string mode = NeiActions.ModeName(NeiActions.Mode);
         if (NeiSkin.IconButton(wrench, "options", L($"{mode} mode · Ctrl+click to change", $"{mode}模式 · Ctrl＋点击切换"), selected: NeiActions.Mode != NeiActions.LocalMode.Recipe))
         { _options = true; _skipFocusFrame = true; }
-        bool compact = _left.width < 35 || _left.height < 100;
-        if (NeiSkin.IconButton(new Rect(rect.x + side + 3, rect.y, side, side), "bookmark", L("Show or hide bookmarks", "显示或隐藏书签"), selected: compact ? _compactBookmarks : _bookmarksVisible))
-        {
-            if (compact) { _bookmarksVisible = true; _compactBookmarks = !_compactBookmarks; }
-            else ToggleBookmarks();
-        }
+        if (NeiSkin.IconButton(new Rect(rect.x + side + 3, rect.y, side, side), "bookmark", L("Show or hide bookmarks", "显示或隐藏书签"), selected: _bookmarksVisible))
+            ToggleBookmarks();
     }
 }
