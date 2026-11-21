@@ -30,26 +30,33 @@ internal sealed partial class NeiWindow
         }
         y += 31;
         if (NeiSkin.Button(new Rect(x, y, w, 27),
-            _plugin.AllowCheats ? L("AllowLocalCheats: On", "AllowLocalCheats：开") : L("AllowLocalCheats: Off", "AllowLocalCheats：关"),
+            _plugin.AllowCheats ? L("Single-player cheats: On", "单机作弊：开") : L("Single-player cheats: Off", "单机作弊：关"),
             selected: _plugin.AllowCheats))
         {
             _plugin.SetAllowCheats(!_plugin.AllowCheats);
             Status(_plugin.AllowCheats
-                ? L("Local cheats enabled; select Utility or Cheat mode.", "已启用单机作弊；请选择实用或作弊模式。")
+                ? L("Single-player cheats allowed; multiplayer permissions are set by the server.", "已允许单机作弊；多人权限仍由服务器决定。")
                 : L("Local cheats disabled.", "已禁用单机作弊。"));
         }
         y += 32;
         if (NeiActions.ShowsUtilities)
         {
-            if (NeiSkin.Button(new Rect(x, y, w, 27), L("Heal local character", "治疗本地角色"), NeiActions.CanUse))
-                Status(NeiActions.Heal() ?? L("Character healed", "已治疗角色"));
+            if (NeiSkin.Button(new Rect(x, y, w, 27), L("Heal your character", "治疗自己的角色"), NeiActions.CanHeal))
+            {
+                string? error = NeiActions.Heal(out bool submitted);
+                Status(error ?? (submitted ? L("Heal command submitted to Together", "已向 Together 提交治疗命令") : L("Character healed", "已治疗角色")));
+            }
             y += 29;
             if (_plugin.IsNativeInventory)
             {
                 int[] speeds = { 1, 5, 20 };
+                bool canSetSpeed = NeiActions.CanSetSpeed;
                 for (int i = 0; i < speeds.Length; i++)
-                    if (NeiSkin.Button(new Rect(x + i * w / 3, y, w / 3 - 3, 24), $"×{speeds[i]}", NeiActions.CanUse))
-                        Status(NeiActions.SetSpeed(speeds[i]) ?? L("Game speed changed", "已更改游戏速度"));
+                    if (NeiSkin.Button(new Rect(x + i * w / 3, y, w / 3 - 3, 24), $"×{speeds[i]}", canSetSpeed))
+                    {
+                        string? error = NeiActions.SetSpeed(speeds[i], out bool submitted);
+                        Status(error ?? (submitted ? L("Speed command submitted to Together", "已向 Together 提交调速命令") : L("Game speed changed", "已更改游戏速度")));
+                    }
                 y += 27;
             }
         }

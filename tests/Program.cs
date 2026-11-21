@@ -29,6 +29,8 @@ static int RunTests()
         ("native drag releases over NEI cancel only without a real drop target", DragReleaseOwnership),
         ("closing the inventory cancels a drag without cancelling ordinary radial transitions", DragInventoryClose),
         ("missed native release is cleared without stealing the release frame", MissedDragRelease),
+        ("Together permissions distinguish hosts, authorized clients, and unknown sessions", MultiplayerPermissions),
+        ("multiplayer give only targets the caller and accepts bounded item tokens", MultiplayerGiveCommand),
 #if RECIPE_TESTS
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
         ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
@@ -250,6 +252,28 @@ static void MissedDragRelease()
     Check(!DragInputPolicy.IsStale(true, false), "An ordinary drag remains live across frames.");
     Check(!DragInputPolicy.IsStale(false, true), "The native and terminal release handlers keep the original release edge.");
     Check(DragInputPolicy.IsStale(false, false), "An unhandled release or focus loss cannot leave a stale preview next frame.");
+}
+
+static void MultiplayerPermissions()
+{
+    Check(CheatPermission.ForTogether(false, false, null, null, null, null) == CheatAccess.Offline, "No active transport is offline.");
+    Check(CheatPermission.ForTogether(false, true, false, true, true, true) == CheatAccess.Unavailable, "A connecting transport is not offline.");
+    Check(CheatPermission.ForTogether(null, false, null, null, true, true) == CheatAccess.Unavailable, "An unreadable network state fails closed.");
+    Check(CheatPermission.ForTogether(true, true, true, false, true, null) == CheatAccess.Host, "A host follows the server cheat rule.");
+    Check(CheatPermission.ForTogether(true, true, false, true, true, true) == CheatAccess.AdminClient, "An authorized client can submit through Together's admin dispatcher.");
+    Check(CheatPermission.ForTogether(true, true, false, true, true, false) == CheatAccess.Unavailable, "A client-cheats rule is not an admin grant.");
+    Check(CheatPermission.ForTogether(true, true, false, true, false, true) == CheatAccess.Unavailable, "Admin alone does not override a disabled cheat rule.");
+    Check(CheatPermission.ForTogether(true, true, true, true, true, true) == CheatAccess.Unavailable, "Inconsistent roles fail closed.");
+}
+
+static void MultiplayerGiveCommand()
+{
+    Check(CheatPermission.GiveCommand("food/energy-bar", 2, 64) == "give @m food/energy-bar food/energy-bar",
+        "Every item goes to the command caller as one bounded batch.");
+    foreach (string id in new[] { "", "rope 1", "@a", "rope\nheal", "rope;heal", "../rope", "//rope" })
+        Check(CheatPermission.GiveCommand(id, 1, 64) == null, $"Reject non-item or unsafe command token {id}.");
+    Check(CheatPermission.GiveCommand("rope", 0, 64) == null && CheatPermission.GiveCommand("rope", 65, 64) == null,
+        "Only quantities from 1 to 64 are valid.");
 }
 
 static void FullWidthHostLayout()

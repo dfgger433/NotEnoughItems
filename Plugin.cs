@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.2.10")]
+[BepInPlugin(Guid, "Not Enough Items", "1.2.11")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -127,7 +127,7 @@ public sealed class Plugin : BaseUnityPlugin
     internal void SetAllowCheats(bool value)
     {
         _allowCheats.Value = value;
-        if (!value) NeiActions.Enabled = false;
+        if (!value) NeiActions.DisableOfflineCheats();
     }
 
     /// <summary>Cycles Recipe → Utility → Cheat and returns a localized notice for the UI.</summary>
@@ -140,7 +140,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         _enabled = Config.Bind("NotEnoughItems", "Enabled", true, "Show NEI beside inventory and the optional Inventory Terminal. Also changed by Game Settings, the toggle key, and Hide overlay.");
         _replaceUei = Config.Bind("NotEnoughItems", "ReplaceUEIPanel", true, "Hide the legacy UEI panel while NEI is visible; other UEI functions are untouched.");
-        _allowCheats = Config.Bind("NotEnoughItems", "AllowLocalCheats", false, "Allow entering the optional single-player cheat mode. Never applies to a multiplayer game.");
+        _allowCheats = Config.Bind("NotEnoughItems", "AllowLocalCheats", false, "Opt in to cheats in single-player. Multiplayer mode uses the server's Together permissions instead.");
         _scale = Config.Bind("NotEnoughItems", "Scale", 1f, new ConfigDescription("Sidebar scale multiplier.", new AcceptableValueRange<float>(0.7f, 1.4f)));
         _toggle = Config.Bind("NotEnoughItems", "Toggle", KeyCode.O, "Show or hide the NEI overlay on the open surface.");
         _recipes = Config.Bind("NotEnoughItems", "RecipesKey", KeyCode.R, "Look up recipes for the hovered item.");
@@ -168,12 +168,12 @@ public sealed class Plugin : BaseUnityPlugin
             Chinese ? "在背包和库存终端显示 NEI；隐藏后可在这里重新开启。" : "Show NEI in inventory and the Inventory Terminal. You can re-enable it here after hiding it.",
             category, _enabled.Value, _ => MirrorVisibility()));
         ModOptionsRegistry.Register(ModOptionDefinition.Bool("NotEnoughItems.AllowLocalCheats",
-            Chinese ? "NEI · 允许单机作弊" : "NEI · Allow local cheats",
-            Chinese ? "明确启用后，NEI 才能在确认的单机运行中进入实用／作弊模式；多人或未知状态始终拒绝。" : "Explicit opt-in. NEI can enter Utility/Cheat mode only in a confirmed single-player run; multiplayer and unknown states are always refused.",
+            Chinese ? "NEI · 允许单机作弊" : "NEI · Allow single-player cheats",
+            Chinese ? "仅控制单机。多人实用／作弊模式由 Together 的服务器权限决定。" : "Single-player opt-in only. In multiplayer, Together checks the server's permissions.",
             category, _allowCheats.Value, value =>
             {
                 _allowCheats.Value = value;
-                if (!value) NeiActions.Enabled = false;
+                if (!value) NeiActions.DisableOfflineCheats();
             }));
         ModOptionsRegistry.Register(ModOptionDefinition.Float("NotEnoughItems.Scale", "NEI · Sidebar scale", "Change the size of the item and bookmark panels.", category, _scale.Value, 0.7f, 1.4f, v => _scale.Value = v));
         foreach (var bind in new[] { _toggle, _recipes, _usages, _bookmark, _toggleBookmarks })

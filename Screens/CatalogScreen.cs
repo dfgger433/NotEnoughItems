@@ -34,7 +34,7 @@ internal sealed partial class NeiWindow
     {
         float cap = Mathf.Min(23, (row.width - 28) / 3);
         int amount = GiveQuantity;
-        string tip = L("Quantity for left click in local cheat mode", "数量 · 单机作弊模式左键给予");
+        string tip = L("Quantity for left click in Cheat mode", "数量 · 作弊模式左键给予");
         if (NeiSkin.IconButton(new Rect(row.x, row.y, cap, row.height), "remove", L("Decrease quantity", "减少数量"), amount > 1))
             _quantityText = (amount - 1).ToString(CultureInfo.InvariantCulture);
         _quantityRect = new Rect(row.x + cap + 3, row.y, row.width - 2 * cap - 6, row.height);

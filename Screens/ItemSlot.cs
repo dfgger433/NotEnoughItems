@@ -49,7 +49,7 @@ internal sealed partial class NeiWindow
     }
 
     private static bool CanGiveSlot(bool source, string id, CatalogItem? item, int button, bool shift, bool alt) =>
-        CanGiveSlot(source, id, item, button, shift, alt, NeiActions.Mode == NeiActions.LocalMode.Cheat);
+        CanGiveSlot(source, id, item, button, shift, alt, cheatMode: true) && NeiActions.CanGive;
 
     internal static bool CanGiveSlot(bool source, string id, CatalogItem? item, int button, bool shift, bool alt, bool cheatMode) =>
         source && cheatMode && (button == 0 || button == 1) && !shift && !alt &&
@@ -58,8 +58,9 @@ internal sealed partial class NeiWindow
     private void GiveSlot(CatalogItem item, int button)
     {
         if (ModalOpen || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
-        if (NeiActions.TryHandleGiveFromSlot(item.Id, button, false, GiveQuantity, out var error, out int dropped))
-            Status(error ?? (dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品")));
+        if (NeiActions.TryHandleGiveFromSlot(item.Id, button, false, GiveQuantity, out var error, out int dropped, out bool submitted))
+            Status(error ?? (submitted ? L("Give command submitted to Together", "已向 Together 提交发放命令") :
+                dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品")));
     }
 
     private static void DrawSprite(Rect rect, Sprite? sprite, Color tint, string fallback)
