@@ -65,6 +65,11 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
 
 `ReplaceSource` 与 `ClearSource` 分别替换／清除同一来源的类别和配方。请为类别、配方及虚拟物品使用自己的前缀，避免与游戏或其他模组冲突。完整类型见 [Catalog.cs](<Catalog.cs>)。查询可从 `Catalog.Shared` 获取按产物、用途及分类的索引。
 
+## 1.2.6 悬浮框层级
+
+- 物品悬浮框保留游戏原版位置、文本和布局，在 NEI GUI 绘制后再次合成原版 `GlobalDark.tooltipRect`，避免 Modernity 图集或侧栏 IMGUI 覆盖原版提示。
+- 这不是自绘提示框，也不复制物品实例；原版 Canvas 的兄弟节点只在捕获期间暂时停用并立即恢复。
+
 ## 1.2.4 运行时修复
 
 - 书签栏的实物条目在 Cheat 模式下遵循右栏刷取规则；Shift 查询、拖动和配方书签被明确排除。
