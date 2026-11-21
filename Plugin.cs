@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.2.8")]
+[BepInPlugin(Guid, "Not Enough Items", "1.2.9")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -337,7 +337,9 @@ public sealed class Plugin : BaseUnityPlugin
         if (_escapeDown && Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyBinds.GetBind("pause")) Event.current.Use();
         if (!_enabled.Value || _active == GameSurface.Kind.Closed) return;
         int originalDepth = GUI.depth;
-        GUI.depth = -100;
+        // Unity renders smaller IMGUI depths on top. Keep NEI behind the stock
+        // UGUI tooltip and other native IMGUI surfaces instead of covering them.
+        GUI.depth = 100;
         try
         {
             _window.Draw();

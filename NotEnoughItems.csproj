@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <Version>1.2.8</Version>
+    <Version>1.2.9</Version>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <Description>Not Enough Items for Casualties: Unknown</Description>
     <GameRoot Condition="'$(GameRoot)' == ''">$(MSBuildProjectDirectory)\..\..</GameRoot>

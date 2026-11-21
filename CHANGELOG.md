@@ -1,5 +1,10 @@
 # 更新记录
 
+## 1.2.9
+
+- 修复 NEI 自身 IMGUI 深度为 `-100` 导致 GUI 盖住原版悬浮框：NEI 现在使用较低优先级的深度 `100`，让原版 UGUI 和终端原生提示保留在前景。
+- 继续使用可恢复的 `GlobalDark.tooltipRect` VisualLease，不切换 Canvas 渲染模式、不创建捕获纹理。
+
 ## 1.2.8
 
 - 按 Unknown Inventory Terminal 的 `VisualLease` 方案提升原版 `GlobalDark.tooltipRect` 子树，而不是提升整个 Canvas。
