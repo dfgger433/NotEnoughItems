@@ -112,7 +112,15 @@ internal sealed partial class NeiWindow
         _alternatives.Clear();
     }
 
-    private bool ShowLeft => _bookmarksVisible;
+    private bool HideBookmarksForDrag
+    {
+        get
+        {
+            var camera = PlayerCamera.main;
+            return camera && camera.dragItem && camera.dragItem.TryGetComponent<WaterContainerItem>(out _);
+        }
+    }
+    private bool ShowLeft => _bookmarksVisible && !HideBookmarksForDrag;
     private bool ShowRight => CatalogSetting.Value;
     private ConfigEntry<bool> CatalogSetting => _plugin.IsNativeInventory ? _showInventoryGrid : _showGrid;
 

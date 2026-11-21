@@ -186,8 +186,9 @@ internal sealed partial class NeiWindow
 
     private void DrawLeftTools(Rect rect)
     {
-        _leftTools = rect;
         float side = rect.height;
+        bool hideBookmarks = HideBookmarksForDrag;
+        _leftTools = hideBookmarks ? new Rect(rect.x, rect.y, side, side) : rect;
         var wrench = new Rect(rect.x, rect.y, side, side);
         var e = Event.current;
         if (e.control && e.type == EventType.MouseDown && e.button == 0 && wrench.Contains(e.mousePosition))
@@ -199,7 +200,7 @@ internal sealed partial class NeiWindow
         string mode = NeiActions.ModeName(NeiActions.Mode);
         if (NeiSkin.IconButton(wrench, "options", L($"{mode} mode · Ctrl+click to change", $"{mode}模式 · Ctrl＋点击切换"), selected: NeiActions.Mode != NeiActions.LocalMode.Recipe))
         { _options = true; _skipFocusFrame = true; }
-        if (NeiSkin.IconButton(new Rect(rect.x + side + 3, rect.y, side, side), "bookmark", L("Show or hide bookmarks", "显示或隐藏书签"), selected: _bookmarksVisible))
+        if (!hideBookmarks && NeiSkin.IconButton(new Rect(rect.x + side + 3, rect.y, side, side), "bookmark", L("Show or hide bookmarks", "显示或隐藏书签"), selected: _bookmarksVisible))
             ToggleBookmarks();
     }
 }
