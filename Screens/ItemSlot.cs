@@ -8,7 +8,7 @@ internal sealed partial class NeiWindow
 {
     private void ItemSlot(Rect rect, string id, bool bookmarked = false, Sprite? overrideIcon = null, string? amount = null,
         string? fallback = null, Rect? clipping = null, Vector2? globalOffset = null, string? details = null,
-        int requirement = -1, bool belowRequirement = false, Item? liveItem = null, bool catalogSlot = false)
+        int requirement = -1, bool belowRequirement = false, Item? liveItem = null, bool catalogSlot = false, bool bookmarkSlot = false)
     {
         _catalog.TryGetItem(id, out var item);
         var recipeBookmark = id.StartsWith("recipe/", StringComparison.Ordinal) ? _catalog.Recipes.FirstOrDefault(r => RecipeKey(r) == id) : null;
@@ -33,22 +33,33 @@ internal sealed partial class NeiWindow
         if (belowRequirement)
             NeiSkin.Label(new Rect(rect.x + 3, rect.y + 1, rect.width - 5, 13), "!");
         if (!string.IsNullOrEmpty(amount)) NeiSkin.Label(new Rect(rect.x + 2, rect.yMax - 14, rect.width - 4, 13), amount!, TextAnchor.MiddleRight);
-        if (e.type == EventType.Repaint && absolute.width > 0 && absolute.height > 0) _itemTargets.Add((absolute, id));
+        if (e.type == EventType.Repaint && absolute.width > 0 && absolute.height > 0)
+        {
+            _itemTargets.Add((absolute, id));
+            _tooltipSlots.Add((absolute, title, item, details, liveItem ?? (SameId(id, _item) ? _lookupItem : null)));
+            _hoveringItemSlot |= hover;
+        }
         if (!hover) return;
-        if (e.type == EventType.Repaint)
-            _itemTooltip = (absolute, title, item, details,
-                liveItem ?? (SameId(id, _item) ? _lookupItem : null), Time.frameCount);
         if (e.type != EventType.MouseDown || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
         if (e.button == 2 || e.alt) ToggleBookmark(id);
         else if (e.button == 0 && requirement >= 0) _expandedRequirement = expanded ? -1 : requirement;
-        else if (catalogSlot && !ModalOpen && item is { Kind: CatalogItemKind.Item, IsVirtual: false } &&
-            NeiActions.Mode == NeiActions.LocalMode.Cheat &&
-            NeiActions.TryHandleGiveFromSlot(item.Id, e.button, e.shift, GiveQuantity, out var error, out int dropped))
-        {
-            Status(error ?? (dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品")));
-        }
+        else if (CanGiveSlot(catalogSlot || bookmarkSlot, id, item, e.button, e.shift, e.alt)) GiveSlot(item!, e.button);
         else if (e.button == 0 || e.button == 1) Lookup(id, e.button == 1);
         e.Use();
+    }
+
+    private static bool CanGiveSlot(bool source, string id, CatalogItem? item, int button, bool shift, bool alt) =>
+        CanGiveSlot(source, id, item, button, shift, alt, NeiActions.Mode == NeiActions.LocalMode.Cheat);
+
+    internal static bool CanGiveSlot(bool source, string id, CatalogItem? item, int button, bool shift, bool alt, bool cheatMode) =>
+        source && cheatMode && (button == 0 || button == 1) && !shift && !alt &&
+        item is { Kind: CatalogItemKind.Item, IsVirtual: false } && !id.StartsWith("recipe/", StringComparison.Ordinal);
+
+    private void GiveSlot(CatalogItem item, int button)
+    {
+        if (ModalOpen || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
+        if (NeiActions.TryHandleGiveFromSlot(item.Id, button, false, GiveQuantity, out var error, out int dropped))
+            Status(error ?? (dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品")));
     }
 
     private static void DrawSprite(Rect rect, Sprite? sprite, Color tint, string fallback)

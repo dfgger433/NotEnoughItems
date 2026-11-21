@@ -12,17 +12,14 @@ internal static class ModernityFrames
         internal int Height { get; } = height;
     }
 
+    // GuiNEIButton uses these three rows with 2 px edges; the hover row is also the active state.
+    internal const int ButtonSlice = 2;
+
     internal static Frame? Find(string name) => name switch
     {
         "button_disabled" => new Frame("widgets.png", 0, 46, 200, 20),
         "button" => new Frame("widgets.png", 0, 66, 200, 20),
-        "button_hover" or "button_pressed" => new Frame("widgets.png", 0, 86, 200, 20),
-        "field" or "field_hover" => new Frame("widgets.png", 0, 0, 20, 22),
-        "field_focus" => new Frame("widgets.png", 0, 22, 24, 24),
-        "slot_hover" => new Frame("slot.png", 0, 0, 18, 18),
-        "slot_selected" => new Frame("widgets.png", 0, 22, 24, 24),
-        "tab" => new Frame("nei_tabbed_sprites.png", 24, 16, 24, 24),
-        "tab_selected" => new Frame("nei_tabbed_sprites.png", 0, 16, 24, 24),
+        "button_hover" => new Frame("widgets.png", 0, 86, 200, 20),
         "bookmark" => new Frame("nei_tabbed_sprites.png", 0, 0, 16, 16),
         "bookmark_selected" => new Frame("nei_tabbed_sprites.png", 16, 0, 16, 16),
         "options" or "wrench" => new Frame("nei_tabbed_sprites.png", 32, 0, 16, 16),

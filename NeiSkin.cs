@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
@@ -15,6 +14,13 @@ internal static class NeiSkin
     private static readonly Color32 Shadow = Rgb(0x191827);
     private static readonly Color32 TooltipInk = Rgb(0xF4F2FB);
     private static readonly Color32 TooltipAccent = Rgb(0xBDB4E1);
+    private static readonly Color32 FieldBorder = Rgb(0xA0A0A0);
+    private static readonly Color32 FieldUnfocusedInk = Rgb(0x909090);
+    private static readonly Color32 FieldFocusedInk = Rgb(0xE0E0E0);
+    private static readonly Color SlotHoverInk = new Color32(255, 255, 255, 96);
+    private static readonly Color SlotSelectionInk = Rgb(0xFFD663);
+    private static readonly Color IconHoverTint = Rgb(0xE0E0E0);
+    private static readonly Color IconDisabledTint = new Color(1f, 1f, 1f, .42f);
     private static SkinStyles? _styles;
     private static readonly Dictionary<string, Texture2D?> Sources = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, Texture2D?> Frames = new(StringComparer.Ordinal);
@@ -26,8 +32,8 @@ internal static class NeiSkin
         if (!CanPaint(rect) || (!hovered && !selected))
             return;
 
-        SkinStyles styles = Styles;
-        Paint(selected ? styles.SlotSelected : styles.SlotHovered, rect);
+        // A catalyst slot sprite has an opaque interior; the overlay grid only needs an outline.
+        Outline(rect, selected ? SlotSelectionInk : SlotHoverInk);
     }
 
     /// <summary>Draws a raised action or option and returns Unity's native button click.</summary>
@@ -41,19 +47,32 @@ internal static class NeiSkin
     internal static bool IconButton(Rect rect, string icon, string tooltip, bool enabled = true, bool selected = false)
     {
         SkinStyles styles = Styles;
-        GUIStyle style = enabled ? (selected ? styles.ButtonSelected : styles.Button) : styles.ButtonDisabled;
-        string graphic = icon == "bookmark" && selected ? "bookmark_selected" : icon;
-        if (icon == "options") graphic = NeiActions.Mode switch
+        string caption = ModernityFrames.Caption(icon);
+        var content = new GUIContent(caption, tooltip);
+        // NEI renders paging and quantity controls as captioned widgets, not sprites.
+        if (caption.Length > 0)
+            return ClickContent(rect, content, enabled, selected ? styles.ButtonSelected : styles.Button, styles.ButtonDisabled);
+
+        string graphic = icon switch
         {
-            NeiActions.LocalMode.Utility => "options_utility",
-            NeiActions.LocalMode.Cheat => "options_cheat",
+            "bookmark" when selected => "bookmark_selected",
+            "options" or "wrench" when NeiActions.Mode == NeiActions.LocalMode.Utility => "options_utility",
+            "options" or "wrench" when NeiActions.Mode == NeiActions.LocalMode.Cheat => "options_cheat",
             _ => icon
         };
-        bool clicked = ClickContent(rect, new GUIContent(ModernityFrames.Caption(icon), tooltip), enabled, style, styles.ButtonDisabled);
-        if (CanPaint(rect))
+        // Keep the native IMGUI click/tooltip but never draw a widget behind an atlas icon.
+        bool clicked = ClickContent(rect, content, enabled, GUIStyle.none, GUIStyle.none);
+        if (CanPaint(rect) && CropFrame(graphic) is { } texture)
         {
-            float inset = Mathf.Max(2f, Mathf.Min(rect.width, rect.height) * 0.18f);
-            Icon(new Rect(rect.x + inset, rect.y + inset, rect.width - inset * 2, rect.height - inset * 2), graphic);
+            bool hovered = rect.Contains(Event.current.mousePosition);
+            Color tint = !(GUI.enabled && enabled) ? IconDisabledTint : hovered ? IconHoverTint : Color.white;
+            float scale = Mathf.Min(1f, (rect.width - 2f) / texture.width, (rect.height - 2f) / texture.height);
+            if (scale > 0f)
+            {
+                float width = texture.width * scale, height = texture.height * scale;
+                DrawTexture(new Rect(rect.center.x - width * .5f, rect.center.y - height * .5f, width, height), texture,
+                    ScaleMode.ScaleToFit, tint);
+            }
         }
         return clicked;
     }
@@ -63,14 +82,8 @@ internal static class NeiSkin
     {
         if (!CanPaint(rect) || string.IsNullOrWhiteSpace(icon))
             return;
-        Texture2D? texture = GetIcon(icon);
-        if (texture == null || !texture)
-            return;
-
-        Color previous = GUI.color;
-        GUI.color = Color.white;
-        GUI.DrawTexture(rect, texture, ScaleMode.ScaleToFit, true);
-        GUI.color = previous;
+        if (CropFrame(icon) is { } texture)
+            DrawTexture(rect, texture, ScaleMode.ScaleToFit, Color.white);
     }
 
     /// <summary>Draws the replaceable, alpha-zero default background or a named screen background variant.</summary>
@@ -87,27 +100,30 @@ internal static class NeiSkin
         if (background == null || !background)
             return;
 
-        Color previous = GUI.color;
-        GUI.color = Color.white;
-        GUI.DrawTexture(rect, background, ScaleMode.StretchToFill, true);
-        GUI.color = previous;
+        DrawTexture(rect, background, ScaleMode.StretchToFill, Color.white);
     }
 
     /// <summary>Draws a recipe/option tab. The caller owns which tab is selected.</summary>
-    internal static bool Tab(Rect rect, string text, bool selected, bool enabled = true)
-    {
-        SkinStyles styles = Styles;
-        return Click(rect, text, enabled, selected ? styles.TabSelected : styles.Tab, styles.ButtonDisabled);
-    }
+    internal static bool Tab(Rect rect, string text, bool selected, bool enabled = true) =>
+        Button(rect, text, enabled, selected);
 
     /// <summary>Draws a native single-line editor. An optional control name allows IMGUI focus management.</summary>
     internal static string TextField(Rect rect, string text, string? controlName = null, int maxLength = 128)
     {
-        GUIStyle style = Styles.TextField;
+        // NEI's FormattedTextField draws a one-pixel gray border and a black interior;
+        // widgets.png starts with the hotbar, not a text-field sprite.
+        if (CanPaint(rect))
+        {
+            Fill(rect, FieldBorder);
+            Rect inside = new(rect.x + 1f, rect.y + 1f, rect.width - 2f, rect.height - 2f);
+            if (inside.width > 0f && inside.height > 0f)
+                Fill(inside, Color.black);
+        }
+
         if (!string.IsNullOrEmpty(controlName))
             GUI.SetNextControlName(controlName);
 
-        return GUI.TextField(rect, text, maxLength, style);
+        return GUI.TextField(rect, text, maxLength, Styles.TextField);
     }
 
     /// <summary>Draws a clipped label in the panel's normal or secondary text color.</summary>
@@ -210,9 +226,33 @@ internal static class NeiSkin
     private static SkinStyles Styles => _styles ??= new SkinStyles();
     private static bool CanPaint(Rect rect) => Event.current.type == EventType.Repaint && rect.width > 0f && rect.height > 0f;
 
-    private static Texture2D? GetIcon(string icon)
+    private static void Outline(Rect rect, Color color)
     {
-        return CropFrame(icon);
+        float edge = Mathf.Min(1f, rect.width * .5f, rect.height * .5f);
+        Fill(new Rect(rect.x, rect.y, rect.width, edge), color);
+        Fill(new Rect(rect.x, rect.yMax - edge, rect.width, edge), color);
+        float middle = rect.height - 2f * edge;
+        if (middle <= 0f)
+            return;
+        Fill(new Rect(rect.x, rect.y + edge, edge, middle), color);
+        Fill(new Rect(rect.xMax - edge, rect.y + edge, edge, middle), color);
+    }
+
+    private static void Fill(Rect rect, Color color) =>
+        DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, color);
+
+    private static void DrawTexture(Rect rect, Texture2D texture, ScaleMode scaleMode, Color color)
+    {
+        Color previous = GUI.color;
+        try
+        {
+            GUI.color = color;
+            GUI.DrawTexture(rect, texture, scaleMode, true);
+        }
+        finally
+        {
+            GUI.color = previous;
+        }
     }
 
     // Paint decorations without allocating control IDs; buttons/editors still run on every IMGUI event.
@@ -339,18 +379,13 @@ internal static class NeiSkin
 
     private sealed class SkinStyles
     {
-        private const int Slice = 2;
         private readonly GUIStyle?[,] _labels = new GUIStyle[9, 2];
         private readonly GUIStyle?[] _labelShadows = new GUIStyle[9];
         internal readonly GUIStyle Wrapped;
         internal readonly GUIStyle WrappedShadow;
-        internal readonly GUIStyle SlotHovered;
-        internal readonly GUIStyle SlotSelected;
         internal readonly GUIStyle Button;
         internal readonly GUIStyle ButtonSelected;
         internal readonly GUIStyle ButtonDisabled;
-        internal readonly GUIStyle Tab;
-        internal readonly GUIStyle TabSelected;
         internal readonly GUIStyle TextField;
         internal readonly GUIStyle TooltipTitle;
         internal readonly GUIStyle TooltipDetail;
@@ -364,24 +399,16 @@ internal static class NeiSkin
             // Inline text uses a one-pixel shadow over the transparent game world.
             Wrapped = TextStyle(TextAnchor.UpperLeft, OverlayInk, 13, wrap: true);
             WrappedShadow = TextStyle(TextAnchor.UpperLeft, Shadow, 13, wrap: true);
-            SlotHovered = FrameStyle(Atlas("slot_hover"));
-            SlotSelected = FrameStyle(Atlas("slot_selected"));
-
-            var normal = Atlas("button");
-            var hover = Atlas("button_hover");
-            var pressed = Atlas("button_pressed");
-            var disabled = Atlas("button_disabled");
-            var tab = Atlas("tab");
-            var activeTab = Atlas("tab_selected");
+            var normal = CropFrame("button");
+            var active = CropFrame("button_hover");
+            var disabled = CropFrame("button_disabled");
             var darkInk = Rgb(0x232538);
-            Button = ControlStyle(normal, hover, pressed, hover, TextAnchor.MiddleCenter, darkInk, 4);
-            ButtonSelected = ControlStyle(activeTab, hover, pressed, hover, TextAnchor.MiddleCenter, darkInk, 4);
-            ButtonDisabled = ControlStyle(disabled, disabled, disabled, disabled, TextAnchor.MiddleCenter, OverlayMuted, 4);
-            Tab = ControlStyle(tab, hover, pressed, hover, TextAnchor.MiddleCenter, darkInk, 4);
-            TabSelected = ControlStyle(activeTab, activeTab, pressed, activeTab, TextAnchor.MiddleCenter, darkInk, 4);
+            Button = ButtonStyle(normal, active, darkInk);
+            ButtonSelected = ButtonStyle(active, active, darkInk);
+            ButtonDisabled = ButtonStyle(disabled, disabled, OverlayMuted);
 
-            TextField = ControlStyle(Atlas("field"), Atlas("field_hover"), Atlas("field_focus"), Atlas("field_focus"),
-                TextAnchor.MiddleLeft, TooltipInk, 6);
+            TextField = ContentStyle(TextAnchor.MiddleLeft, 6);
+            ApplyStates(TextField, null, null, FieldUnfocusedInk, FieldFocusedInk);
             TooltipTitle = TextStyle(TextAnchor.UpperLeft, TooltipInk, 13, wrap: true);
             TooltipDetail = TextStyle(TextAnchor.UpperLeft, TooltipAccent, 12, wrap: true);
             TooltipDetailShadow = TextStyle(TextAnchor.UpperLeft, Shadow, 12, wrap: true);
@@ -396,15 +423,6 @@ internal static class NeiSkin
         internal GUIStyle LabelShadow(TextAnchor alignment) =>
             _labelShadows[(int)alignment] ??= TextStyle(alignment, Shadow, 13);
 
-        private static Texture2D? Atlas(string frame) => CropFrame(frame);
-
-        private static GUIStyle FrameStyle(Texture2D? background)
-        {
-            var style = new GUIStyle { border = new RectOffset(Slice, Slice, Slice, Slice) };
-            style.normal.background = background;
-            return style;
-        }
-
         private static GUIStyle TextStyle(TextAnchor alignment, Color color, int size, bool wrap = false)
         {
             var style = new GUIStyle();
@@ -413,21 +431,33 @@ internal static class NeiSkin
             return style;
         }
 
-        private static GUIStyle ControlStyle(Texture2D? normal, Texture2D? hover, Texture2D? active, Texture2D? focused,
-            TextAnchor alignment, Color color, int horizontalPadding)
+        private static GUIStyle ButtonStyle(Texture2D? normal, Texture2D? active, Color ink)
         {
-            GUIStyle style = FrameStyle(normal);
-            SetText(style, alignment, 13, false);
-            style.padding = new RectOffset(horizontalPadding, horizontalPadding, 2, 2);
-            SetState(style.normal, normal, color);
-            SetState(style.hover, hover, color);
-            SetState(style.active, active, color);
-            SetState(style.focused, focused, color);
-            SetState(style.onNormal, normal, color);
-            SetState(style.onHover, hover, color);
-            SetState(style.onActive, active, color);
-            SetState(style.onFocused, focused, color);
+            var style = ContentStyle(TextAnchor.MiddleCenter, 4);
+            const int edge = ModernityFrames.ButtonSlice;
+            // Every row is cropped into an isolated point-filtered texture before Unity slices it.
+            style.border = new RectOffset(edge, edge, edge, edge);
+            ApplyStates(style, normal, active, ink, ink);
             return style;
+        }
+
+        private static GUIStyle ContentStyle(TextAnchor alignment, int horizontalPadding)
+        {
+            var style = new GUIStyle { padding = new RectOffset(horizontalPadding, horizontalPadding, 2, 2) };
+            SetText(style, alignment, 13, false);
+            return style;
+        }
+
+        private static void ApplyStates(GUIStyle style, Texture2D? normal, Texture2D? active, Color ink, Color focusInk)
+        {
+            SetState(style.normal, normal, ink);
+            SetState(style.hover, active, ink);
+            SetState(style.active, active, focusInk);
+            SetState(style.focused, active, focusInk);
+            SetState(style.onNormal, normal, ink);
+            SetState(style.onHover, active, ink);
+            SetState(style.onActive, active, focusInk);
+            SetState(style.onFocused, active, focusInk);
         }
 
         private static void SetText(GUIStyle style, TextAnchor alignment, int size, bool wrap)

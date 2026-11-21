@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.2.2")]
+[BepInPlugin(Guid, "Not Enough Items", "1.2.4")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -52,6 +52,8 @@ public sealed class Plugin : BaseUnityPlugin
     private bool _escapeDown;
     private float _nextRefresh;
     private int _updatedFrame = -1;
+
+    internal IReadOnlyList<Rect> TooltipObstacles() => _window.TooltipObstacles();
 
     internal bool TryGetItemTooltip(out (string, string) tooltip)
     {
@@ -261,8 +263,7 @@ public sealed class Plugin : BaseUnityPlugin
         }
         if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && Input.GetKeyDown(KeyCode.F))
         {
-            _window.RequestSearchFocus();
-            CaptureKey();
+            if (_window.RequestSearchFocus()) CaptureKey();
             return;
         }
         bool recipes = Pressed(_recipes), usages = Pressed(_usages), bookmark = Pressed(_bookmark);

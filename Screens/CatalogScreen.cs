@@ -34,7 +34,7 @@ internal sealed partial class NeiWindow
     {
         float cap = Mathf.Min(23, (row.width - 28) / 3);
         int amount = GiveQuantity;
-        string tip = L("Quantity for Ctrl + left click in local cheat mode", "数量 · 单机作弊模式 Ctrl＋左键给予");
+        string tip = L("Quantity for left click in local cheat mode", "数量 · 单机作弊模式左键给予");
         if (NeiSkin.IconButton(new Rect(row.x, row.y, cap, row.height), "remove", L("Decrease quantity", "减少数量"), amount > 1))
             _quantityText = (amount - 1).ToString(CultureInfo.InvariantCulture);
         _quantityRect = new Rect(row.x + cap + 3, row.y, row.width - 2 * cap - 6, row.height);
@@ -75,13 +75,31 @@ internal sealed partial class NeiWindow
 
     private void DrawSearch(Rect rect)
     {
-        var value = NeiSkin.TextField(rect, _query, SearchControl, 160);
-        if (_focusSearch && Event.current.type == EventType.Repaint) { GUI.FocusControl(SearchControl); _focusSearch = false; }
+        var value = DrawSearchInput(rect, _query, L("Search items…", "搜索物品…"));
         if (value != _query) { _query = value; _page = 0; ApplyFilter(); }
-        if (rect.width > 82 && _query.Length == 0 && GUI.GetNameOfFocusedControl() != SearchControl)
-            NeiSkin.Label(new Rect(rect.x + 6, rect.y, rect.width - 12, rect.height), L("Search items…", "搜索物品…"), muted: true);
         if (rect.Contains(Event.current.mousePosition) && GUI.GetNameOfFocusedControl() != SearchControl)
-            Tip(L("Search · Ctrl+F", "搜索 · Ctrl+F"), L("@source  $tag  #description  &id  -exclude\nUse quotes for a phrase.", "@来源  $标签  #描述  &ID  -排除\n短语用双引号括住。"));
+            Tip(L("Search · Ctrl+F", "搜索 · Ctrl+F"), L("@source  $tag  #description  &id  -exclude\nUse quotes for a phrase. Right click to clear.", "@来源  $标签  #描述  &ID  -排除\n短语用双引号括住。右键清空。"));
+    }
+
+    private string DrawSearchInput(Rect rect, string value, string placeholder)
+    {
+        if (rect.width < 22f || rect.height < 15f) return value;
+        var e = Event.current;
+        if (e.type == EventType.MouseDown && e.button == 1 && rect.Contains(e.mousePosition))
+        {
+            value = string.Empty;
+            _focusSearch = true;
+            e.Use();
+        }
+        string next = NeiSkin.TextField(rect, value, SearchControl, 160);
+        if (_focusSearch && e.type == EventType.Repaint)
+        {
+            GUI.FocusControl(SearchControl);
+            _focusSearch = false;
+        }
+        if (rect.width > 82 && next.Length == 0 && GUI.GetNameOfFocusedControl() != SearchControl)
+            NeiSkin.Label(new Rect(rect.x + 6, rect.y, rect.width - 12, rect.height), placeholder, muted: true);
+        return next;
     }
 
     private void DrawGrid(Rect rect, int count, Func<int, string> idAt, ref int page, Rect navigation, float cellSize = 28)

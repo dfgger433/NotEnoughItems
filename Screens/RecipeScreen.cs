@@ -40,11 +40,9 @@ internal sealed partial class NeiWindow
             SetCategory(categories, Wrap(choice + 1, categories.Length + 1));
         y += 29;
         _searchRect = new Rect(x, y, w, 22);
-        string filter = NeiSkin.TextField(_searchRect, _recipeQuery, SearchControl, 160);
+        string filter = DrawSearchInput(_searchRect, _recipeQuery, L("Find a recipe…", "搜索配方…"));
         if (filter != _recipeQuery) { _recipeIndex = 0; _recipeScroll = Vector2.zero; _recipeQuery = filter; }
-        if (_recipeQuery.Length == 0 && GUI.GetNameOfFocusedControl() != SearchControl)
-            NeiSkin.Label(new Rect(x + 6, y, w - 12, 22), L("Find a recipe…", "搜索配方…"), muted: true);
-        if (_searchRect.Contains(Event.current.mousePosition))
+        if (_searchRect.Contains(Event.current.mousePosition) && GUI.GetNameOfFocusedControl() != SearchControl)
             Tip(L("Recipe search", "配方搜索"), L("< input   > output   ^ machine or tool   ~ name or description", "< 输入   > 产物   ^ 机器或工具   ~ 名称或描述"));
         y += 27;
         IReadOnlyList<Recipe> recipes = _category == null ? all : _item == null ? _catalog.GetRecipesForCategory(_category) : all.Where(r => SameId(r.CategoryId, _category)).ToArray();

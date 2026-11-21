@@ -117,7 +117,7 @@ internal sealed partial class NeiWindow
                 }
                 else if (e.type == EventType.MouseDown && e.button == 0 && e.alt && _book.Split(item)) { SaveBookmarks(); e.Use(); }
             }
-            ItemSlot(slot, item.Id, amount: item.Quantity > 1 ? item.Quantity.ToString() : null);
+            ItemSlot(slot, item.Id, amount: item.Quantity > 1 ? item.Quantity.ToString() : null, bookmarkSlot: true);
         }
         if (e.type == EventType.ScrollWheel && rect.Contains(e.mousePosition))
         {
@@ -154,7 +154,12 @@ internal sealed partial class NeiWindow
                 hovered ??= _book.Page(_group).FirstOrDefault(entry => hitGroup.Group != null && entry.Group == hitGroup.Group);
                 if (hovered != null && _book.Move(source, hovered, _reorderBookmark)) SaveBookmarks();
             }
-            else if (source == hovered) Lookup(source.Id, false);
+            else if (source == hovered)
+            {
+                _catalog.TryGetItem(source.Id, out var entry);
+                if (CanGiveSlot(true, source.Id, entry, e.button, _reorderBookmark || e.shift, e.alt)) GiveSlot(entry!, e.button);
+                else Lookup(source.Id, false);
+            }
             e.Use();
         }
     }

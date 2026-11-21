@@ -278,6 +278,9 @@ internal sealed class GameSurface
         Patch(harmony, log, typeof(PlayerCamera), "HandleMouseOver", nameof(SkipHover));
         harmony.Patch(AccessTools.Method(typeof(UIUtil), nameof(UIUtil.GetUITooltip)),
             postfix: new HarmonyMethod(typeof(GameSurface), nameof(UseOriginalItemTooltip)) { priority = Priority.Last });
+        harmony.Patch(AccessTools.Method(typeof(GlobalDark), nameof(GlobalDark.HandleTooltip)),
+            prefix: new HarmonyMethod(typeof(GameSurface), nameof(FeedNeiTooltip)) { priority = Priority.First },
+            postfix: new HarmonyMethod(typeof(GameSurface), nameof(PlaceNeiTooltip)) { priority = Priority.Last });
         if (Chainloader.PluginInfos.TryGetValue(TerminalGuid, out var terminal) && terminal.Instance != null)
             Patch(harmony, log, terminal.Instance.GetType(), "OnGUI", nameof(ShowTerminalChrome));
         var uei = AccessTools.TypeByName("UeiRuntime");
@@ -297,10 +300,30 @@ internal sealed class GameSurface
         catch (Exception error) { log.LogWarning($"Could not patch {type.Name}.{target}: {error.Message}"); }
     }
 
+    private static int _neiTooltipFrame = -1;
+    private static (string, string) _neiTooltipText;
+
+    // Feed the same stock state used by world item hover even when no UITooltip is raycast.
+    private static void FeedNeiTooltip(GlobalDark __instance)
+    {
+        _neiTooltipFrame = -1;
+        if (Plugin.Instance?.TryGetItemTooltip(out var itemText) != true) return;
+        _neiTooltipFrame = Time.frameCount;
+        _neiTooltipText = itemText;
+        __instance.SetTooltip(itemText);
+    }
+
     // GlobalDark calls this while choosing which tooltip to show, before the stock renderer lays it out.
     private static void UseOriginalItemTooltip(ref (string, string) __result)
     {
-        if (Plugin.Instance?.TryGetItemTooltip(out var itemText) == true) __result = itemText;
+        if (_neiTooltipFrame == Time.frameCount) __result = _neiTooltipText;
+    }
+
+    private static void PlaceNeiTooltip(GlobalDark __instance)
+    {
+        if (_neiTooltipFrame == Time.frameCount && Plugin.Instance is { } plugin)
+            NativeTooltipLayer.MoveClearOfOverlay(__instance, plugin);
+        _neiTooltipFrame = -1;
     }
 
     private static bool SkipInput(PlayerCamera __instance)

@@ -25,10 +25,12 @@ static int RunTests()
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
         ("reordering and clipboard import preserve independent groups", BookmarkGroups),
         ("GUI texture locations use a namespace and preserve legacy mappings", TextureLocations),
+        ("native tooltips stay inside the viewport and avoid active overlay controls", TooltipAvoidsControls),
 #if RECIPE_TESTS
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
         ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
         ("native tooltip entry points and original rich text passthrough", TooltipSmoke.Run),
+        ("bookmark cheat clicks preserve lookup, drag modifiers and recipe bookmarks", BookmarkCheatClicks),
         ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
         ("usage queries share ingredient matching semantics without false positives", RecipeUsageMatching),
@@ -224,6 +226,20 @@ static void TextureLocations()
         ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" }, "Official sprite positions and paging glyphs.");
 }
 
+static void TooltipAvoidsControls()
+{
+    var screen = new Rect(6, 6, 1268, 708);
+    var right = new Rect(975, 80, 285, 575);
+    var search = new Rect(500, 685, 280, 24);
+    var nearCursor = new Rect(961, 610, 300, 135);
+    var placed = TooltipPlacement.Place(nearCursor, screen, [right, search]);
+    Check(!placed.Overlaps(right) && !placed.Overlaps(search), "Use available free space rather than painting below overlay controls.");
+    Check(placed.xMin >= screen.xMin && placed.yMin >= screen.yMin && placed.xMax <= screen.xMax && placed.yMax <= screen.yMax,
+        "The popup stays within the viewport margins.");
+    var alreadyClear = new Rect(45, 73, 130, 80);
+    RectEqual(alreadyClear, TooltipPlacement.Place(alreadyClear, screen, [right, search]), "Unobstructed tooltips retain the vanilla placement.");
+}
+
 static void CheckSides(Rect host, Rect left, Rect right, float width, float height)
 {
     Check(left.width > 0 && right.width > 0, "Fixture must leave room for both sides.");
@@ -268,6 +284,19 @@ static void EmbeddedGuiTextures()
         Check(width > 0 && (width & (width - 1)) == 0 && height > 0 && (height & (height - 1)) == 0,
             "Texture canvas dimensions must be powers of two: " + path);
     }
+}
+
+static void BookmarkCheatClicks()
+{
+    var window = typeof(CatalogItem).Assembly.GetType("NotEnoughItems.NeiWindow", throwOnError: true)!;
+    var check = window.GetMethod("CanGiveSlot", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
+        null, [typeof(bool), typeof(string), typeof(CatalogItem), typeof(int), typeof(bool), typeof(bool), typeof(bool)], null)!;
+    var item = new CatalogItem("rope", "Rope");
+    bool Can(string id = "item:rope", int button = 0, bool shift = false, bool alt = false, bool cheat = true, bool source = true) =>
+        (bool)check.Invoke(null, [source, id, item, button, shift, alt, cheat])!;
+    Check(Can() && Can(button: 1), "Both ordinary bookmark click actions reach item giving in Cheat mode.");
+    Check(!Can(shift: true) && !Can(alt: true) && !Can(button: 2), "Lookup/drag and bookmark gestures do not give items.");
+    Check(!Can(cheat: false) && !Can(source: false) && !Can(id: "recipe/native/rope"), "Recipe browsing, other menus and recipe bookmarks never give an item.");
 }
 
 static void NativeInventoryAnchor()

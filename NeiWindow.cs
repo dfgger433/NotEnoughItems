@@ -27,7 +27,9 @@ internal sealed partial class NeiWindow
     private readonly Stack<(string? Item, bool Usage, string? Category, int Index, string[] Contents, Item? LiveItem)> _back = new();
     private string[] _lookupContents = Array.Empty<string>();
     private readonly List<(Rect Rect, string Id)> _itemTargets = new();
-    private (Rect Rect, string Title, CatalogItem? Item, string? Details, Item? Instance, int Frame)? _itemTooltip;
+    private readonly List<(Rect Rect, string Title, CatalogItem? Item, string? Details, Item? Instance)> _tooltipSlots = new();
+    private int _tooltipFrame = -1;
+    private bool _hoveringItemSlot;
     private Item? _lookupItem;
     private Rect _left, _right, _center, _inspector, _searchRect, _groupRect, _quantityRect, _compactBar, _compactGrid, _leftTools;
     private bool _compactBookmarks, _bookmarksVisible = true;
@@ -79,7 +81,7 @@ internal sealed partial class NeiWindow
         _inspector = NeiLayout.Inspector(_center, _width, _height, 1f);
     }
 
-    internal void Hide() { _left = _right = _inspector = _searchRect = _groupRect = _quantityRect = _compactBar = _compactGrid = _leftTools = default; _itemTargets.Clear(); _itemTooltip = null; _lookupItem = null; }
+    internal void Hide() { _left = _right = _inspector = _searchRect = _groupRect = _quantityRect = _compactBar = _compactGrid = _leftTools = default; _itemTargets.Clear(); _tooltipSlots.Clear(); _tooltipFrame = -1; _lookupItem = null; }
     internal void ToggleBookmarks() { _bookmarksVisible = !_bookmarksVisible; _compactBookmarks = false; }
     internal void ResetView()
     {
@@ -90,7 +92,7 @@ internal sealed partial class NeiWindow
         _activeRecipeKey = null;
         _back.Clear();
         _itemTargets.Clear();
-        _itemTooltip = null;
+        _tooltipSlots.Clear(); _tooltipFrame = -1;
         _lookupItem = null;
         _expandedRequirement = -1;
         _requirementRecipe = null;
@@ -116,16 +118,44 @@ internal sealed partial class NeiWindow
             if (_itemTargets[i].Rect.Contains(pointer)) return _itemTargets[i].Id;
         return null;
     }
+    internal IReadOnlyList<Rect> TooltipObstacles()
+    {
+        var logical = new List<Rect>();
+        if (ModalOpen) logical.Add(_inspector);
+        else
+        {
+            if (ShowLeft) logical.Add(_left);
+            if (ShowRight) logical.Add(_right);
+            if (_compactGrid.width > 0) logical.Add(_compactGrid);
+            if (_searchRect.width > 0) logical.Add(_searchRect);
+            if (_leftTools.width > 0) logical.Add(_leftTools);
+            if (!_plugin.IsNativeInventory) logical.Add(_center);
+        }
+        return logical.Select(rect => new Rect(rect.position * _scale, rect.size * _scale)).ToArray();
+    }
+
     internal bool TryGetItemTooltip(Vector2 pointer, out (string, string) result)
     {
         result = default;
-        if (_itemTooltip is not { } slot || Time.frameCount - slot.Frame > 1 ||
-            !slot.Rect.Contains(pointer / _scale) || !Hit(pointer)) return false;
-        result = NativeTooltip.ForItem(slot.Title, slot.Item, slot.Details, slot.Instance);
-        return !string.IsNullOrEmpty(result.Item1);
+        if (_tooltipFrame < 0 || Time.frameCount - _tooltipFrame > 2 || !Hit(pointer)) return false;
+        var logical = pointer / _scale;
+        for (int i = _tooltipSlots.Count - 1; i >= 0; i--)
+        {
+            var slot = _tooltipSlots[i];
+            if (!slot.Rect.Contains(logical)) continue;
+            result = NativeTooltip.ForItem(slot.Title, slot.Item, slot.Details, slot.Instance);
+            return !string.IsNullOrEmpty(result.Item1);
+        }
+        return false;
     }
 
-    internal void RequestSearchFocus() { _showGrid.Value = true; _focusSearch = true; }
+    internal bool RequestSearchFocus()
+    {
+        if (_options || _chainGroup != null) return false;
+        if (!_open) _showGrid.Value = true;
+        _focusSearch = true;
+        return true;
+    }
 
     internal void RefreshCatalog(ManualLogSource log)
     {
@@ -215,7 +245,7 @@ internal sealed partial class NeiWindow
         _item = id;
         _lookupContents = Array.Empty<string>();
         _lookupItem = null;
-        _itemTooltip = null;
+        _tooltipSlots.Clear(); _tooltipFrame = -1;
         _selectedRecipeBookmark = null;
         _craftableOnly = false;
         _activeRecipeKey = null;
@@ -255,7 +285,12 @@ internal sealed partial class NeiWindow
         }
         _tipTitle = _tipBody = null;
         _searchRect = _groupRect = _quantityRect = _compactBar = _compactGrid = _leftTools = default;
-        if (e.type == EventType.Repaint) { _itemTargets.Clear(); _bookmarkHeaders.Clear(); _itemTooltip = null; }
+        if (e.type == EventType.Repaint)
+        {
+            _itemTargets.Clear(); _bookmarkHeaders.Clear(); _tooltipSlots.Clear();
+            _tooltipFrame = Time.frameCount;
+            _hoveringItemSlot = false;
+        }
         if (e.type == EventType.Repaint && !Input.GetMouseButton(0)) { _bookmarkDrag = null; _dragGroup = null; }
         Matrix4x4 savedMatrix = GUI.matrix;
         try
@@ -274,7 +309,7 @@ internal sealed partial class NeiWindow
                 if (ShowRight) DrawCatalog(_right);
                 DrawCompactBar();
             }
-            if (e.type == EventType.Repaint && _itemTooltip == null)
+            if (e.type == EventType.Repaint && !_hoveringItemSlot)
             {
                 if (_tipTitle != null) NeiSkin.Tooltip(e.mousePosition, _tipTitle, _tipBody);
                 else if (Hit(screenMouse) && !string.IsNullOrEmpty(GUI.tooltip)) NeiSkin.Tooltip(e.mousePosition, GUI.tooltip);
