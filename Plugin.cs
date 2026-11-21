@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.2.6")]
+[BepInPlugin(Guid, "Not Enough Items", "1.2.7")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -341,7 +341,6 @@ public sealed class Plugin : BaseUnityPlugin
         try
         {
             _window.Draw();
-            NativeTooltipLayer.RenderAfterGui(GlobalDark.main);
         }
         finally { GUI.depth = originalDepth; }
     }
