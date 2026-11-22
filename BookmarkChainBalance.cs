@@ -140,7 +140,7 @@ internal static class BookmarkChainBalance
     private const int MaximumExpansionDepth = 128;
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
 
-    /// <summary>Balances a group. Carried stock annotates the bill without changing its recipe multipliers.</summary>
+    /// <summary>Balances a group. Carried stock can replace upstream production for preferred ingredient choices.</summary>
     /// <param name="catalog">Catalog used to normalize item IDs and resolve substitutions.</param>
     /// <param name="entries">The entries belonging to this group only, in bookmark order.</param>
     /// <param name="available">Optional snapshot of carried quantities.</param>
@@ -286,6 +286,7 @@ internal static class BookmarkChainBalance
         private readonly Dictionary<string, List<Output>> _producers = new(Ids);
         private readonly Dictionary<string, double> _bookmarked = new(Ids);
         private readonly Dictionary<string, double> _available = new(Ids);
+        private readonly HashSet<string> _useCarriedFirst = new(Ids);
         private readonly Dictionary<string, double> _production = new(Ids);
         private readonly Dictionary<string, double> _reserved = new(Ids);
         private readonly Dictionary<string, double> _consumed = new(Ids);
@@ -477,6 +478,8 @@ internal static class BookmarkChainBalance
                             itemId = choice.BrowseId;
                             amount = UnitCost(ingredient, choice, amount);
                             requirement = false;
+                            if (At(_available, itemId) > Epsilon && PreferredYield(itemId, node) > Epsilon)
+                                _useCarriedFirst.Add(itemId);
                         }
                     }
 
@@ -601,7 +604,8 @@ internal static class BookmarkChainBalance
                     ReportCycle(input.Key, producer.Recipe.Id, "Bookmark chain contains a recipe cycle.");
                     continue;
                 }
-                double initial = At(_bookmarked, input.Key) + ((_targetOnly || _craftMode) ? At(_available, input.Key) : 0);
+                double initial = At(_bookmarked, input.Key) +
+                    ((_targetOnly || _craftMode || _useCarriedFirst.Contains(input.Key)) ? At(_available, input.Key) : 0);
                 double shortage = At(_consumed, input.Key) + At(_retained, input.Key) - initial -
                     At(_production, input.Key) + At(_reserved, input.Key);
                 if (shortage <= Epsilon) break;
@@ -644,9 +648,10 @@ internal static class BookmarkChainBalance
             {
                 double gross = input.PerBatch * input.Owner.Batches;
                 double bookmarked = Take(initial, input.Key, gross);
-                double internalSupply = TakeProduction(input, gross - bookmarked, consume: true);
+                double onHand = _useCarriedFirst.Contains(input.Key) ? Take(carried, input.Key, gross - bookmarked) : 0;
+                double internalSupply = TakeProduction(input, gross - bookmarked - onHand, consume: true);
                 double external = gross - internalSupply;
-                double onHand = Take(carried, input.Key, external - bookmarked);
+                onHand += Take(carried, input.Key, external - bookmarked - onHand);
                 double available = bookmarked + onHand;
                 if (bookmarked > Epsilon) _links.Add(new(null, input.Owner.Index, input.ItemId, bookmarked, false));
                 if (onHand > Epsilon) _links.Add(new(null, input.Owner.Index, input.ItemId, onHand, true));
@@ -662,7 +667,8 @@ internal static class BookmarkChainBalance
                 foreach (var input in group)
                 {
                     double gross = input.PerBatch;
-                    double internalSupply = TakeProduction(input, gross, consume: false, skip: prior);
+                    double stockFirst = _useCarriedFirst.Contains(input.Key) ? Math.Min(fromInitial, gross) : 0;
+                    double internalSupply = TakeProduction(input, gross - stockFirst, consume: false, skip: prior);
                     prior += internalSupply;
                     double external = gross - internalSupply;
                     double available = Math.Min(fromInitial, external);
