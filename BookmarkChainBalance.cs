@@ -14,6 +14,19 @@ internal sealed class BookmarkChainBalanceEntry
     /// <param name="preferredIngredients">Explicit, zero-based ingredient slot selections.</param>
     public BookmarkChainBalanceEntry(string id, int quantity = 1, Recipe? recipe = null, bool showRecipe = false,
         IReadOnlyDictionary<int, string>? preferredIngredients = null)
+        : this(id, quantity, recipe, showRecipe, preferredIngredients, preferredRecipe: false)
+    {
+    }
+
+    /// <summary>Creates a bookmark balance entry with optional favorite-producer preference.</summary>
+    /// <param name="id">Bookmarked item or selected recipe product ID.</param>
+    /// <param name="quantity">Number of recipe batches, or units of a plain bookmarked material.</param>
+    /// <param name="recipe">The explicitly bookmarked recipe, if any.</param>
+    /// <param name="showRecipe">True for an unresolved recipe bookmark.</param>
+    /// <param name="preferredIngredients">Explicit, zero-based ingredient slot selections.</param>
+    /// <param name="preferredRecipe">True when this saved recipe is the selected favorite route for its outputs.</param>
+    public BookmarkChainBalanceEntry(string id, int quantity, Recipe? recipe, bool showRecipe,
+        IReadOnlyDictionary<int, string>? preferredIngredients, bool preferredRecipe)
     {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("A bookmark ID is required.", nameof(id));
         if (quantity < 0) throw new ArgumentOutOfRangeException(nameof(quantity));
@@ -22,6 +35,7 @@ internal sealed class BookmarkChainBalanceEntry
         Recipe = recipe;
         ShowRecipe = showRecipe;
         PreferredIngredients = preferredIngredients;
+        PreferredRecipe = preferredRecipe;
     }
 
     internal string Id { get; }
@@ -29,6 +43,8 @@ internal sealed class BookmarkChainBalanceEntry
     internal Recipe? Recipe { get; }
     internal bool ShowRecipe { get; }
     internal IReadOnlyDictionary<int, string>? PreferredIngredients { get; }
+    /// <summary>Whether this recipe is the user's favorite producer route for its outputs.</summary>
+    internal bool PreferredRecipe { get; }
 }
 
 /// <summary>A typed material amount in the summary or one recipe step.</summary>
@@ -439,9 +455,19 @@ internal static class BookmarkChainBalance
                                 candidates.Add(ingredient, matches = _catalog.GetMatchingItems(ingredient).ToArray());
                             choice = matches.Select(item => (Item: item,
                                     Stock: At(_bookmarked, item.BrowseId) + At(_available, item.BrowseId),
-                                    Yield: BestYield(item.BrowseId, node), Cost: UnitCost(ingredient, item, amount)))
+                                    Carried: At(_available, item.BrowseId),
+                                    Yield: BestYield(item.BrowseId, node),
+                                    PreferredYield: PreferredYield(item.BrowseId, node),
+                                    Cost: UnitCost(ingredient, item, amount)))
                                 .Where(candidate => candidate.Yield > 0 || candidate.Stock > 0)
-                                .OrderByDescending(candidate => candidate.Stock + Epsilon >= candidate.Cost)
+                                // A favorite producer is the preferred sample for a generic input
+                                // when its carried amount covers the slot. A complete carried
+                                // alternative still beats a partial favorite; if every candidate is
+                                // short, prefer carried material before producer yield as a fallback.
+                                .OrderByDescending(candidate => candidate.Carried + Epsilon >= candidate.Cost && candidate.PreferredYield > Epsilon)
+                                .ThenByDescending(candidate => candidate.Stock + Epsilon >= candidate.Cost)
+                                .ThenByDescending(candidate => candidate.Carried > Epsilon && candidate.PreferredYield > Epsilon)
+                                .ThenByDescending(candidate => candidate.Carried > Epsilon)
                                 .ThenByDescending(candidate => candidate.Yield / candidate.Cost)
                                 .ThenByDescending(candidate => candidate.Stock / candidate.Cost)
                                 .ThenBy(candidate => candidate.Item.BrowseId, Ids).Select(candidate => candidate.Item).FirstOrDefault();
@@ -471,6 +497,10 @@ internal static class BookmarkChainBalance
 
         private double BestYield(string key, Node consumer) => _producers.TryGetValue(key, out var producers)
             ? producers.Where(output => output.Owner != consumer).Select(output => output.Yield).DefaultIfEmpty(0).Max() : 0;
+
+        private double PreferredYield(string key, Node consumer) => _producers.TryGetValue(key, out var producers)
+            ? producers.Where(output => output.Owner != consumer && output.Owner.Entry.PreferredRecipe)
+                .Select(output => output.Yield).DefaultIfEmpty(0).Max() : 0;
 
         private static double UnitCost(RecipeIngredient ingredient, CatalogItem item, double amount)
         {
