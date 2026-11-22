@@ -799,7 +799,9 @@ namespace NotEnoughItems
                 global::LiquidType? type = null;
                 global::Liquids.Registry?.TryGetValue(id, out type);
                 LiquidRegistry.TryGetCustomInfo(id, out var custom);
-                if (type == null && custom == null) continue;
+                // A registry key is still a browseable liquid even when its optional
+                // LiquidType/custom metadata has not been populated yet. Keep it in the
+                // catalog so recipe slots can render the droplet and resolve later data.
                 string key = Fallback(type?.localeName, id);
                 string source = LiquidRegistry.TryGetOwnerModGuid(id, out string owner) ? owner : custom != null ? "CUCoreLib" : NativeSource;
                 var tags = new List<string>();
@@ -971,8 +973,10 @@ namespace NotEnoughItems
             try
             {
                 GameObject prefab = Resources.Load<GameObject>(id);
-                SpriteRenderer? renderer = prefab == null ? null : prefab.GetComponent<SpriteRenderer>();
-                return renderer == null ? null : renderer.sprite;
+                if (!prefab) return null;
+                var rootIcon = prefab.GetComponent<SpriteRenderer>()?.sprite;
+                if (rootIcon) return rootIcon;
+                return prefab.GetComponentsInChildren<SpriteRenderer>(true).Select(renderer => renderer.sprite).FirstOrDefault(sprite => sprite);
             }
             catch
             {
@@ -980,9 +984,12 @@ namespace NotEnoughItems
             }
         }
 
-        private static Sprite? LoadDroplet()
+        private static Sprite? _droplet;
+
+        internal static Sprite? LoadDroplet()
         {
-            try { return Resources.Load<Sprite>("Sprites/droplet"); } catch { return null; }
+            if (_droplet) return _droplet;
+            try { return _droplet = Resources.Load<Sprite>("Sprites/droplet"); } catch { return null; }
         }
 
         private static IEnumerable<string> ReadTags(global::ItemInfo info)
