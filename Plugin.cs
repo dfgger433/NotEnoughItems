@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.2.11")]
+[BepInPlugin(Guid, "Not Enough Items", "1.3.0")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -313,6 +313,13 @@ public sealed class Plugin : BaseUnityPlugin
             if (_window.RequestSearchFocus()) CaptureKey();
             return;
         }
+        bool control = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+        bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        if (TryBookmarkKey(mouse, control, shift))
+        {
+            CaptureKey();
+            return;
+        }
         bool recipes = Pressed(_recipes), usages = Pressed(_usages), bookmark = Pressed(_bookmark);
         if (!recipes && !usages && !bookmark) return;
         var id = _window.ItemAt(mouse);
@@ -328,14 +335,37 @@ public sealed class Plugin : BaseUnityPlugin
         }
         if (bookmark)
         {
-            bool control = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             if (_window.HandleBookmarkShortcut(mouse, id, control, shift)) CaptureKey();
             return;
         }
         if (string.IsNullOrEmpty(id)) return;
         _window.Lookup(id, usages, contents, lookupItem);
         CaptureKey();
+    }
+
+    private static readonly KeyCode[] BookmarkActionKeys = { KeyCode.T, KeyCode.F, KeyCode.V, KeyCode.C, KeyCode.L, KeyCode.S };
+
+    private bool TryBookmarkKey(Vector2 mouse, bool control, bool shift)
+    {
+        foreach (var key in BookmarkActionKeys)
+        {
+            if (!Input.GetKeyDown(key)) continue;
+            bool handled = BookmarkKeys.Resolve(key, control, shift) switch
+            {
+                BookmarkShortcut.Tree => _window.OpenBookmarkTree(mouse),
+                BookmarkShortcut.OrderTree => _window.OrderAndInspectAt(mouse),
+                BookmarkShortcut.OrderFavorite => _window.OrderFavoriteAt(mouse),
+                BookmarkShortcut.Pull or BookmarkShortcut.PullMissing => _window.HandleBookmarkPull(mouse, shift),
+                BookmarkShortcut.Craft or BookmarkShortcut.CraftMissing => _window.HandleBookmarkCraft(mouse, control),
+                BookmarkShortcut.Share or BookmarkShortcut.ShareRecipe => _window.ShareBookmark(mouse, shift),
+                BookmarkShortcut.Copy => _window.HandleBookmarkClipboard(mouse, copy: true),
+                BookmarkShortcut.Paste => _window.HandleBookmarkClipboard(mouse, copy: false),
+                BookmarkShortcut.OpenNative => _window.OpenBookmarkInCrafting(mouse),
+                _ => false
+            };
+            if (handled) return true;
+        }
+        return false;
     }
 
     private void LateUpdate()
@@ -429,6 +459,7 @@ public sealed class Plugin : BaseUnityPlugin
     internal bool OpenCrafting(global::Recipe recipe) => _surface.OpenCrafting(_active, recipe);
     internal bool CanOpenCrafting(global::Recipe recipe) => GameSurface.CanOpenCrafting(recipe);
     internal void HideOverlay() => SetOverlayVisible(false);
+    internal void LogCraftFailure(Exception error) => Logger.LogError("NEI bookmark crafting stopped: " + error);
 
     private void OnDisable()
     {
@@ -446,6 +477,7 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnDestroy()
     {
         if (_enabled != null) _enabled.SettingChanged -= OnVisibilityChanged;
+        BookmarkCrafting.Release();
         _harmony?.UnpatchSelf();
         NativeTooltipLayer.Release();
         NeiSkin.Release();

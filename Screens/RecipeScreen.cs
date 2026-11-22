@@ -16,7 +16,7 @@ internal sealed partial class NeiWindow
             all = all.Concat(_lookupContents.SelectMany(_catalog.GetRecipesUsing)).Distinct().ToArray();
         var categories = (_item == null ? _catalog.RecipeCategories : _catalog.RecipeCategories.Where(c => all.Any(r => SameId(r.CategoryId, c.Id)))).ToArray();
         _catalog.TryGetItem(_item ?? string.Empty, out var subject);
-        _activeRecipeKey = null;
+        _activeRecipe = null;
         string name = subject?.DisplayName ?? _item ?? L("Bookmarked recipe", "收藏的配方");
         Header(p, name, _item == null ? "NEI" : _usage ? L("Uses", "用途") : L("Recipes", "配方"));
         float x = p.x + 8, w = p.width - 16, y = p.y + 31;
@@ -67,13 +67,22 @@ internal sealed partial class NeiWindow
         Recipe recipe = recipes[_recipeIndex];
         NeiSkin.Label(new Rect(x + 25, y, w - 50, 23), $"{_recipeIndex + 1}/{recipes.Count}  ·  {recipe.Name}", TextAnchor.MiddleCenter);
         y += 27;
-        _activeRecipeKey = RecipeKey(recipe);
-        float third = w / 3;
-        if (NeiSkin.Button(new Rect(x, y, third - 2, 22), L("Bookmark recipe", "收藏配方"), selected: _book.Find(_group, _activeRecipeKey) != null))
-            ToggleBookmark(_activeRecipeKey);
-        if (NeiSkin.Button(new Rect(x + third, y, third - 2, 22), L("Order from bookmarks", "用已收藏配方建组")))
-            BookmarkOrder(recipe, 1);
-        if (NeiSkin.Button(new Rect(x + 2 * third, y, third, 22), L("Craftable", "可制作"), selected: _craftableOnly)) { _craftableOnly = !_craftableOnly; _recipeIndex = 0; }
+        _activeRecipe = recipe;
+        var heart = new Rect(x, y, 27, 22);
+        var e = Event.current;
+        if (e.type == EventType.Repaint) _favoriteRect = heart;
+        string key = RecipeKey(recipe);
+        bool favorite = _book.IsFavorite(key);
+        if (NeiSkin.Button(heart, favorite ? "♥" : "♡", selected: favorite)) ToggleFavorite(recipe, key);
+        if (favorite) NeiSkin.BookmarkTint(new Rect(heart.x + 4, heart.yMax - 4, heart.width - 8, 2), new Color32(87, 175, 103, 255));
+        if (heart.Contains(e.mousePosition)) Tip(L("Favorite recipe", "收藏配方样板"),
+            L($"Left: favorite · Shift+{_plugin.BookmarkKey}: place a crafting order", $"左键：收藏样板 · Shift＋{_plugin.BookmarkKey}：添加合成订单"));
+        float available = w - 31;
+        if (NeiSkin.Button(new Rect(x + 31, y, available * .6f - 2, 22), L("Bookmark", "加入书签")))
+        {
+            if (_book.ToggleRecipe(_group, key, 1, true, recipe.Outputs.FirstOrDefault()?.BrowseId)) SaveBookmarks();
+        }
+        if (NeiSkin.Button(new Rect(x + 31 + available * .6f, y, available * .4f, 22), L("Craftable", "可制作"), selected: _craftableOnly)) { _craftableOnly = !_craftableOnly; _recipeIndex = 0; }
         y += 27;
         bool native = recipe.IsNative && recipe.NativeIndex >= 0;
         float footer = native ? 33 : 9;

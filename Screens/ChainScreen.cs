@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
@@ -8,186 +7,349 @@ namespace NotEnoughItems;
 
 internal sealed partial class NeiWindow
 {
-    private BookmarkChainPlan? _chainPlan;
-    private readonly Dictionary<(string Page, string Group, string Requirement), string> _ingredientChoices = new();
+    private static readonly Color BookmarkProductTint = new Color32(83, 145, 218, 112);
+    private static readonly Color BookmarkMaterialTint = new Color32(83, 175, 112, 102);
+    private readonly Dictionary<string, (BookmarkChainBalanceResult Plan, Dictionary<BookmarkBook.Entry, BookmarkChainBalanceStep> Steps)> _bookmarkBalance = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Recipe> _bookmarkRecipes = new(StringComparer.Ordinal);
+    private int _bookmarkRecipeRevision = -1;
+    private List<(string Title, IReadOnlyList<BookmarkChainBalanceAmount> Items, Color? Tint)>? _bookmarkTip;
 
-    private void OpenChain(string group, bool details)
-    {
-        _chainGroup = group;
-        _chainDetails = details;
-        _chainScroll = Vector2.zero;
-        _chainPlan = CalculateChain(group);
-        _bookmarkDrag = null;
-        _skipFocusFrame = true;
-    }
+    private int _chainTipOffset, _chainTipMaxOffset;
+    private (string Key, bool Details, string Title, string Hint, List<(string Title, IReadOnlyList<BookmarkChainBalanceAmount> Items, Color? Tint)> Blocks)? _cachedChainTip;
+    private Dictionary<string, int> _bookmarkStock = new(StringComparer.OrdinalIgnoreCase);
 
-    private BookmarkChainPlan CalculateChain(string group)
+    private void RefreshBookmarkStock()
     {
-        var entries = _book.Page(_group).Where(entry => group.Length == 0 || entry.Group == group).ToArray();
-        var recipeLookup = _catalog.Recipes.GroupBy(RecipeKey).ToDictionary(recipes => recipes.Key, recipes => recipes.First());
-        var selected = entries.Where(entry => entry.IsRecipe && recipeLookup.ContainsKey(entry.Id))
-            .Select(entry => (Entry: entry, Recipe: recipeLookup[entry.Id])).ToArray();
-        var targets = new List<BookmarkChainTarget>();
-        foreach (var entry in entries.Where(entry => !entry.IsRecipe)) targets.Add(new BookmarkChainTarget(entry.Id, entry.Quantity));
-        var outputs = selected.Select(candidate => (candidate.Entry, candidate.Recipe, Output: candidate.Recipe.Outputs.FirstOrDefault()))
-            .Where(candidate => candidate.Output != null).ToArray();
-        var sinks = outputs.Where(candidate => !selected.Any(other => other.Recipe != candidate.Recipe && other.Recipe.Inputs.Any(input =>
-            !input.IsCatalyst && !input.MatchesAny && SameId(input.BrowseId, candidate.Output!.BrowseId)))).ToArray();
-        foreach (var candidate in sinks.Length == 0 ? outputs.Take(1) : sinks)
-            targets.Add(new BookmarkChainTarget(candidate.Output!.BrowseId, candidate.Entry.Quantity, candidate.Recipe));
-        var choices = _ingredientChoices.Where(pair => pair.Key.Page == _group && pair.Key.Group == group)
-            .ToDictionary(pair => pair.Key.Requirement, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
-        return BookmarkChain.Plan(new BookmarkChainRequest(_catalog, targets, selected.Select(entry => entry.Recipe),
-            available: InventoryForChain(), preferredIngredients: choices));
-    }
-
-    private static IReadOnlyDictionary<string, int> InventoryForChain()
-    {
-        var quantities = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var liquids = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        if (!ShowLeft || !_book.Page(_group).Any(entry => _book.IsChainEnabled(_group, entry.Group))) return;
         var camera = PlayerCamera.main;
-        if (!camera || !camera.body) return quantities;
-        foreach (var item in camera.body.GetAllItemsThorough().Distinct())
-        {
-            if (!item || item.favourited || string.IsNullOrEmpty(item.id)) continue;
-            if (!item.TryGetComponent<Container>(out var storage) || storage.itemCount == 0)
-            {
-                var key = "item:" + item.id;
-                quantities.TryGetValue(key, out int before);
-                quantities[key] = before + 1;
-            }
-            if (!item.TryGetComponent<WaterContainerItem>(out var container) || container.stack == null) continue;
-            var local = container.stack.Where(stack => stack != null && stack.amount > 0 && !string.IsNullOrWhiteSpace(stack.liquidId))
-                .GroupBy(stack => stack.liquidId, StringComparer.OrdinalIgnoreCase);
-            foreach (var contents in local)
-            {
-                var key = "liquid:" + contents.Key;
-                double amount = contents.Sum(stack => (double)stack.amount);
-                liquids.TryGetValue(key, out double before);
-                // One native ingredient must fit in one container; don't add separate stacks together.
-                liquids[key] = Math.Max(before, amount);
-            }
-        }
-        foreach (var liquid in liquids) quantities[liquid.Key] = (int)Math.Min(int.MaxValue, Math.Floor(liquid.Value));
-        return quantities;
+        var stock = CarriedQuantities(camera ? camera.body : null);
+        if (stock.Count == _bookmarkStock.Count && stock.All(pair => _bookmarkStock.TryGetValue(pair.Key, out var count) && count == pair.Value)) return;
+        _bookmarkStock = stock;
+        InvalidateBookmarkView();
     }
 
-    private void DrawChain(Rect panel)
+    private Recipe? BookmarkedRecipe(string key)
     {
-        NeiSkin.Background(panel, "recipe");
-        Header(panel, _chainGroup == string.Empty ? L("Bookmark page chain", "整页书签合成链") : L("Bookmark group chain", "书签组合成链"), "NEI");
-        float x = panel.x + 8, y = panel.y + 27, w = panel.width - 16;
-        if (NeiSkin.Button(new Rect(x, y, w / 3 - 3, 23), L("Back to bookmarks", "返回书签"))) { _chainGroup = null; return; }
-        if (NeiSkin.Button(new Rect(x + w / 3, y, w / 3 - 3, 23), L("Recipe steps", "配方步骤"), selected: _chainDetails))
-        { _chainDetails = !_chainDetails; _chainScroll = Vector2.zero; }
-        if (NeiSkin.Button(new Rect(x + 2 * w / 3, y, w / 3, 23), L("Recalculate", "重新计算"))) _chainPlan = CalculateChain(_chainGroup!);
-        y += 27;
-        NeiSkin.Label(new Rect(x, y, w, 21), L("Planning only · availability estimated from carried items", "仅作规划 · 持有量按随身物品估算"), muted: true);
-        y += 23;
-        var plan = _chainPlan;
-        if (plan == null) return;
-        var rows = new List<(string Label, string? Id, string? Amount, RecipeIngredient? Choice)>();
-        void Heading(string en, string zh) => rows.Add((L(en, zh), null, null, null));
-        void Row(string id, double amount, string? label = null, RecipeIngredient? choice = null) => rows.Add((label ?? Display(id), id,
-            amount.ToString("0.##", CultureInfo.InvariantCulture) + (id.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase) ? " mL" : ""), choice));
-        Heading("Targets", "目标产物");
-        foreach (var target in plan.Targets) Row(target.ItemId, target.Quantity);
-        Heading("Required (net)", "所需材料（净用量）");
-        foreach (var input in plan.Inputs.Where(input => input.RequiredQuantity > 0))
-            Row(input.ItemId, input.RequiredQuantity, input.IsRequirement ? RequirementTitle(input.Ingredient) : null,
-                input.Ingredient.MatchesAny ? input.Ingredient : null);
-        Heading("Missing", "缺少材料");
-        foreach (var missing in plan.Missing) Row(missing.ItemId, missing.Shortage);
-        if (plan.Missing.Count == 0) rows.Add((L("No simulated shortages", "没有模拟缺料"), null, null, null));
-        if (plan.Surplus.Count > 0) Heading("Surplus", "剩余产物");
-        foreach (var surplus in plan.Surplus) Row(surplus.ItemId, surplus.Surplus);
-        if (_chainDetails)
+        if (_bookmarkRecipeRevision != _catalog.Revision)
         {
-            Heading("Recipe steps", "配方步骤");
-            foreach (var step in plan.Nodes)
-            {
-                Row(RecipeKey(step.Recipe), step.ProducedQuantity, $"{step.Recipe.Name} ×{step.Batches}");
-                foreach (var input in step.Inputs)
-                    Row(input.ItemId, input.RequiredQuantity, "↳ " + (input.IsRequirement ? RequirementTitle(input.Ingredient) : Display(input.ItemId)),
-                        input.Ingredient.MatchesAny ? input.Ingredient : null);
-            }
+            _bookmarkRecipeRevision = _catalog.Revision;
+            _bookmarkRecipes.Clear();
+            foreach (var recipe in _catalog.Recipes) _bookmarkRecipes.TryAdd(RecipeKey(recipe), recipe);
         }
-        if (plan.Diagnostics.Count > 0) Heading("Notes", "计算提示");
-        foreach (var issue in plan.Diagnostics) rows.Add((issue.Message, null, null, null));
-        if (plan.Targets.Count == 0) rows.Add((L("Bookmark recipe outputs or items first.", "请先收藏配方产物或物品。"), null, null, null));
-        var viewport = new Rect(x, y, w, Mathf.Max(1, panel.yMax - y - 7));
-        var content = new Rect(0, 0, w - 19, Mathf.Max(viewport.height, rows.Count * 28));
-        var inputEvent = Event.current;
-        if (inputEvent.type == EventType.ScrollWheel && inputEvent.shift && viewport.Contains(inputEvent.mousePosition))
+        return _bookmarkRecipes.TryGetValue(key, out var found) ? found : null;
+    }
+
+    private static RecipeOutput? BookmarkProduct(BookmarkBook.Entry entry, Recipe recipe) =>
+        recipe.Outputs.FirstOrDefault(output => SameId(output.BrowseId, entry.ProductId)) ?? recipe.Outputs.FirstOrDefault();
+
+    private static int BookmarkBatches(BookmarkBook.Entry entry, Recipe recipe)
+    {
+        int output = Math.Max(1, BookmarkProduct(entry, recipe)?.Amount ?? 1);
+        return entry.LegacyRecipeQuantity ? (entry.Quantity + output - 1) / output : entry.Quantity;
+    }
+
+    private bool AdjustBookmark(BookmarkBook.Entry entry, int delta)
+    {
+        if (entry.LegacyRecipeQuantity && BookmarkedRecipe(entry.Id) is { } recipe)
         {
-            Vector2 local = inputEvent.mousePosition - viewport.position + _chainScroll;
-            int index = (int)(local.y / 28);
-            if (local.x >= 2 && local.x < 27 && index >= 0 && index < rows.Count && rows[index].Choice is { } choice)
-            {
-                CycleChainIngredient(choice, inputEvent.delta.y < 0 ? 1 : -1);
-                inputEvent.Use();
-            }
+            return _book.StepQuantity(entry, delta, BookmarkBatches(entry, recipe));
         }
-        _chainScroll = GUI.BeginScrollView(viewport, _chainScroll, content, false, content.height > viewport.height);
+        return _book.StepQuantity(entry, delta);
+    }
+
+    private BookmarkBook.Entry[] BookmarkGroupEntries(string group) => _book.Page(_group).Where(entry => entry.Group == group).ToArray();
+
+    private BookmarkChainBalanceEntry BalanceEntry(BookmarkBook.Entry entry)
+    {
+        var recipe = entry.IsRecipe ? BookmarkedRecipe(entry.Id) : null;
+        return new BookmarkChainBalanceEntry(recipe == null ? entry.Id : BookmarkProduct(entry, recipe)?.BrowseId ?? entry.Id,
+            recipe == null ? entry.Quantity : BookmarkBatches(entry, recipe), recipe, entry.IsRecipe, entry.Variants);
+    }
+
+    private (BookmarkChainBalanceResult Plan, Dictionary<BookmarkBook.Entry, BookmarkChainBalanceStep> Steps) BookmarkBalance(string group)
+    {
+        if (_bookmarkBalance.TryGetValue(group, out var cached)) return cached;
+        var entries = BookmarkGroupEntries(group);
+        var plan = BookmarkChainBalance.Calculate(_catalog, entries.Select(BalanceEntry), _bookmarkStock);
+        cached = (plan, plan.Steps.ToDictionary(step => entries[step.EntryIndex]));
+        return _bookmarkBalance[group] = cached;
+    }
+
+    private IEnumerable<BookmarkCell> CellsForBookmark(BookmarkBook.Entry entry, bool compact)
+    {
+        bool chain = _book.IsChainEnabled(_group, entry.Group);
+        if (!entry.IsRecipe || BookmarkedRecipe(entry.Id) is not { } recipe)
+        {
+            yield return new BookmarkCell(entry, entry.Id, -1, entry.Quantity, null, details: entry.IsRecipe ?
+                L("The saved recipe is not currently available", "已保存的配方目前不可用") : null);
+            yield break;
+        }
+        BookmarkChainBalanceStep? step = null;
+        if (chain) BookmarkBalance(entry.Group).Steps.TryGetValue(entry, out step);
+        int batches = step?.Batches ?? (chain ? 0 : BookmarkBatches(entry, recipe));
+        var primary = BookmarkProduct(entry, recipe);
+        bool expanded = !compact && entry.ShowRecipe;
+        var outputs = expanded ? recipe.Outputs.OrderByDescending(output => ReferenceEquals(output, primary)) :
+            (primary == null ? Enumerable.Empty<RecipeOutput>() : new[] { primary });
+        if (primary == null) yield return new BookmarkCell(entry, entry.Id, -1, batches, $"×{batches}", details: recipe.Name);
+        foreach (var output in outputs)
+        {
+            var planned = step?.Outputs.FirstOrDefault(amount => SameId(amount.ItemId, output.BrowseId));
+            yield return new BookmarkCell(entry, output.BrowseId, -1, (double)output.Amount * batches,
+                ReferenceEquals(output, primary) && (chain || entry.ShowQuantity) ? $"×{batches}" : null,
+                planned?.NetQuantity > 0 ? BookmarkProductTint : null, recipe.Name + " · " + L("Left: saved recipe", "左键：查看收藏的配方"));
+        }
+        if (!expanded) yield break;
+        foreach (int index in OrderedIngredients(entry, recipe))
+        {
+            var ingredient = recipe.Inputs[index];
+            var planned = step?.Inputs.FirstOrDefault(amount => amount.IngredientIndex == index);
+            string id = planned?.ItemId ?? (ingredient.MatchesAny ? SelectedBookmarkVariant(entry, index, ingredient) ?? ingredient.BrowseId : ingredient.BrowseId);
+            double amount = planned?.Quantity ?? (ingredient.MatchesAny && !ingredient.IsLiquid ? 1 : ingredient.Amount) * (ingredient.IsCatalyst ? 1 : batches);
+            string? details = ingredient.MatchesAny ? RequirementTitle(ingredient) + " · " + L("Shift+wheel: choose material", "Shift＋滚轮：切换材料") : null;
+            if (ingredient.IsCatalyst) details = (details == null ? "" : details + "\n") + L("Tool · retained", "工具 · 不消耗");
+            yield return new BookmarkCell(entry, id, index, amount, null, planned?.NetQuantity > 0 ? BookmarkMaterialTint : null, details);
+        }
+    }
+
+    private static IEnumerable<int> OrderedIngredients(BookmarkBook.Entry entry, Recipe recipe) =>
+        entry.IngredientOrder.Where(slot => slot < recipe.Inputs.Count).Concat(Enumerable.Range(0, recipe.Inputs.Count)).Distinct();
+
+    private string? SelectedBookmarkVariant(BookmarkBook.Entry entry, int index, RecipeIngredient ingredient)
+    {
+        var matches = _catalog.GetMatchingItems(ingredient);
+        return matches.FirstOrDefault(item => SameId(item.BrowseId, entry.Variant(index)))?.BrowseId ?? matches.FirstOrDefault()?.BrowseId;
+    }
+
+    private bool CycleBookmarkVariant(BookmarkCell cell, int direction)
+    {
+        if (BookmarkedRecipe(cell.Entry.Id) is not { } recipe) return false;
+        if (cell.Ingredient >= 0 && cell.Ingredient < recipe.Inputs.Count && recipe.Inputs[cell.Ingredient].MatchesAny)
+        {
+            var matches = _catalog.GetMatchingItems(recipe.Inputs[cell.Ingredient]).ToArray();
+            if (matches.Length == 0) return true;
+            // Include the unpinned slot in the cycle so an explicit choice is reversible.
+            string? pinned = cell.Entry.Variant(cell.Ingredient);
+            int current = Array.FindIndex(matches, item => SameId(item.BrowseId, pinned));
+            int next = Wrap(current + 1 + direction, matches.Length + 1) - 1;
+            if (_book.SetVariant(cell.Entry, cell.Ingredient, next < 0 ? null : matches[next].BrowseId)) SaveBookmarks();
+            return true;
+        }
+        return false;
+    }
+
+    private bool ReorderBookmarkIngredients(BookmarkCell source, BookmarkCell target, bool before)
+    {
+        if (source.Ingredient < 0 || target.Ingredient < 0 || source.Ingredient == target.Ingredient || BookmarkedRecipe(source.Entry.Id) is not { } recipe) return false;
+        var slots = OrderedIngredients(source.Entry, recipe).ToList();
+        slots.Remove(source.Ingredient);
+        slots.Insert(slots.IndexOf(target.Ingredient) + (before ? 0 : 1), source.Ingredient);
+        return _book.SetIngredientOrder(source.Entry, slots);
+    }
+
+    private void ClickBookmark(BookmarkCell cell, int button, bool shift, bool alt)
+    {
+        if (PlayerCamera.main && PlayerCamera.main.dragItem) return;
+        var entry = cell.Entry;
+        if (alt)
+        {
+            if (_book.Split(entry)) SaveBookmarks();
+            return;
+        }
+        if (entry.IsRecipe && cell.Ingredient < 0 && button == 0)
+        {
+            Lookup(entry.Id, false);
+            return;
+        }
+        _catalog.TryGetItem(cell.Id, out var item);
+        if (CanGiveSlot(!entry.IsRecipe, cell.Id, item, button, shift, alt)) GiveSlot(item!, button);
+        else Lookup(cell.Id, button == 1);
+    }
+
+    private bool PageChainEnabled() => _book.IsChainEnabled(_group) || _book.Page(_group).Any(entry => _book.IsChainEnabled(_group, entry.Group));
+
+    private void BookmarkBracketTip(string group, bool details)
+    {
+        if (group.Length == 0)
+        {
+            Tip(L("Create bookmark group", "创建书签组"), L("Drag along this gutter to select entries", "沿左侧拖动，框选要加入分组的书签"));
+            return;
+        }
+        string title = L("Bookmark group", "书签组");
+        if (_book.IsChainEnabled(_group, group)) BookmarkChainTip(title, new[] { group }, details);
+        else Tip(title, L("Left: grid/queue · Right: enable chain\nAlt+drag: resize · Shift+drag: reorder\nShift+C: craft · Ctrl+C: copy · Shift+A: remove group", "左键：网格／队列 · 右键：启用合成链\nAlt＋拖动：调整范围 · Shift＋拖动：排序\nShift＋C：制作 · Ctrl＋C：复制 · Shift＋A：删除整组"));
+    }
+
+    private void BookmarkPageChainTip(bool details) => BookmarkChainTip(L("Bookmark page chain", "整页书签合成链"),
+        _book.Page(_group).Select(entry => entry.Group).Distinct().Where(group => _book.IsChainEnabled(_group, group)), details);
+
+    private void BookmarkChainTip(string title, IEnumerable<string> groups, bool details)
+    {
+        var e = Event.current;
+        if (e.type == EventType.ScrollWheel && !e.control && !e.alt && _chainTipMaxOffset > 0)
+        {
+            _chainTipOffset = Math.Clamp(_chainTipOffset + Math.Sign(e.delta.y), 0, _chainTipMaxOffset);
+            e.Use();
+            return;
+        }
+        if (e.type != EventType.Repaint) return;
+        string[] selected = groups.ToArray();
+        string key = title + "\n" + string.Join("\n", selected);
+        if (_cachedChainTip is { } cache && cache.Key == key && cache.Details == details)
+        {
+            Tip(cache.Title, cache.Hint);
+            _bookmarkTip = cache.Blocks.Count == 0 ? null : cache.Blocks;
+            return;
+        }
+        _chainTipOffset = _chainTipMaxOffset = 0;
+        var plans = selected.Select(group => BookmarkBalance(group).Plan).ToArray();
+        var blocks = new List<(string Title, IReadOnlyList<BookmarkChainBalanceAmount> Items, Color? Tint)>();
+        void Section(string label, IEnumerable<BookmarkChainBalanceAmount> amounts, Color? tint, bool sum = true)
+        {
+            var items = (sum ? amounts.GroupBy(amount => (amount.ItemId, amount.IsCatalyst)).Select(row =>
+            {
+                var a = row.First();
+                return new BookmarkChainBalanceAmount(a.ItemId, row.Sum(m => m.Quantity), 0, 0, a.IsLiquid, a.IsRequirement, a.Ingredient);
+            }) : amounts).ToArray();
+            if (items.Length > 0) blocks.Add((label, items, tint));
+        }
+        Section(L("Products", "产物"), plans.SelectMany(plan => plan.Results), BookmarkProductTint);
+        Section(L("Materials", "原料"), plans.SelectMany(plan => plan.Inputs).Where(amount => !amount.IsCatalyst), BookmarkMaterialTint);
+        Section(L("Tools · not consumed", "工具 · 不消耗"), plans.SelectMany(plan => plan.Inputs).Where(amount => amount.IsCatalyst), BookmarkMaterialTint);
+        Section(L("Surplus", "余料"), plans.SelectMany(plan => plan.Surplus), null);
+        // A page summary is the sum of independent lane bills. Do not sum per-lane
+        // shortages: that would credit the same carried stack once per group.
+        if (plans.Length == 1) Section(L("Short of carried / bookmarked stock", "随身和书签库存仍缺"), plans[0].Missing, new Color32(182, 93, 87, 105));
+        if (details)
+            foreach (var step in plans.SelectMany(plan => plan.Steps))
+                Section($"×{step.Batches}  {step.Recipe.Name}", step.Outputs.Concat(step.Inputs), null, sum: false);
+        var notes = plans.SelectMany(plan => plan.Diagnostics).Where(issue => issue.Code != BookmarkChainDiagnosticCode.MissingMaterial)
+            .Select(issue => issue.Message).Distinct().Take(3).ToArray();
+        string hint = details ? L("Recipe steps · wheel to scroll", "制作步骤 · 滚轮查看更多") : L("Hold Shift for steps · wheel to scroll", "按 Shift 查看步骤 · 滚轮查看更多");
+        if (blocks.Count == 0) hint = L("No recipe totals to display", "没有可显示的配方用量") + (notes.Length == 0 ? "" : "\n" + string.Join("\n", notes));
+        else if (notes.Length != 0) blocks.Add((string.Join(" · ", notes), Array.Empty<BookmarkChainBalanceAmount>(), null));
+        Tip(title, hint);
+        _cachedChainTip = (key, details, title, hint, blocks);
+        _bookmarkTip = blocks.Count > 0 ? blocks : null;
+    }
+
+    private void DrawBookmarkChainTip(Vector2 mouse)
+    {
+        const int slot = 31, heading = 19;
+        var blocks = _bookmarkTip!;
+        int columns = Math.Max(3, Math.Min(11, (int)((_width - 24) / slot)));
+        float width = columns * slot + 12;
+        float maxHeight = _height - 12;
+        var counts = blocks.Select(block => block.Items.Count).ToArray();
+        int rowCount = counts.Sum(count => Math.Max(1, (count + columns - 1) / columns));
+        float naturalHeight = 49 + blocks.Count * heading + counts.Sum(count => (count + columns - 1) / columns * slot);
+        float height = Math.Min(maxHeight, naturalHeight);
+        _chainTipMaxOffset = naturalHeight <= maxHeight ? 0 : rowCount - 1;
+        _chainTipOffset = Math.Clamp(_chainTipOffset, 0, _chainTipMaxOffset);
+        float x = Mathf.Clamp(mouse.x + 13, 6, _width - width - 6);
+        float y = mouse.y + 14 + height <= _height - 6 ? mouse.y + 14 : Mathf.Clamp(mouse.y - height - 10, 6, _height - height - 6);
+        var box = new Rect(x, y, width, height);
+        NeiSkin.BookmarkTint(box, new Color32(28, 21, 36, 246));
+        NeiSkin.BookmarkTint(new Rect(x, y, width, 2), new Color32(91, 164, 111, 255));
+        GUI.BeginGroup(box);
         try
         {
-            Vector2 offset = viewport.position - _chainScroll;
-            for (int i = 0; i < rows.Count; i++)
+            NeiSkin.Label(new Rect(6, 4, width - 12, 20), _tipTitle ?? "NEI");
+            NeiSkin.Label(new Rect(6, 22, width - 12, 18), _tipBody ?? "", muted: true);
+            float top = 43;
+            int previous = -1;
+            foreach (var (section, start, count) in BookmarkBoardPaging.Rows(counts, columns).Skip(_chainTipOffset))
             {
-                var row = rows[i];
-                float top = i * 28;
-                if (top + offset.y + 28 <= viewport.yMin || top + offset.y >= viewport.yMax) continue;
-                var icon = new Rect(2, top + 1, 25, 25);
-                if (!string.IsNullOrEmpty(row.Id)) ItemSlot(icon, row.Id, clipping: viewport, globalOffset: offset,
-                    details: row.Choice != null ? L("Shift+scroll changes the ingredient variant", "Shift＋滚轮选择匹配的材料") : null);
-                NeiSkin.Label(new Rect(31, top, content.width - 100, 25), row.Label);
-                if (row.Amount != null) NeiSkin.Label(new Rect(content.width - 68, top, 66, 25), row.Amount, TextAnchor.MiddleRight);
+                var block = blocks[section];
+                if (section != previous)
+                {
+                    if (top + heading > height - 6) break;
+                    NeiSkin.Label(new Rect(6, top, width - 12, heading), block.Title);
+                    top += heading;
+                    previous = section;
+                }
+                if (count != 0 && top + slot > height - 6) break;
+                for (int i = 0; i < count; i++)
+                {
+                    var a = block.Items[start + i];
+                    var r = new Rect(6 + i * slot, top, slot - 1, slot - 1);
+                    _catalog.TryGetItem(a.ItemId, out var item);
+                    var caption = a.IsRequirement && a.Ingredient != null ? RequirementTitle(a.Ingredient) : item?.DisplayName ?? a.ItemId;
+                    if (block.Tint is { } tint) NeiSkin.BookmarkTint(r, tint);
+                    DrawSprite(new Rect(r.x + 3, r.y + 2, r.width - 6, r.height - 6), item?.Icon, item?.IconTint ?? Color.white, caption);
+                    NeiSkin.Label(new Rect(r.x + 1, r.yMax - 13, r.width - 2, 13), BookmarkAmount(a.ItemId, a.Quantity), TextAnchor.MiddleRight);
+                }
+                if (count != 0) top += slot;
             }
+            if (_chainTipMaxOffset > 0) NeiSkin.Label(new Rect(width - 88, 4, 81, heading), $"↕ {_chainTipOffset + 1}/{rowCount}", TextAnchor.MiddleRight);
         }
-        finally { GUI.EndScrollView(); }
+        finally { GUI.EndGroup(); }
     }
 
-    private void CycleChainIngredient(RecipeIngredient ingredient, int delta)
-    {
-        var choices = _catalog.GetMatchingItems(ingredient);
-        if (choices.Count == 0 || _chainGroup == null) return;
-        var key = (_group, _chainGroup, ingredient.BrowseId);
-        _ingredientChoices.TryGetValue(key, out var current);
-        int index = current == null ? -1 : Array.FindIndex(choices.ToArray(), choice => SameId(choice.BrowseId, current));
-        _ingredientChoices[key] = choices[Wrap(index + delta + (index < 0 && delta < 0 ? 1 : 0), choices.Count)].BrowseId;
-        _chainPlan = CalculateChain(_chainGroup);
-    }
+    private Recipe? FavoriteForProduct(string id) => _book.Favorites.Select(BookmarkedRecipe).FirstOrDefault(recipe =>
+        recipe?.Outputs.Any(output => SameId(output.BrowseId, id)) == true);
 
-    private void BookmarkOrder(Recipe root, int quantity)
+    private void ToggleFavorite(Recipe recipe, string key)
     {
-        var recipeIndex = _catalog.Recipes.GroupBy(RecipeKey).ToDictionary(set => set.Key, set => set.First());
-        var available = _book.Entries.Where(e => e.IsRecipe && recipeIndex.ContainsKey(e.Id)).Select(e => recipeIndex[e.Id]).Distinct().ToArray();
-        var picked = new List<Recipe>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        void Visit(Recipe recipe)
+        if (!_book.IsFavorite(key))
         {
-            if (picked.Count >= 128 || !seen.Add(RecipeKey(recipe))) return;
-            picked.Add(recipe);
-            foreach (var input in recipe.Inputs.Where(input => !input.MatchesAny && !input.IsCatalyst))
-            {
-                var chosen = available.FirstOrDefault(candidate => candidate.Outputs.Any(output => SameId(output.BrowseId, input.BrowseId)));
-                if (chosen != null) Visit(chosen);
-            }
+            // There is one preferred route per product. Otherwise selecting the heart on a
+            // second recipe would leave new orders following an arbitrary earlier favorite.
+            var products = recipe.Outputs.Select(output => output.BrowseId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (string old in _book.Favorites.Where(k => BookmarkedRecipe(k)?.Outputs.Any(output => products.Contains(output.BrowseId)) == true).ToArray())
+                _book.ToggleFavorite(old);
         }
-        Visit(root);
-        // Use a new page so existing recipe bookmarks keep their groups and quantities.
-        var page = root.Name.Length > 28 ? root.Name.Substring(0, 28) : root.Name;
-        var original = page;
-        for (int n = 2; _book.Page(page).Any(); n++) page = $"{original} {n}";
+        if (_book.ToggleFavorite(key)) SaveBookmarks();
+    }
+
+    internal bool OrderFavoriteAt(Vector2 pointer)
+    {
+        pointer /= _scale;
+        if (!ShowRight || !_right.Contains(pointer) || _options) return false;
+        var hit = _itemTargets.FindLast(t => t.Rect.Contains(pointer));
+        if (hit.Id == null) return false;
+        var recipe = FavoriteForProduct(hit.Id);
+        if (recipe == null) Status(L("Mark a recipe with the heart before placing an order.", "请先点配方旁的爱心，指定要下单的配方。"));
+        else BookmarkOrder(recipe, BookmarkQuantity, hit.Id);
+        return true;
+    }
+
+    internal bool OrderAndInspectAt(Vector2 pointer)
+    {
+        if (!_open || _options || _activeRecipe == null || !_favoriteRect.Contains(pointer / _scale)) return false;
+        BookmarkOrder(_activeRecipe, 1, inspect: true);
+        return true;
+    }
+
+    private void BookmarkOrder(Recipe root, int quantity, string? productId = null, bool inspect = false)
+    {
+        var favorites = _book.Favorites.OrderBy(key => key, StringComparer.Ordinal).Select(BookmarkedRecipe).OfType<Recipe>().ToArray();
+        var picked = new List<(Recipe Recipe, string? Product)>();
+        var seen = new HashSet<Recipe> { root };
+        picked.Add((root, root.Outputs.FirstOrDefault(output => SameId(output.BrowseId, productId ?? _item))?.BrowseId ?? root.Outputs.FirstOrDefault()?.BrowseId));
+        for (int i = 0; i < picked.Count; i++)
+            foreach (var input in picked[i].Recipe.Inputs)
+            {
+                var producer = favorites.FirstOrDefault(candidate => candidate != picked[i].Recipe && candidate.Outputs.Any(output => OutputMatches(input, output)));
+                if (producer != null && seen.Add(producer))
+                    picked.Add((producer, producer.Outputs.First(output => OutputMatches(input, output)).BrowseId));
+            }
+
         string group = Guid.NewGuid().ToString("N");
-        foreach (var recipe in picked)
+        foreach (var (recipe, product) in picked)
         {
-            string key = RecipeKey(recipe);
-            if (_book.Toggle(page, key, recipe == root ? quantity : 1) && _book.Find(page, key) is { } entry) entry.Group = group;
+            if (_book.Add(_group, RecipeKey(recipe), recipe == root ? quantity : 1, group, productId: product, showQuantity: true) != null) continue;
+            // Do not silently save a truncated order when bookmarks reach their limit.
+            _book.RemoveGroup(_group, group);
+            Status(L("Order could not fit on this page; no recipes were added.", "无法完整加入订单：已达书签上限或配方标识无效。"));
+            return;
         }
+        if (!_book.IsChainEnabled(_group, group)) _book.ToggleChain(_group, group);
         SaveBookmarks();
-        SelectBookmarkGroup(page);
         _open = false;
-        OpenChain(group, false);
+        _bookmarkPage = int.MaxValue;
+        _skipFocusFrame = true;
+        if (inspect) OpenTreeGroup(group);
+        else Status(L("Crafting order added to this bookmark page", "已在当前书签页添加合成订单"));
     }
 }

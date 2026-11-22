@@ -20,10 +20,7 @@ internal sealed partial class NeiWindow
     private readonly ConfigEntry<bool> _showGrid;
     private readonly ConfigEntry<bool> _showInventoryGrid;
     private readonly BookmarkBook _book = new();
-    private string? _activeRecipeKey, _chainGroup;
-    private bool _chainDetails;
-    private Vector2 _chainScroll;
-    private readonly HashSet<string> _collapsedGroups = new(StringComparer.Ordinal);
+    private Recipe? _activeRecipe;
     private readonly List<string> _recent = new();
     private readonly Stack<(string? Item, bool Usage, string? Category, int Index, string[] Contents, Item? LiveItem)> _back = new();
     private string[] _lookupContents = Array.Empty<string>();
@@ -43,7 +40,8 @@ internal sealed partial class NeiWindow
     private readonly Dictionary<global::Recipe, bool> _craftable = new();
     private int _page, _bookmarkPage, _recipeIndex;
     private string _quantityText = "1";
-    private int GiveQuantity => int.TryParse(_quantityText, out int value) ? Mathf.Clamp(value, 1, 64) : 1;
+    private int BookmarkQuantity => int.TryParse(_quantityText, out int value) ? Math.Clamp(value, 1, BookmarkBook.MaximumQuantity) : 1;
+    private int GiveQuantity => Math.Min(64, BookmarkQuantity);
     private int _seenRevision = -1;
     private string? _item, _category;
     private bool _usage, _open, _options, _groups, _focusSearch, _searchFocused;
@@ -60,7 +58,8 @@ internal sealed partial class NeiWindow
     private IReadOnlyList<CatalogItem> _filtered = Array.Empty<CatalogItem>();
     private string? _lastError;
     internal bool SearchFocused { get => _searchFocused; set => _searchFocused = value; }
-    internal bool ModalOpen => _open || _options || _chainGroup != null;
+    private bool _returnToTree;
+    internal bool ModalOpen => _open || _options || _treeOpen;
 
     internal NeiWindow(Plugin plugin, ConfigFile config)
     {
@@ -92,16 +91,24 @@ internal sealed partial class NeiWindow
         _tooltipSlots.Clear();
         _tooltipFrame = -1;
         _lookupItem = null;
+        ClearBookmarkHits();
+        _bookmarkDrag = null;
     }
 
-    internal void ToggleBookmarks() => _bookmarksVisible = !_bookmarksVisible;
+    internal void ToggleBookmarks()
+    {
+        _productionContext++;
+        _bookmarksVisible = !_bookmarksVisible;
+        ClearBookmarkHits();
+        _bookmarkDrag = null;
+    }
     internal void ResetView()
     {
-        _open = _options = _groups = _searchFocused = _focusSearch = false;
-        _chainGroup = null;
+        _productionContext++;
+        _open = _treeOpen = _returnToTree = _options = _groups = _searchFocused = _focusSearch = false;
         _bookmarkDrag = null;
-        _dragGroup = null;
-        _activeRecipeKey = null;
+        _activeRecipe = null;
+        ClearBookmarkHits();
         _back.Clear();
         _itemTargets.Clear();
         _tooltipSlots.Clear(); _tooltipFrame = -1;
@@ -157,7 +164,7 @@ internal sealed partial class NeiWindow
 
     internal bool RequestSearchFocus()
     {
-        if (_options || _chainGroup != null || (!_open && !ShowRight)) return false;
+        if (_options || (!_open && !_treeOpen && !ShowRight)) return false;
         _focusSearch = true;
         return true;
     }
@@ -166,12 +173,14 @@ internal sealed partial class NeiWindow
     {
         try
         {
+            RefreshBookmarkStock();
             int revision = _catalog.Revision;
             if (_seenRevision != revision)
             {
                 bool first = _seenRevision < 0;
                 _seenRevision = revision;
                 _ingredientSearch.Clear();
+                InvalidateBookmarkView();
                 ApplyFilter();
                 if (first || _lastError != null)
                     log.LogInfo($"NEI catalog: {_catalog.Items.Count} entries, {_catalog.Recipes.Count} recipes, {_catalog.RecipeCategories.Count} categories.");
@@ -196,29 +205,99 @@ internal sealed partial class NeiWindow
         if (_book.Toggle(_group, id, quantity)) SaveBookmarks();
     }
 
-    private void SaveBookmarks() => _saved.Value = _book.Serialize();
+    private void SaveBookmarks()
+    {
+        _productionContext++;
+        _saved.Value = _book.Serialize();
+        InvalidateBookmarkView();
+    }
 
     internal bool HandleBookmarkShortcut(Vector2 pointer, string? id, bool control, bool shift)
     {
+        if (_options) return false;
         pointer /= Mathf.Max(.01f, _scale);
-        if (shift && !_open)
+        if (ShowLeft && _left.Contains(pointer))
         {
-            var header = _bookmarkHeaders.Find(entry => entry.Rect.Contains(pointer));
-            if (header.Group != null && header.Group.Length > 0)
+            if (_bookmarkDrag != null) return false;
+            var group = _bookmarkNavigation.Contains(pointer) ? "" : _bookmarkHeaders.Find(hit => hit.Rect.Contains(pointer)).Group;
+            if (shift && group != null)
             {
-                _book.Entries.RemoveAll(entry => entry.Page == _group && entry.Group == header.Group);
-                _collapsedGroups.Remove(header.Group);
-                SaveBookmarks();
+                if (_book.RemoveGroup(_group, group)) SaveBookmarks();
+                return true;
+            }
+            var cell = _bookmarkCells.Find(hit => hit.Rect.Contains(pointer)).Cell;
+            if (cell != null)
+            {
+                if (_book.IsCollapsed(_group, cell.Entry.Group) && _book.IsChainEnabled(_group, cell.Entry.Group))
+                {
+                    if (shift && _book.RemoveGroup(_group, cell.Entry.Group)) SaveBookmarks();
+                }
+                else if (cell.Ingredient >= 0 && !shift)
+                    Status(L("Shift+A removes the saved recipe. Its ingredients stay attached to it.", $"Shift＋{_plugin.BookmarkKey} 移除整条配方；原料与配方一起保留。"));
+                else if (_book.Remove(cell.Entry)) SaveBookmarks();
                 return true;
             }
         }
-        if (shift && _open && _activeRecipeKey != null)
+        if (_open && _inspector.Contains(pointer) && _activeRecipe is { } recipe)
         {
-            ToggleBookmark(_activeRecipeKey, control ? GiveQuantity : 1);
-            return true;
+            if (shift && _favoriteRect.Contains(pointer))
+            {
+                BookmarkOrder(recipe, control ? BookmarkQuantity : 1);
+                return true;
+            }
+            string? product = recipe.Outputs.FirstOrDefault(output => SameId(output.BrowseId, id))?.BrowseId;
+            if (shift || product != null)
+            {
+                product ??= recipe.Outputs.FirstOrDefault()?.BrowseId;
+                if (_book.ToggleRecipe(_group, RecipeKey(recipe), control ? BookmarkQuantity : 1, shift, product,
+                    showQuantity: control)) SaveBookmarks();
+                return true;
+            }
         }
         if (id == null) return false;
-        ToggleBookmark(id, control ? GiveQuantity : 1);
+        if (shift && FavoriteForProduct(id) is { } preferred)
+        {
+            if (_book.ToggleRecipe(_group, RecipeKey(preferred), control ? BookmarkQuantity : 1, true, id, showQuantity: control)) SaveBookmarks();
+        }
+        else if (_book.Toggle(_group, id, control ? BookmarkQuantity : 1, string.Empty, control)) SaveBookmarks();
+        return true;
+    }
+
+    // The host has no NEI chat-link receiver. Share the same scoped, pasteable payload
+    // locally rather than sending an unusable Minecraft NBT link to multiplayer chat.
+    internal bool ShareBookmark(Vector2 pointer, bool withRecipe)
+    {
+        pointer /= _scale;
+        if (!ShowLeft || !_left.Contains(pointer) || _options) return false;
+        string? group = _bookmarkNavigation.Contains(pointer) ? "" : _bookmarkHeaders.Find(hit => hit.Rect.Contains(pointer)).Group;
+        if (group != null)
+        {
+            if (_book.Page(_group).Any(entry => entry.Group == group)) CopyBookmark(_book.CopyGroup(_group, group));
+            return true;
+        }
+        var cell = _bookmarkCells.Find(hit => hit.Rect.Contains(pointer)).Cell;
+        if (cell == null) return false;
+        if (withRecipe && cell.Entry.IsRecipe) CopyBookmark(_book.CopyEntry(cell.Entry));
+        else
+        {
+            var single = new BookmarkBook();
+            int count = (int)Math.Clamp(Math.Ceiling(cell.Amount), 1, BookmarkBook.MaximumQuantity);
+            if (single.Add(_group, cell.Id, count, showQuantity: cell.Entry.ShowQuantity) is { } item) CopyBookmark(single.CopyEntry(item));
+        }
+        return true;
+    }
+
+    internal bool HandleBookmarkClipboard(Vector2 pointer, bool copy)
+    {
+        pointer /= Mathf.Max(.01f, _scale);
+        if (!ShowLeft || !_left.Contains(pointer) || _options) return false;
+        if (!copy) { PasteBookmarks(); return true; }
+        if (_bookmarkNavigation.Contains(pointer)) { CopyBookmark(_book.CopyPage(_group)); return true; }
+        var group = _bookmarkHeaders.Find(hit => hit.Rect.Contains(pointer)).Group;
+        if (!string.IsNullOrEmpty(group)) { CopyBookmark(_book.CopyGroup(_group, group)); return true; }
+        var cell = _bookmarkCells.Find(hit => hit.Rect.Contains(pointer)).Cell;
+        if (cell == null) return false;
+        CopyBookmark(_book.CopyEntry(cell.Entry));
         return true;
     }
 
@@ -234,6 +313,8 @@ internal sealed partial class NeiWindow
         if (_recent.Count > 32) _recent.RemoveAt(_recent.Count - 1);
     }
 
+    private void LookupFromTree(string id) => Lookup(id, false);
+
     private void OpenView(string? id, bool usage, string? category)
     {
         if (id?.StartsWith("recipe/", StringComparison.Ordinal) == true)
@@ -246,6 +327,8 @@ internal sealed partial class NeiWindow
                 return;
             }
         }
+        if (_treeOpen) { _treeOpen = false; _returnToTree = true; _open = false; _back.Clear(); }
+        else if (!_open) _returnToTree = false;
         if (_open && _back.Count < 64) _back.Push((_item, _usage, _category, _recipeIndex, _lookupContents, _lookupItem));
         _item = id;
         _lookupContents = Array.Empty<string>();
@@ -253,8 +336,8 @@ internal sealed partial class NeiWindow
         _tooltipSlots.Clear(); _tooltipFrame = -1;
         _selectedRecipeBookmark = null;
         _craftableOnly = false;
-        _activeRecipeKey = null;
-        _chainGroup = null;
+        _activeRecipe = null;
+        _favoriteRect = default;
         _recipeQuery = string.Empty;
         _usage = usage;
         _category = category;
@@ -270,11 +353,14 @@ internal sealed partial class NeiWindow
     internal void Back()
     {
         if (_options) { _options = false; return; }
-        if (_chainGroup != null) { _chainGroup = null; return; }
+        if (_treeOpen) { _treeOpen = _returnToTree = false; _skipFocusFrame = true; return; }
+        if (_returnToTree && _open && _back.Count == 0 && _expandedRequirement < 0)
+        { _open = _returnToTree = false; _treeOpen = true; _skipFocusFrame = true; return; }
         if (_expandedRequirement >= 0) { _expandedRequirement = -1; return; }
         if (_back.Count == 0) { _open = false; _itemTargets.Clear(); return; }
         _recipeQuery = string.Empty; _craftableOnly = false;
-        _activeRecipeKey = null;
+        _activeRecipe = null;
+        _favoriteRect = default;
         (_item, _usage, _category, _recipeIndex, _lookupContents, _lookupItem) = _back.Pop();
         _recipeScroll = Vector2.zero;
     }
@@ -289,14 +375,15 @@ internal sealed partial class NeiWindow
             _skipFocusFrame = false;
         }
         _tipTitle = _tipBody = null;
+        _bookmarkTip = null;
         _searchRect = _groupRect = _quantityRect = _leftTools = default;
         if (e.type == EventType.Repaint)
         {
-            _itemTargets.Clear(); _bookmarkHeaders.Clear(); _tooltipSlots.Clear();
+            _itemTargets.Clear(); ClearBookmarkHits(); _tooltipSlots.Clear();
             _tooltipFrame = Time.frameCount;
             _hoveringItemSlot = false;
+            if ((_bookmarkDrag is { } drag && !Input.GetMouseButton(drag.Button)) || !ShowLeft || _plugin.NativePointerActive) _bookmarkDrag = null;
         }
-        if (e.type == EventType.Repaint && !Input.GetMouseButton(0)) { _bookmarkDrag = null; _dragGroup = null; }
         Matrix4x4 savedMatrix = GUI.matrix;
         try
         {
@@ -309,12 +396,13 @@ internal sealed partial class NeiWindow
             if (modalAtStart && ModalOpen)
             {
                 if (_options) DrawOptions(_inspector);
-                else if (_chainGroup != null) DrawChain(_inspector);
+                else if (_treeOpen) DrawBookmarkTree(_inspector);
                 else DrawInspector(_inspector);
             }
             if (e.type == EventType.Repaint && !_hoveringItemSlot)
             {
-                if (_tipTitle != null) NeiSkin.Tooltip(e.mousePosition, _tipTitle, _tipBody);
+                if (_bookmarkTip != null) DrawBookmarkChainTip(e.mousePosition);
+                else if (_tipTitle != null) NeiSkin.Tooltip(e.mousePosition, _tipTitle, _tipBody);
                 else if (Hit(screenMouse) && !string.IsNullOrEmpty(GUI.tooltip)) NeiSkin.Tooltip(e.mousePosition, GUI.tooltip);
             }
             if (e.type == EventType.Repaint && _status != null && Time.unscaledTime < _statusUntil)

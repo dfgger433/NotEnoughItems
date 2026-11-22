@@ -8,7 +8,8 @@ internal sealed partial class NeiWindow
 {
     private void ItemSlot(Rect rect, string id, bool bookmarked = false, Sprite? overrideIcon = null, string? amount = null,
         string? fallback = null, Rect? clipping = null, Vector2? globalOffset = null, string? details = null,
-        int requirement = -1, bool belowRequirement = false, Item? liveItem = null, bool catalogSlot = false, bool bookmarkSlot = false)
+        int requirement = -1, bool belowRequirement = false, Item? liveItem = null, bool catalogSlot = false,
+        bool interactive = true, Color? backing = null, string? corner = null)
     {
         _catalog.TryGetItem(id, out var item);
         var recipeBookmark = id.StartsWith("recipe/", StringComparison.Ordinal) ? _catalog.Recipes.FirstOrDefault(r => RecipeKey(r) == id) : null;
@@ -26,8 +27,10 @@ internal sealed partial class NeiWindow
             hover &= absolute.width > 0 && absolute.height > 0 && area.Contains(e.mousePosition + position);
         }
         bool expanded = requirement >= 0 && _expandedRequirement == requirement;
+        if (backing is { } tint) NeiSkin.BookmarkTint(rect, tint);
         if (hover || bookmarked || expanded) NeiSkin.Slot(rect, hover, bookmarked || expanded);
         DrawSprite(new Rect(rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8), overrideIcon ?? item?.Icon, item?.IconTint ?? Color.white, title);
+        if (!string.IsNullOrEmpty(corner)) NeiSkin.Label(new Rect(rect.x + 1, rect.y, rect.width - 2, 12), corner!);
         if (requirement >= 0)
             NeiSkin.Label(new Rect(rect.x + 2, rect.y + 1, rect.width - 4, 13), expanded ? "−" : "+", TextAnchor.MiddleRight);
         if (belowRequirement)
@@ -39,11 +42,11 @@ internal sealed partial class NeiWindow
             _tooltipSlots.Add((absolute, title, item, details, liveItem ?? (SameId(id, _item) ? _lookupItem : null)));
             _hoveringItemSlot |= hover;
         }
-        if (!hover) return;
+        if (!hover || !interactive) return;
         if (e.type != EventType.MouseDown || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
         if (e.button == 2 || e.alt) ToggleBookmark(id);
         else if (e.button == 0 && requirement >= 0) _expandedRequirement = expanded ? -1 : requirement;
-        else if (CanGiveSlot(catalogSlot || bookmarkSlot, id, item, e.button, e.shift, e.alt)) GiveSlot(item!, e.button);
+        else if (CanGiveSlot(catalogSlot, id, item, e.button, e.shift, e.alt)) GiveSlot(item!, e.button);
         else if (e.button == 0 || e.button == 1) Lookup(id, e.button == 1);
         e.Use();
     }

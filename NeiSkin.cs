@@ -36,6 +36,23 @@ internal static class NeiSkin
         Outline(rect, selected ? SlotSelectionInk : SlotHoverInk);
     }
 
+    internal static void BookmarkTint(Rect rect, Color tint)
+    {
+        if (CanPaint(rect)) Fill(rect, tint);
+    }
+
+    internal static void BookmarkBracket(Rect rect, bool start, bool end, bool enabled, bool highlighted)
+    {
+        if (!CanPaint(rect)) return;
+        Color tint = enabled ? Rgb(highlighted ? 0x96E6A2u : 0x57AF67u) : Rgb(highlighted ? 0xDAD9E2u : 0x92939Bu);
+        float x = rect.x + 3;
+        float top = rect.y + (start ? 2 : 0);
+        float bottom = rect.yMax - (end ? 2 : 0);
+        Fill(new Rect(x, top, 1.5f, bottom - top), tint);
+        if (start) Fill(new Rect(x, top, 6, 1.5f), tint);
+        if (end) Fill(new Rect(x, bottom - 1.5f, 6, 1.5f), tint);
+    }
+
     /// <summary>Draws a raised action or option and returns Unity's native button click.</summary>
     internal static bool Button(Rect rect, string text, bool enabled = true, bool selected = false)
     {

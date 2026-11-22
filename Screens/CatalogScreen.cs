@@ -33,19 +33,19 @@ internal sealed partial class NeiWindow
     private void DrawQuantity(Rect row)
     {
         float cap = Mathf.Min(23, (row.width - 28) / 3);
-        int amount = GiveQuantity;
-        string tip = L("Quantity for left click in Cheat mode", "数量 · 作弊模式左键给予");
+        int amount = BookmarkQuantity;
+        string tip = L("Bookmark quantity / multiplier step · Cheat gives at most 64", "书签数量／乘数步进 · 作弊给予最多 64 件");
         if (NeiSkin.IconButton(new Rect(row.x, row.y, cap, row.height), "remove", L("Decrease quantity", "减少数量"), amount > 1))
             _quantityText = (amount - 1).ToString(CultureInfo.InvariantCulture);
         _quantityRect = new Rect(row.x + cap + 3, row.y, row.width - 2 * cap - 6, row.height);
-        string input = NeiSkin.TextField(_quantityRect, _quantityText, QuantityControl, 2);
+        string input = NeiSkin.TextField(_quantityRect, _quantityText, QuantityControl, 4);
         if (input.All(c => c >= '0' && c <= '9')) _quantityText = input;
-        if (NeiSkin.IconButton(new Rect(row.xMax - cap, row.y, cap, row.height), "add", L("Increase quantity", "增加数量"), amount < 64))
+        if (NeiSkin.IconButton(new Rect(row.xMax - cap, row.y, cap, row.height), "add", L("Increase quantity", "增加数量"), amount < BookmarkBook.MaximumQuantity))
             _quantityText = (amount + 1).ToString(CultureInfo.InvariantCulture);
         if (_quantityRect.Contains(Event.current.mousePosition) && GUI.GetNameOfFocusedControl() != QuantityControl)
             Tip(tip, null);
         if (GUI.GetNameOfFocusedControl() != QuantityControl)
-            _quantityText = GiveQuantity.ToString(CultureInfo.InvariantCulture);
+            _quantityText = BookmarkQuantity.ToString(CultureInfo.InvariantCulture);
     }
 
     private void DrawBottomRail(bool showSearch)

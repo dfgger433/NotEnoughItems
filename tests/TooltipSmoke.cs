@@ -20,6 +20,19 @@ internal static class TooltipSmoke
         }
     }
 
+    internal static void BookmarkNativeEndpoints()
+    {
+        const BindingFlags methods = BindingFlags.Static | BindingFlags.NonPublic;
+        var craft = typeof(Catalog).Assembly.GetType("NotEnoughItems.BookmarkCrafting", true)!;
+        var check = craft.GetMethod("CheckSelection", methods)!.GetParameters();
+        if (typeof(global::Recipe).GetMethod("GetItemsForRecipe", Type.EmptyTypes)?.ReturnType != typeof(List<Item>) ||
+            check[0].ParameterType != typeof(global::Recipe) || check[1].ParameterType != typeof(List<Item>).MakeByRefType() ||
+            typeof(RecipeResult).GetMethod("SpawnResult", [typeof(int)])?.ReturnType != typeof(void) ||
+            typeof(PlayerCamera).GetMethod("TryCraft", Type.EmptyTypes)?.ReturnType != typeof(void) ||
+            typeof(Body).GetMethod("PickUpItem", [typeof(Item), typeof(int), typeof(bool)]) == null)
+            throw new InvalidOperationException("The installed game no longer exposes the verified craft/transfer hooks.");
+    }
+
     internal static void Run()
     {
         var assembly = typeof(CatalogItem).Assembly;

@@ -601,7 +601,7 @@ namespace NotEnoughItems
         {
             if (item == null)
                 throw new ArgumentNullException(nameof(item));
-            _providerItems[item.Id] = item;
+            _providerItems[item.BrowseId] = item;
             Refresh();
         }
 

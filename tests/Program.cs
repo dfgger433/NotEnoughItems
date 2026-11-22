@@ -24,6 +24,33 @@ static int RunTests()
         ("tall terminals keep search clear of native slots and quantity", TallTerminalFooter),
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
         ("reordering and clipboard import preserve independent groups", BookmarkGroups),
+        ("dragging a bracket to a new page preserves its settings without merging IDs", () =>
+        {
+            var book = new BookmarkBook();
+            var a = book.Add("A", "rope", 1, "g")!;
+            var b = book.Add("A", "cloth", 2, "g")!;
+            var other = book.Add("B", "hammer", 1, "g")!;
+            book.ToggleChain("A", "g"); book.ToggleCollapsed("A", "g");
+            Check(book.DropAtEnd(a, "B", true) && !book.Page("A").Any() && book.Page("B").SequenceEqual(new[] { other, a, b }) &&
+                a.Group == b.Group && a.Group != other.Group && book.IsChainEnabled("B", a.Group) && book.IsCollapsed("B", a.Group), "Transfer the entire independent bracket.");
+            Check(book.DropAtEnd(a, "B", false) && a.Group == "" && book.Page("B").Last() == a, "An empty-space drop removes just the selected entry from the bracket.");
+        }),
+        ("bookmark groups, saved recipe routes and crafting targets", BookmarkParityTests.Run),
+        ("craft, top-up, clipboard and native menu shortcuts never alias", () =>
+        {
+            Check(BookmarkKeys.Resolve(KeyCode.C, true, false) == BookmarkShortcut.Copy &&
+                BookmarkKeys.Resolve(KeyCode.C, true, true) == BookmarkShortcut.CraftMissing &&
+                BookmarkKeys.Resolve(KeyCode.C, false, true) == BookmarkShortcut.Craft &&
+                BookmarkKeys.Resolve(KeyCode.C, false, false) == BookmarkShortcut.None &&
+                BookmarkKeys.Resolve(KeyCode.V, true, false) == BookmarkShortcut.Paste &&
+                BookmarkKeys.Resolve(KeyCode.V, false, true) == BookmarkShortcut.PullMissing &&
+                BookmarkKeys.Resolve(KeyCode.S, false, true) == BookmarkShortcut.OpenNative, "Only explicit crafting chords can start an order.");
+        }),
+        ("long chain tooltip rows expose every ingredient including the last", () =>
+        {
+            var rows = BookmarkBoardPaging.Rows(new[] { 0, 100, 1 }, 3).ToArray();
+            Check(rows.Length == 36 && rows[0] == (0, 0, 0) && rows[^2] == (1, 99, 1) && rows[^1] == (2, 0, 1), "A clipped step or note is not dropped.");
+        }),
         ("GUI texture locations use a namespace and preserve legacy mappings", TextureLocations),
         ("full-width hosts retain both side grids and a separate inspector", FullWidthHostLayout),
         ("native drag releases over NEI cancel only without a real drop target", DragReleaseOwnership),
@@ -36,6 +63,7 @@ static int RunTests()
         ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
         ("native tooltip entry points and original rich text passthrough", TooltipSmoke.Run),
         ("drag hooks match the installed game's native entry points", TooltipSmoke.DragEndpoints),
+        ("bookmark crafting and pickup hooks match the installed game", TooltipSmoke.BookmarkNativeEndpoints),
         ("bookmark cheat clicks preserve lookup, drag modifiers and recipe bookmarks", BookmarkCheatClicks),
         ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
