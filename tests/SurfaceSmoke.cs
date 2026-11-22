@@ -32,15 +32,15 @@ internal static class SurfaceSmoke
         terminalReportedOpen = true;
         Expect("Terminal", "Terminal with no native radial", inventoryOpen: false);
         Expect("Terminal", "Terminal using the native radial", inventoryOpen: true);
+        Expect("Terminal", "Terminal hides the native container but leaves its state open", inventoryOpen: true, containerOpen: true);
         int probesBeforeBlock = terminalProbes;
-        Expect("Closed", "Container opened while both inventories still report open", inventoryOpen: true, containerOpen: true);
-        Expect("Closed", "Container opened while the terminal alone still reports open", inventoryOpen: false, containerOpen: true);
         Expect("Closed", "Native secondary screen while both inventories still report open", inventoryOpen: true, blockingScreen: true);
         if (terminalProbes != probesBeforeBlock)
             throw new InvalidOperationException("A native blocker must win before querying the optional terminal.");
         Expect("Terminal", "Terminal resumes when the native blocker closes", inventoryOpen: true);
         terminalReportedOpen = false;
-        Expect("Inventory", "Native backpack resumes when the terminal closes", inventoryOpen: true);
+        Expect("Closed", "Native container becomes visible again when the terminal closes", inventoryOpen: true, containerOpen: true);
+        Expect("Inventory", "Native backpack resumes after the terminal and container close", inventoryOpen: true);
         Expect("Closed", "Native secondary screen with no optional terminal", inventoryOpen: true, blockingScreen: true, terminalInstalled: false);
     }
 }
