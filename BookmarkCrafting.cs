@@ -15,7 +15,7 @@ internal static class BookmarkCrafting
     private static Receipt? _pending;
 
     internal static IEnumerator Execute(BookmarkChainBalanceResult plan, Action<string> completed, Func<bool> contextValid,
-        IReadOnlyList<BookmarkChainBalanceEntry> route)
+        IReadOnlyList<BookmarkChainBalanceEntry> route, IReadOnlyCollection<string>? favorites = null)
     {
         string L(string en, string zh) => Plugin.Instance?.Chinese == true ? zh : en;
         if (plan.Diagnostics.Any(d => d.Code is BookmarkChainDiagnosticCode.Cycle or BookmarkChainDiagnosticCode.InvalidRecipe or BookmarkChainDiagnosticCode.MissingRecipe))
@@ -24,12 +24,17 @@ internal static class BookmarkCrafting
             yield break;
         }
         var camera = PlayerCamera.main;
-        int made = 0, attempts = 0, unsupported = 0, missing = 0;
+        if (plan.Steps.Any(step => !step.Recipe.IsNative || step.Recipe.NativeRecipe is not { } native || !GameSurface.CanOpenCrafting(native)))
+        {
+            completed(L("An order recipe is unavailable or locked. No materials were spent.", "订单中有配方未解锁或不支持自动制作，未消耗材料。"));
+            yield break;
+        }
+        int made = 0, attempts = 0;
         string reason = "";
         foreach (var step in plan.Steps)
         {
             var native = step.Recipe.NativeRecipe;
-            if (native == null || !step.Recipe.IsNative) { unsupported++; continue; }
+            if (native == null) { reason = L("Recipe not available.", "配方不可用。"); break; }
             var pins = route[step.EntryIndex].PreferredIngredients;
             for (int i = 0; i < step.Batches; i++)
             {
@@ -40,18 +45,21 @@ internal static class BookmarkCrafting
                 if (CheatSession.Detect(camera.body).Access != CheatAccess.Offline)
                 { reason = L("Auto-craft requires a verified offline session.", "仅在可确认的单机状态下自动制作。"); break; }
                 int index = step.Recipe.NativeRecipeIndex;
-                if (index < 0 || !GameSurface.CanOpenCrafting(native)) { unsupported++; break; }
-                if (native.GetItemsForRecipe() == null) { missing++; break; }
+                if (index < 0 || !GameSurface.CanOpenCrafting(native)) { reason = L("Recipe no longer available.", "配方已不可用。"); break; }
+                if (camera.body.skills.INT < native.INT)
+                { reason = L("Intelligence is too low to craft this recipe reliably.", "当前智力不足以稳定制作此配方。"); break; }
+                if (NativeCraftSelection.Find(native, camera.body, pins, favorites ?? Array.Empty<string>()) == null)
+                { reason = L($"Missing usable inputs for {step.Recipe.Name}.", $"「{step.Recipe.Name}」缺少可用原料。"); break; }
                 if (!EnsureObserver()) { reason = L("Native craft verification unavailable.", "无法核验原生制作结果。"); break; }
 
                 camera.SelectRecipe(index);
-                var receipt = new Receipt(native, camera.body, pins);
+                var receipt = new Receipt(native, camera.body, pins, favorites ?? Array.Empty<string>());
                 _pending = receipt;
                 try { attempts++; camera.TryCraft(); }
                 finally { _pending = null; }
                 if (!receipt.Produced)
                 {
-                    reason = receipt.Rejected ? L("Native selection differs from a pinned material; not consumed.", "原生选料与指定材料不符，本批未消耗。") :
+                    reason = receipt.Rejected ? L("Eligible inputs changed before crafting; nothing consumed in this batch.", "制作前可用原料发生变化，本批未消耗。") :
                         L("Native result not confirmed; stopped. The game may have spent materials.", "未确认原生产出，已停止。按游戏规则可能已消耗材料。");
                     break;
                 }
@@ -60,30 +68,16 @@ internal static class BookmarkCrafting
             }
             if (reason.Length > 0) break;
         }
-        completed(L($"Produced {made} batches. Missing inputs: {missing} steps; unavailable: {unsupported}. ",
-            $"已制作 {made} 批。缺料 {missing} 步，不支持或未解锁 {unsupported} 步。") + reason);
+        completed(L($"Produced {made} batches. ", $"已制作 {made} 批。") + reason);
     }
 
     // TryMake resolves ingredients again immediately before UseItem. Validate THAT selection,
     // not a preview, and allow the original missing-material branch to handle a mismatch.
     private static void CheckSelection(global::Recipe __instance, ref List<Item>? __result)
     {
-        if (_pending is not { } r || !ReferenceEquals(r.Recipe, __instance) || __result == null || r.Pins == null) return;
-        foreach (var (slot, expected) in r.Pins)
-        {
-            if (slot >= 0 && slot < __result.Count && __result[slot] is { } item && item)
-            {
-                if (expected.StartsWith("item:", StringComparison.OrdinalIgnoreCase) && string.Equals("item:" + item.id, expected, StringComparison.OrdinalIgnoreCase)) continue;
-                // In a mixed vessel, the native quality matcher may consume another liquid.
-                // Decline ambiguous pins rather than overriding the game's selection.
-                if (expected.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase) && item.TryGetComponent<WaterContainerItem>(out var vessel) &&
-                    vessel.stack != null && vessel.stack.Any(s => s != null && s.amount > 0) &&
-                    vessel.stack.Where(s => s != null && s.amount > 0).All(s => string.Equals("liquid:" + s.liquidId, expected, StringComparison.OrdinalIgnoreCase))) continue;
-            }
-            r.Rejected = true;
-            __result = null;
-            return;
-        }
+        if (_pending is not { } r || r.ResultStarted || !ReferenceEquals(r.Recipe, __instance)) return;
+        __result = NativeCraftSelection.Find(__instance, r.Body, r.Pins, r.Favorites);
+        r.Rejected = __result == null;
     }
 
     private static bool EnsureObserver()
@@ -106,18 +100,24 @@ internal static class BookmarkCrafting
 
     private static void BeforeResult(RecipeResult __instance)
     {
-        if (_pending is { } r && ReferenceEquals(r.Recipe.result, __instance)) r.Measure(before: true);
+        if (_pending is { } r && ReferenceEquals(r.Recipe.result, __instance))
+        {
+            r.ResultStarted = true;
+            r.Measure(before: true);
+        }
     }
     private static void AfterResult(RecipeResult __instance)
     {
         if (_pending is { } r && ReferenceEquals(r.Recipe.result, __instance)) r.Measure(before: false);
     }
 
-    private sealed class Receipt(global::Recipe recipe, Body body, IReadOnlyDictionary<int, string>? pins)
+    private sealed class Receipt(global::Recipe recipe, Body body, IReadOnlyDictionary<int, string>? pins, IReadOnlyCollection<string> favorites)
     {
         internal readonly global::Recipe Recipe = recipe;
+        internal Body Body => body;
         internal readonly IReadOnlyDictionary<int, string>? Pins = pins;
-        internal bool Produced, Rejected;
+        internal readonly IReadOnlyCollection<string> Favorites = favorites;
+        internal bool Produced, Rejected, ResultStarted;
         private bool _measured;
         private readonly HashSet<int> _itemIds = new();
         private double _liquidBefore;

@@ -459,7 +459,7 @@ namespace NotEnoughItems
 
             var outputs = new[]
             {
-                new RecipeOutput(recipe.result.id, recipe.result.amount, recipe.result.isLiquid, recipe.result.resultCondition)
+                NativeOutput(recipe.result)
             };
             string name = SafeRecipeName(recipe, nativeIndex);
             return new Recipe(
@@ -479,6 +479,12 @@ namespace NotEnoughItems
                 SafeBool(() => recipe.isRepair, false),
                 SafeInt(() => recipe.INT, 0));
         }
+
+        // RecipeResult.amount counts deliveries, not milliliters. The stock game
+        // may stop after the first delivery when it fills an existing vessel.
+        internal static RecipeOutput NativeOutput(global::RecipeResult result) => new(result.id,
+            result.isLiquid && result.amount > 0 ? (int)Math.Clamp(Math.Round((double)result.resultCondition), 0, int.MaxValue) : result.amount,
+            result.isLiquid, result.resultCondition);
 
         private static string SafeRecipeName(global::Recipe recipe, int index)
         {
