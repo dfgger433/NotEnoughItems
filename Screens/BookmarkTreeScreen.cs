@@ -54,7 +54,8 @@ internal sealed partial class NeiWindow
         _treeQuery = "";
         _treeScroll = Vector2.zero;
         _treeView = TreeView.Steps;
-        _open = _options = _returnToTree = _focusSearch = _searchFocused = _treePanning = false;
+        _open = _options = _returnToTree = _searchFocused = _treePanning = false;
+        _focusSearch = null;
         _back.Clear();
         _treeOpen = _skipFocusFrame = true;
     }

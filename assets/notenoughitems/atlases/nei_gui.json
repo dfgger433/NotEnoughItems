@@ -4,6 +4,11 @@
       "type": "minecraft:directory",
       "source": "gui/modernity",
       "prefix": "modernity/"
+    },
+    {
+      "type": "minecraft:directory",
+      "source": "gui/controls",
+      "prefix": "controls/"
     }
   ]
 }

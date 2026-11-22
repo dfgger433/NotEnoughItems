@@ -65,14 +65,14 @@ internal sealed partial class NeiWindow
             if (NeiSkin.Button(new Rect(x + w - 41, y, 19, 22), "↑")) CopyBookmark(_book.CopyPage(_group));
             if (NeiSkin.Button(new Rect(x + w - 20, y, 20, 22), "↓")) PasteBookmarks();
             y += 26;
-            if (!ShowRight)
+            if (!_options)
             {
                 DrawQuantity(new Rect(x, y, w, 23));
                 y += 26;
             }
         }
         var footer = new Rect(x, panel.yMax - 27, w, 23);
-        var tools = NeiLayout.BottomRail(_width, _height, _center, _right).Tools;
+        var tools = NeiLayout.LeftTools(_height);
         if (footer.Overlaps(tools)) footer.y = tools.yMin - footer.height - 3;
         // Process drag destinations before the generic MouseUp in the grid. Page arrows
         // remain normal click controls when no bookmark drag is in progress.

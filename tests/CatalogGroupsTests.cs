@@ -3,7 +3,6 @@ using System;
 using NotEnoughItems;
 
 /// <summary>Focused tests for the catalog-group model. Run through the existing console test project.</summary>
-/// <remarks>Add ../CatalogGroups.cs and this file to tests/Nei.Tests.csproj, then call CatalogGroupsTests.Run().</remarks>
 internal static class CatalogGroupsTests
 {
     internal static void Run()

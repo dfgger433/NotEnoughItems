@@ -47,20 +47,34 @@ internal static class NeiLayout
         return (left, right);
     }
 
-    // Like NEI, the lower controls anchor to the screen, not the player or pointer.
-    internal static (Rect Tools, Rect Search) BottomRail(float width, float height, Rect center, Rect right)
+    // The wrench and bookmark toggle clear the native HUD; the catalog footer belongs to its panel.
+    internal static Rect LeftTools(float height) => new(54, Mathf.Max(8, height - 31), 49, 23);
+
+    internal readonly struct CatalogPanel
     {
-        const float margin = 8, toolsWidth = 49, gap = 5, buttonHeight = 23;
-        // Casualties: Unknown keeps its health/crafting HUD in the first 50 logical pixels.
-        const float toolsLeft = 54;
-        float y = Mathf.Max(margin, height - margin - buttonHeight);
-        float searchMin = toolsLeft + toolsWidth + gap;
-        float searchWidth = Mathf.Min(272, Mathf.Max(0, width - margin - searchMin));
-        float searchLeft = Mathf.Max(searchMin, (width - searchWidth) / 2);
-        var search = new Rect(searchLeft, y, searchWidth, buttonHeight);
-        if (search.Overlaps(center) && right.width >= 81 && right.height >= 125)
-            search = new Rect(right.x + 3, right.yMax - 54, right.width - 6, buttonHeight);
-        return (new Rect(toolsLeft, y, toolsWidth, buttonHeight), search);
+        internal readonly Rect Previous, Page, Group, Next, Grid, Search, Name, Add, Remove;
+
+        internal CatalogPanel(Rect panel)
+        {
+            const float gap = 2, h = 23;
+            float x = panel.x + 3, end = panel.xMax - 3, top = panel.y + 2;
+            float w = end - x;
+            float cap = Mathf.Min(h, w / 6);
+            Previous = new Rect(x, top, cap, h);
+            Next = new Rect(end - cap, top, cap, h);
+            Group = new Rect(Next.x - cap - gap, top, cap, h);
+            Page = Rect.MinMaxRect(Previous.xMax, top, Group.x - gap, top + h);
+
+            // On a narrow gutter let the search have a full line rather than clipping both editors.
+            bool stacked = w < 180;
+            float bottom = panel.yMax - 3, y = bottom - h;
+            float nameWidth = stacked ? w - 2 * (cap + gap) : Mathf.Clamp(w * .24f, 48, 85);
+            Remove = new Rect(end - cap, y, cap, h);
+            Add = new Rect(Remove.x - gap - cap, y, cap, h);
+            Name = new Rect(Add.x - gap - nameWidth, y, nameWidth, h);
+            Search = new Rect(x, stacked ? y - gap - h : y, stacked ? w : Name.x - gap - x, h);
+            Grid = Rect.MinMaxRect(x, Previous.yMax + 3, end, Search.y - 3);
+        }
     }
 
     internal static Rect InspectorBetween(Rect center, Rect left, Rect right, float width, float height)

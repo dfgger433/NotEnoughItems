@@ -3,9 +3,10 @@ namespace NotEnoughItems;
 // Source rectangles use physical pixels measured from the top left of the unmodified PNGs.
 internal static class ModernityFrames
 {
-    internal readonly struct Frame(string file, int x, int y, int width, int height)
+    internal readonly struct Frame(string file, int x, int y, int width, int height, string directory = NeiAssets.ModernityDirectory)
     {
         internal string File { get; } = file;
+        internal string ResourcePath { get; } = directory + file;
         internal int X { get; } = x;
         internal int Y { get; } = y;
         internal int Width { get; } = width;
@@ -26,6 +27,9 @@ internal static class ModernityFrames
         "options_utility" => new Frame("nei_tabbed_sprites.png", 48, 0, 16, 16),
         "options_cheat" => new Frame("nei_tabbed_sprites.png", 64, 0, 16, 16),
         "search" => new Frame("nei_sprites.png", 0, 152, 20, 20),
+        // Only the first 36 rows have pixels. The light row at y=24 duplicates y=0.
+        "search_field" => new Frame("text_field.png", 0, 12, 128, 12, "gui/controls/"),
+        "search_field_focused" => new Frame("text_field.png", 0, 0, 128, 12, "gui/controls/"),
         _ => null
     };
 

@@ -55,6 +55,12 @@ internal sealed partial class NeiWindow
         bool focused = GUI.GetNameOfFocusedControl() == CatalogGroupControl;
         if (_catalogGroupEditing && (!focused || (e.type == EventType.MouseDown && !groupName.Contains(e.mousePosition))))
             CommitCatalogGroupName(stayOnFailure: false);
+        else if (_catalogGroupEditing && focused && e.type == EventType.KeyDown &&
+            (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter))
+        {
+            CommitCatalogGroupName(stayOnFailure: true);
+            e.Use();
+        }
 
         if (NeiSkin.Button(selector, L("G", "组")))
             SelectCatalogGroup(_catalogGroups.NextIndex);
@@ -92,12 +98,6 @@ internal sealed partial class NeiWindow
         else if (_catalogGroupEditing)
             CommitCatalogGroupName(stayOnFailure: false);
 
-        if (e.type == EventType.KeyDown && fieldFocused &&
-            (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter))
-        {
-            CommitCatalogGroupName(stayOnFailure: true);
-            e.Use();
-        }
         if (groupName.Contains(e.mousePosition) && !fieldFocused && groupName.width > 20)
             Tip(L("Catalog group name · Enter or click away to save", "目录分组名称 · 回车或点击别处保存"), null);
     }

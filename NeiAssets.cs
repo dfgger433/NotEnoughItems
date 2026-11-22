@@ -9,7 +9,8 @@ internal static class NeiAssets
     internal const string Namespace = "notenoughitems";
     internal const string TextureRoot = "assets/" + Namespace + "/textures/";
 
-    internal static string Modernity(string file) => "gui/modernity/" + file;
+    internal const string ModernityDirectory = "gui/modernity/";
+    internal static string Modernity(string file) => ModernityDirectory + file;
     internal static string Background(string screen) => "gui/backgrounds/" + (screen.Length == 0 ? "default" : screen) + ".png";
 
     internal static string RelativePath(string resourcePath) => TextureRoot + resourcePath;

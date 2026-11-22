@@ -372,15 +372,10 @@ internal sealed class GameSurface
         Patch(harmony, log, typeof(PlayerCamera), "HandleWhileDragging", nameof(SkipWhileDragging));
         Patch(harmony, log, typeof(PlayerCamera), "TryPerformWorldActions", nameof(SkipWorldDropThroughOverlay));
         Patch(harmony, log, typeof(PlayerCamera), "HandleMouseOver", nameof(SkipHover));
-        var tooltipMethod = AccessTools.Method(typeof(UIUtil), nameof(UIUtil.GetUITooltip));
-        if (tooltipMethod != null)
-            harmony.Patch(tooltipMethod,
-                postfix: new HarmonyMethod(typeof(GameSurface), nameof(UseOriginalItemTooltip)) { priority = Priority.Last });
         var darkMethod = AccessTools.Method(typeof(GlobalDark), nameof(GlobalDark.HandleTooltip));
         if (darkMethod != null)
             harmony.Patch(darkMethod,
-                prefix: new HarmonyMethod(typeof(GameSurface), nameof(FeedNeiTooltip)) { priority = Priority.First },
-                postfix: new HarmonyMethod(typeof(GameSurface), nameof(PlaceNeiTooltip)) { priority = Priority.Last });
+                prefix: new HarmonyMethod(typeof(GameSurface), nameof(SuppressNeiTooltip)) { priority = Priority.First });
         var uei = AccessTools.TypeByName("UeiRuntime");
         if (Chainloader.PluginInfos.ContainsKey("casualtiesunknown.uei") && uei != null)
         {
@@ -404,30 +399,14 @@ internal sealed class GameSurface
         catch (Exception error) { log.LogWarning($"Could not patch {type.Name}.{target}: {error.Message}"); }
     }
 
-    private static int _neiTooltipFrame = -1;
-    private static (string, string) _neiTooltipText;
-
-    // Feed the same stock state used by world item hover even when no UITooltip is raycast.
-    private static void FeedNeiTooltip(GlobalDark __instance)
+    // Hide only the stock item tooltip whose pointer is over a NEI-drawn region.
+    private static bool SuppressNeiTooltip(GlobalDark __instance)
     {
-        _neiTooltipFrame = -1;
-        if (Plugin.Instance?.TryGetItemTooltip(out var itemText) != true) return;
-        _neiTooltipFrame = Time.frameCount;
-        _neiTooltipText = itemText;
-        __instance.SetTooltip(itemText);
-    }
-
-    // GlobalDark calls this while choosing which tooltip to show, before the stock renderer lays it out.
-    private static void UseOriginalItemTooltip(ref (string, string) __result)
-    {
-        if (_neiTooltipFrame == Time.frameCount) __result = _neiTooltipText;
-    }
-
-    private static void PlaceNeiTooltip(GlobalDark __instance)
-    {
-        if (_neiTooltipFrame == Time.frameCount) NativeTooltipLayer.Raise(__instance);
-        else NativeTooltipLayer.Restore();
-        _neiTooltipFrame = -1;
+        if (Plugin.Instance?.SuppressNativeTooltip != true) return true;
+        // The stock hidden branch owns the root state; apply it now because the original
+        // method (and its Update-time tooltipText reset) will not run for this frame.
+        NativeTooltipLayer.Hide(__instance);
+        return false;
     }
 
     private static bool SkipInput(PlayerCamera __instance, out bool __state)

@@ -60,8 +60,8 @@ internal sealed partial class NeiWindow
                 y += 27;
             }
         }
-        NeiSkin.Label(new Rect(x, y, w, 24), L("Left click: recipes · Right click: uses · Middle: bookmark", "左键查配方 · 右键查用途 · 中键加书签"));
-        NeiSkin.Label(new Rect(x, y + 26, w, 24), L("Cheat: catalog LMB = quantity · RMB = 1 · Shift = lookup", "作弊：目录左键=数量 · 右键=1 · Shift=查询"));
+        NeiSkin.Label(new Rect(x, y, w, 24), L("Bookmark quantity / cheat amount", "书签数量／作弊给予数量"));
+        DrawQuantity(new Rect(x, y + 26, w, 23));
         if (NeiSkin.Button(new Rect(x, p.yMax - 68, w, 26), L("Hide overlay", "隐藏 NEI"))) { ResetView(); _plugin.HideOverlay(); }
         if (NeiSkin.Button(new Rect(x, p.yMax - 35, w, 26), L("Done", "完成"))) _options = false;
     }

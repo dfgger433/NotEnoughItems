@@ -8,7 +8,7 @@ internal sealed partial class NeiWindow
 {
     private void ItemSlot(Rect rect, string id, bool bookmarked = false, Sprite? overrideIcon = null, string? amount = null,
         string? fallback = null, Rect? clipping = null, Vector2? globalOffset = null, string? details = null,
-        int requirement = -1, bool belowRequirement = false, Item? liveItem = null, bool catalogSlot = false,
+        int requirement = -1, bool belowRequirement = false, bool catalogSlot = false,
         bool interactive = true, Color? backing = null, string? corner = null)
     {
         _catalog.TryGetItem(id, out var item);
@@ -39,8 +39,8 @@ internal sealed partial class NeiWindow
         if (e.type == EventType.Repaint && absolute.width > 0 && absolute.height > 0)
         {
             _itemTargets.Add((absolute, id));
-            _tooltipSlots.Add((absolute, title, item, details, liveItem ?? (SameId(id, _item) ? _lookupItem : null)));
-            _hoveringItemSlot |= hover;
+            // Keep NEI's recipe and bookmark annotations without opening the stock item tooltip.
+            if (hover && !string.IsNullOrWhiteSpace(details)) Tip(title, details);
         }
         if (!hover || !interactive) return;
         if (e.type != EventType.MouseDown || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;

@@ -17,8 +17,9 @@
     <IntermediateOutputPath>obj/$(Configuration)/core-only/</IntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs;BookmarkParityTests.cs;../BookmarkBoardPaging.cs;../BookmarkShortcut.cs" />
+    <Compile Include="Program.cs;BookmarkParityTests.cs;CatalogGroupsTests.cs;../CatalogGroups.cs;../BookmarkBoardPaging.cs;../BookmarkShortcut.cs" />
     <Compile Include="../NeiSearch.cs;../NeiLayout.cs;../BookmarkBook.cs;../NeiAssets.cs;../ModernityFrames.cs;../DragInputPolicy.cs;../CheatPermission.cs" />
+    <Reference Include="UnityEngine" HintPath="$(ManagedDir)/UnityEngine.dll" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)/UnityEngine.CoreModule.dll" />
   </ItemGroup>
   <ItemGroup Condition="'$(SkipRecipeTests)' != 'true'">

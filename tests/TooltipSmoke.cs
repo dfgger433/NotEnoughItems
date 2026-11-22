@@ -1,9 +1,12 @@
 using System.Reflection;
 using NotEnoughItems;
+using UnityEngine;
 using UnityEngine.EventSystems;
 
 internal static class TooltipSmoke
 {
+    private const BindingFlags NonPublic = BindingFlags.Static | BindingFlags.NonPublic;
+
     internal static void DragEndpoints()
     {
         const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
@@ -36,17 +39,57 @@ internal static class TooltipSmoke
     internal static void Run()
     {
         var assembly = typeof(CatalogItem).Assembly;
-        var resolver = assembly.GetType("NotEnoughItems.NativeTooltip", throwOnError: true)!
-            .GetMethod("ForItem", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var item = new CatalogItem("test_virtual", "<size=200>Virtual", "<sprite index=4>Body", kind: CatalogItemKind.Virtual);
-        var result = ((string, string))resolver.Invoke(null, [item.DisplayName, item, "<color=red>NEI note", null])!;
-        if (result.Item1 != "＜size=200＞Virtual" || result.Item2 != "＜sprite index=4＞Body\n\n＜color=red＞NEI note")
-            throw new InvalidOperationException("Provider and NEI-only text must remain literal in the native rich text renderer.");
-        var vanilla = new CatalogItem("test", "Name", "<color=#fff><sprite index=4>Typed description", kind: CatalogItemKind.Liquid);
-        result = ((string, string))resolver.Invoke(null, [vanilla.DisplayName, vanilla, null, null])!;
-        if (result.Item2 != vanilla.Description) throw new InvalidOperationException("Original formatting must pass through untouched.");
-        var endpoint = typeof(UIUtil).GetMethod("GetUITooltip", [typeof(List<RaycastResult>)])!;
-        if (endpoint.ReturnType != typeof((string, string)) || typeof(GlobalDark).GetMethod("HandleTooltip") == null ||
+        var native = assembly.GetType("NotEnoughItems.NativeTooltip", throwOnError: true)!;
+        var suppress = native.GetMethod("Suppress", NonPublic)!;
+        bool Suppress(bool overlay, bool hit) => (bool)suppress.Invoke(null, [overlay, hit])!;
+        if (!Suppress(true, true) || Suppress(true, false) || Suppress(false, true))
+            throw new InvalidOperationException("Only a region hit on an active overlay may hide the stock tooltip.");
+
+        // Captured pointer state or native dragging must never be part of the decision:
+        // a hit outside every drawn NEI rectangle keeps the vanilla tooltip unchanged.
+        var hit = native.GetMethod("Hit", NonPublic)!;
+        var region = typeof((bool Visible, Rect Rect));
+        var visible = Array.CreateInstance(region, 2);
+        visible.SetValue((true, new Rect(10, 10, 100, 100)), 0);
+        visible.SetValue((false, new Rect(0, 0, 500, 500)), 1);
+        bool Hit(Vector2 point) => (bool)hit.Invoke(null, [point, visible])!;
+        if (!Hit(new Vector2(20, 20)) || Hit(new Vector2(5, 5)))
+            throw new InvalidOperationException("The visible NEI rectangle, not its exterior, must bound suppression.");
+        var hidden = Array.CreateInstance(region, 1);
+        hidden.SetValue((false, new Rect(0, 0, 500, 500)), 0);
+        if ((bool)hit.Invoke(null, [new Vector2(50, 50), hidden])! ||
+            (bool)hit.Invoke(null, [new Vector2(50, 50), new[] { (true, new Rect(0, 0, 0, 100)) }])!)
+            throw new InvalidOperationException("Hidden or zero-area NEI controls cannot suppress the stock tooltip.");
+
+        var layer = assembly.GetType("NotEnoughItems.NativeTooltipLayer", throwOnError: true)!;
+        var hide = layer.GetMethod("Hide", NonPublic);
+        if (hide == null || hide.GetParameters() is not [{ ParameterType: var hiddenType }] ||
+            hiddenType != typeof(GlobalDark) || layer.GetMethod("Raise", NonPublic) != null)
+            throw new InvalidOperationException("NEI must hide the stock root, not raise or composite it.");
+
+        var surface = assembly.GetType("NotEnoughItems.GameSurface", throwOnError: true)!;
+        foreach (string legacy in new[] { "FeedNeiTooltip", "UseOriginalItemTooltip", "PlaceNeiTooltip" })
+            if (surface.GetMethod(legacy, NonPublic) != null)
+                throw new InvalidOperationException($"Legacy native-tooltip injection still exists: {legacy}.");
+
+        var plugin = assembly.GetType("NotEnoughItems.Plugin", throwOnError: true)!;
+        var window = assembly.GetType("NotEnoughItems.NeiWindow", throwOnError: true)!;
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        if (plugin.GetMethod("TryGetItemTooltip", instance) != null ||
+            window.GetMethod("TryGetItemTooltip", instance) != null ||
+            plugin.GetProperty("SuppressNativeTooltip", instance) == null ||
+            window.GetMethod("NativeTooltipHit", instance)?.GetParameters() is not [{ ParameterType: var pointerType }] ||
+            pointerType != typeof(Vector2))
+            throw new InvalidOperationException("NEI must hit-test its visible regions instead of injecting GlobalDark content.");
+
+        var dark = typeof(GlobalDark);
+        if (dark.GetMethod("HandleTooltip", Type.EmptyTypes)?.ReturnType != typeof(void) ||
+            dark.GetField("tooltipRect") == null || dark.GetField("tooltipText") == null ||
+            dark.GetMethod("SetTooltip", [typeof((string, string))]) == null)
+            throw new InvalidOperationException("The installed GlobalDark still needs its stock tooltip state for a safe hide.");
+
+        var endpoint = typeof(UIUtil).GetMethod("GetUITooltip", [typeof(List<RaycastResult>)]);
+        if (endpoint == null || endpoint.ReturnType != typeof((string, string)) ||
             typeof(PlayerCamera).GetMethod("ItemHoverDescription", [typeof(Item)])?.ReturnType != typeof((string, string)))
             throw new InvalidOperationException("The installed game must expose the native tooltip path.");
     }

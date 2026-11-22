@@ -20,8 +20,8 @@ static int RunTests()
         ("off-center host leaves layout asymmetric", OffCenterLayout),
         ("narrow-screen panels shrink without covering the host", NarrowLayout),
         ("recipe inspector is clamped to screen margins", InspectorLayout),
-        ("screen footer never follows a moving inventory", FooterAnchoring),
-        ("tall terminals keep search clear of native slots and quantity", TallTerminalFooter),
+        ("catalog controls stay inside the right panel at wide and narrow widths", CatalogPanelLayout),
+        ("catalog groups retain independent queries through edits and reload", CatalogGroupsTests.Run),
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
         ("reordering and clipboard import preserve independent groups", BookmarkGroups),
         ("dragging a bracket to a new page preserves its settings without merging IDs", () =>
@@ -61,7 +61,7 @@ static int RunTests()
 #if RECIPE_TESTS
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
         ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
-        ("native tooltip entry points and original rich text passthrough", TooltipSmoke.Run),
+        ("native tooltip suppression is bounded by visible NEI regions", TooltipSmoke.Run),
         ("drag hooks match the installed game's native entry points", TooltipSmoke.DragEndpoints),
         ("bookmark crafting and pickup hooks match the installed game", TooltipSmoke.BookmarkNativeEndpoints),
         ("bookmark cheat clicks preserve lookup, drag modifiers and recipe bookmarks", BookmarkCheatClicks),
@@ -191,26 +191,34 @@ static void InspectorLayout()
         "narrow screen constrains both dimensions without a negative rectangle");
 }
 
-static void FooterAnchoring()
-{
-    var center = new Rect(430, 100, 420, 500);
-    var (tools, search) = NeiLayout.BottomRail(1280, 720, center, default);
-    var moved = NeiLayout.BottomRail(1280, 720, new Rect(470, 150, 420, 486), default);
-    RectEqual(tools, moved.Tools, "The left buttons are anchored to the screen.");
-    RectEqual(search, moved.Search, "The normal center search does not follow the inventory.");
-    RectEqual(new Rect(54, 689, 49, 23), tools, "Left rail clears the vanilla HUD and uses a fixed screen margin.");
-    Equal(640, search.center.x, "The search is centered.");
-}
-
-static void TallTerminalFooter()
+static void CatalogPanelLayout()
 {
     var terminal = new Rect(480, 8, 320, 704);
-    var (_, right) = NeiLayout.Sides(terminal, 1280, 720, 1);
-    var (tools, search) = NeiLayout.BottomRail(1280, 720, terminal, right);
-    Check(!search.Overlaps(terminal), "Search must not cover any part of tall central terminal.");
-    Check(!tools.Overlaps(terminal) && !tools.Overlaps(search), "Left controls are clear of the terminal and search.");
-    Check(search.xMin > right.xMin && search.xMax < right.xMax && search.yMax < right.yMax - 30,
-        "Tall terminal search is placed  immediately above the right quantity controls.");
+    var (_, wide) = NeiLayout.VisibleSides(terminal, 1280, 720);
+    var (_, narrow) = NeiLayout.VisibleSides(new Rect(115, 8, 250, 394), 480, 410);
+    RectEqual(new Rect(54, 689, 49, 23), NeiLayout.LeftTools(720), "Left controls clear the native HUD.");
+    Check(!wide.Overlaps(terminal), "A tall terminal still has an independent catalog gutter.");
+    foreach (var panel in new[] { wide, narrow })
+    {
+        var layout = new NeiLayout.CatalogPanel(panel);
+        Rect[] regions = [layout.Previous, layout.Page, layout.Group, layout.Next, layout.Grid,
+            layout.Search, layout.Name, layout.Add, layout.Remove];
+        for (int i = 0; i < regions.Length; i++)
+        {
+            Rect a = regions[i];
+            Check(a.width > 0 && a.height > 0 && a.xMin >= panel.xMin && a.xMax <= panel.xMax &&
+                a.yMin >= panel.yMin && a.yMax <= panel.yMax, "Each catalog control must fit inside the right panel.");
+            for (int j = i + 1; j < regions.Length; j++)
+                Check(!a.Overlaps(regions[j]), "Controls and the item grid must not overlap.");
+        }
+        Check(layout.Search.width >= 40 && layout.Name.width >= 40 && layout.Search.y > layout.Grid.yMax &&
+            layout.Name.yMax == panel.yMax - 3, "Both editors remain usable in the catalog footer.");
+        Check(layout.Group.x < layout.Next.x && layout.Group.y == layout.Next.y, "The group button belongs beside next page.");
+    }
+    var normal = new NeiLayout.CatalogPanel(wide);
+    Equal(normal.Name.y, normal.Search.y, "Wide gutters keep both editors in one row.");
+    var compact = new NeiLayout.CatalogPanel(narrow);
+    Check(compact.Search.yMax < compact.Name.y, "Narrow gutters stack the search above the group name.");
 }
 
 static void BookmarkMigration()
@@ -258,6 +266,9 @@ static void TextureLocations()
         NeiAssets.LegacyPath(NeiAssets.Modernity("widgets.png")) == null, "Legacy backgrounds stay readable, not obsolete control art.");
     Check(ModernityFrames.Caption("previous") == "<" && ModernityFrames.Caption("next") == ">" &&
         ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" }, "Official sprite positions and paging glyphs.");
+    Check(ModernityFrames.Find("search_field") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 12, Width: 128, Height: 12 } &&
+        ModernityFrames.Find("search_field_focused") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 0, Width: 128, Height: 12 },
+        "Search uses individual rows of the supplied atlas, not the transparent 128×128 canvas.");
 }
 
 static void DragReleaseOwnership()
@@ -354,7 +365,7 @@ static void EmbeddedGuiTextures()
     var assembly = typeof(Catalog).Assembly;
     Span<byte> header = stackalloc byte[24];
     foreach (string path in new[] { NeiAssets.Modernity("widgets.png"), NeiAssets.Modernity("nei_tabbed_sprites.png"),
-        NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png") })
+        NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png"), "gui/controls/text_field.png" })
     {
         using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
         Check(png != null, "Missing namespaced resource: " + path);

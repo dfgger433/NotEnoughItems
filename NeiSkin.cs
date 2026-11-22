@@ -143,6 +143,16 @@ internal static class NeiSkin
         return GUI.TextField(rect, text, maxLength, Styles.TextField);
     }
 
+    /// <summary>Uses the search skin while keeping the named native editor on every IMGUI event.</summary>
+    internal static string SearchField(Rect rect, string text, string controlName, int maxLength)
+    {
+        SkinStyles styles = Styles;
+        GUIStyle? style = GUI.GetNameOfFocusedControl() == controlName ? styles.SearchFocused : styles.SearchIdle;
+        if (style == null) return TextField(rect, text, controlName, maxLength);
+        GUI.SetNextControlName(controlName);
+        return GUI.TextField(rect, text, maxLength, style);
+    }
+
     /// <summary>Draws a clipped label in the panel's normal or secondary text color.</summary>
     internal static void Label(Rect rect, string text, TextAnchor alignment = TextAnchor.MiddleLeft, bool muted = false)
     {
@@ -297,16 +307,16 @@ internal static class NeiSkin
     {
         if (Frames.TryGetValue(name, out var cached)) return cached;
         if (ModernityFrames.Find(name) is not { } rect) return null;
-        if (!Sources.TryGetValue(rect.File, out var source))
+        if (!Sources.TryGetValue(rect.ResourcePath, out var source))
         {
-            source = LoadTexture(NeiAssets.Modernity(rect.File), readable: true);
-            Sources.Add(rect.File, source);
+            source = LoadTexture(rect.ResourcePath, readable: true);
+            Sources.Add(rect.ResourcePath, source);
         }
         Texture2D? cropped = null;
         if (source != null && source.width >= rect.X + rect.Width && source.height >= rect.Y + rect.Height)
         {
             int bottom = source.height - rect.Y - rect.Height;
-            cropped = NewTexture(rect.Width, rect.Height, "Modernity NEI: " + name);
+            cropped = NewTexture(rect.Width, rect.Height, "NEI: " + name);
             cropped.SetPixels(source.GetPixels(rect.X, bottom, rect.Width, rect.Height));
             cropped.Apply(false, true);
         }
@@ -404,6 +414,8 @@ internal static class NeiSkin
         internal readonly GUIStyle ButtonSelected;
         internal readonly GUIStyle ButtonDisabled;
         internal readonly GUIStyle TextField;
+        internal readonly GUIStyle? SearchIdle;
+        internal readonly GUIStyle? SearchFocused;
         internal readonly GUIStyle TooltipTitle;
         internal readonly GUIStyle TooltipDetail;
         internal readonly GUIStyle TooltipDetailShadow;
@@ -426,6 +438,8 @@ internal static class NeiSkin
 
             TextField = ContentStyle(TextAnchor.MiddleLeft, 6);
             ApplyStates(TextField, null, null, FieldUnfocusedInk, FieldFocusedInk);
+            SearchIdle = SearchStyle(CropFrame("search_field"), OverlayInk);
+            SearchFocused = SearchStyle(CropFrame("search_field_focused"), darkInk);
             TooltipTitle = TextStyle(TextAnchor.UpperLeft, TooltipInk, 13, wrap: true);
             TooltipDetail = TextStyle(TextAnchor.UpperLeft, TooltipAccent, 12, wrap: true);
             TooltipDetailShadow = TextStyle(TextAnchor.UpperLeft, Shadow, 12, wrap: true);
@@ -455,6 +469,16 @@ internal static class NeiSkin
             // Every row is cropped into an isolated point-filtered texture before Unity slices it.
             style.border = new RectOffset(edge, edge, edge, edge);
             ApplyStates(style, normal, active, ink, ink);
+            return style;
+        }
+
+        private static GUIStyle? SearchStyle(Texture2D? frame, Color ink)
+        {
+            if (frame == null) return null;
+            var style = ContentStyle(TextAnchor.MiddleLeft, 6);
+            // One-pixel outline and two extra rows of inset shadow along the top.
+            style.border = new RectOffset(1, 1, 3, 1);
+            ApplyStates(style, frame, frame, ink, ink);
             return style;
         }
 

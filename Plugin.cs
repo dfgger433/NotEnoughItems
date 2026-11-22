@@ -13,7 +13,7 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.3.0")]
+[BepInPlugin(Guid, "Not Enough Items", "1.3.1")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
@@ -57,13 +57,16 @@ public sealed class Plugin : BaseUnityPlugin
     private float _nextRefresh;
     private int _updatedFrame = -1;
 
-    internal bool TryGetItemTooltip(out (string, string) tooltip)
+    internal bool SuppressNativeTooltip
     {
-        tooltip = default;
-        if (!OverlayActive || NativePointerActive || PauseHandler.paused ||
-            SettingsMenu.instance || (ConsoleScript.instance && ConsoleScript.instance.active)) return false;
-        var mouse = Input.mousePosition;
-        return _window.TryGetItemTooltip(new Vector2(mouse.x, Screen.height - mouse.y), out tooltip);
+        get
+        {
+            if (_window == null || PauseHandler.paused || SettingsMenu.instance ||
+                (ConsoleScript.instance && ConsoleScript.instance.active)) return false;
+            var mouse = Input.mousePosition;
+            return NativeTooltip.Suppress(OverlayActive,
+                _window.NativeTooltipHit(new Vector2(mouse.x, Screen.height - mouse.y)));
+        }
     }
 
     internal bool SuppressDuplicate => OverlayActive && _replaceUei.Value;
@@ -463,7 +466,6 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDisable()
     {
-        NativeTooltipLayer.Restore();
         _surface?.SetInputShield(transform, false);
         _window?.ResetView();
         _window?.Hide();
@@ -479,7 +481,6 @@ public sealed class Plugin : BaseUnityPlugin
         if (_enabled != null) _enabled.SettingChanged -= OnVisibilityChanged;
         BookmarkCrafting.Release();
         _harmony?.UnpatchSelf();
-        NativeTooltipLayer.Release();
         NeiSkin.Release();
         NeiActions.Enabled = false;
         if (Instance == this) Instance = null;

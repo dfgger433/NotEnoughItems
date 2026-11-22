@@ -11,6 +11,7 @@ namespace NotEnoughItems;
 internal sealed partial class NeiWindow
 {
     internal const string SearchControl = "NEI.ItemSearch";
+    private const string CatalogSearchControl = "NEI.CatalogSearch";
     internal const string GroupControl = "NEI.BookmarkGroup";
     internal const string QuantityControl = "NEI.Quantity";
     private readonly Plugin _plugin;
@@ -25,9 +26,6 @@ internal sealed partial class NeiWindow
     private readonly Stack<(string? Item, bool Usage, string? Category, int Index, string[] Contents, Item? LiveItem)> _back = new();
     private string[] _lookupContents = Array.Empty<string>();
     private readonly List<(Rect Rect, string Id)> _itemTargets = new();
-    private readonly List<(Rect Rect, string Title, CatalogItem? Item, string? Details, Item? Instance)> _tooltipSlots = new();
-    private int _tooltipFrame = -1;
-    private bool _hoveringItemSlot;
     private Item? _lookupItem;
     private Rect _left, _right, _center, _inspector, _searchRect, _groupRect, _quantityRect, _leftTools;
     private bool _bookmarksVisible = true;
@@ -44,7 +42,8 @@ internal sealed partial class NeiWindow
     private int GiveQuantity => Math.Min(64, BookmarkQuantity);
     private int _seenRevision = -1;
     private string? _item, _category;
-    private bool _usage, _open, _options, _groups, _focusSearch, _searchFocused;
+    private bool _usage, _open, _options, _groups, _searchFocused;
+    private string? _focusSearch;
     private bool _skipFocusFrame;
     private string? _tipTitle, _tipBody, _status;
     private float _statusUntil;
@@ -69,6 +68,7 @@ internal sealed partial class NeiWindow
         _showGrid = config.Bind("NotEnoughItems", "ItemList", true, "Show the item catalog outside the native inventory.");
         _showInventoryGrid = config.Bind("NotEnoughItems", "ItemListInInventory", false, "Show the right-hand item catalog beside the native radial inventory.");
         _book.Load(_saved.Value);
+        InitCatalogGroups(config);
     }
 
     private string L(string en, string zh) => _plugin.Chinese ? zh : en;
@@ -86,10 +86,8 @@ internal sealed partial class NeiWindow
 
     internal void Hide()
     {
-        _left = _right = _inspector = _searchRect = _groupRect = _quantityRect = _leftTools = default;
+        _left = _right = _inspector = _searchRect = _groupRect = _catalogGroupRect = _quantityRect = _leftTools = default;
         _itemTargets.Clear();
-        _tooltipSlots.Clear();
-        _tooltipFrame = -1;
         _lookupItem = null;
         ClearBookmarkHits();
         _bookmarkDrag = null;
@@ -104,14 +102,17 @@ internal sealed partial class NeiWindow
     }
     internal void ResetView()
     {
+        if (_catalogGroupsDirty) SaveCatalogGroupsNow();
+        _catalogGroupEditing = false;
+        _catalogGroupEditText = string.Empty;
         _productionContext++;
-        _open = _treeOpen = _returnToTree = _options = _groups = _searchFocused = _focusSearch = false;
+        _open = _treeOpen = _returnToTree = _options = _groups = _searchFocused = false;
+        _focusSearch = null;
         _bookmarkDrag = null;
         _activeRecipe = null;
         ClearBookmarkHits();
         _back.Clear();
         _itemTargets.Clear();
-        _tooltipSlots.Clear(); _tooltipFrame = -1;
         _lookupItem = null;
         _expandedRequirement = -1;
         _requirementRecipe = null;
@@ -137,9 +138,17 @@ internal sealed partial class NeiWindow
         return (ModalOpen && _inspector.Contains(pointer)) || (ShowLeft && _left.Contains(pointer)) ||
             (ShowRight && _right.Contains(pointer)) || _searchRect.Contains(pointer) || _leftTools.Contains(pointer);
     }
-    internal bool SearchHit(Vector2 pointer) => _searchRect.Contains(pointer / Mathf.Max(.01f, _scale));
-    internal bool GroupHit(Vector2 pointer) => _groupRect.Contains(pointer / Mathf.Max(.01f, _scale)) || _quantityRect.Contains(pointer / Mathf.Max(.01f, _scale));
-    internal static bool IsTextControl(string? name) => name is SearchControl or GroupControl or QuantityControl;
+    internal bool SearchHit(Vector2 pointer)
+    {
+        pointer /= _scale;
+        return _searchRect.Contains(pointer) || ShowRight && new NeiLayout.CatalogPanel(_right).Search.Contains(pointer);
+    }
+    internal bool GroupHit(Vector2 pointer)
+    {
+        pointer /= _scale;
+        return _groupRect.Contains(pointer) || _quantityRect.Contains(pointer) || ShowRight && _catalogGroupRect.Contains(pointer);
+    }
+    internal static bool IsTextControl(string? name) => name is SearchControl or CatalogSearchControl or CatalogGroupControl or GroupControl or QuantityControl;
     internal string? ItemAt(Vector2 pointer)
     {
         pointer /= Mathf.Max(.01f, _scale);
@@ -147,25 +156,22 @@ internal sealed partial class NeiWindow
             if (_itemTargets[i].Rect.Contains(pointer)) return _itemTargets[i].Id;
         return null;
     }
-    internal bool TryGetItemTooltip(Vector2 pointer, out (string, string) result)
+    /// <summary>
+    /// Hit-tests only the panels and controls that were actually drawn. The stock
+    /// tooltip is untouched outside this union, including while a native drag is live.
+    /// </summary>
+    internal bool NativeTooltipHit(Vector2 pointer)
     {
-        result = default;
-        if (_tooltipFrame < 0 || Time.frameCount - _tooltipFrame > 2 || !Hit(pointer)) return false;
-        var logical = pointer / _scale;
-        for (int i = _tooltipSlots.Count - 1; i >= 0; i--)
-        {
-            var slot = _tooltipSlots[i];
-            if (!slot.Rect.Contains(logical)) continue;
-            result = NativeTooltip.ForItem(slot.Title, slot.Item, slot.Details, slot.Instance);
-            return !string.IsNullOrEmpty(result.Item1);
-        }
-        return false;
+        pointer /= Mathf.Max(.01f, _scale);
+        return NativeTooltip.Hit(pointer,
+            (ModalOpen, _inspector), (ShowLeft, _left), (ShowRight, _right),
+            (true, _searchRect), (true, _leftTools), (true, _groupRect), (true, _quantityRect));
     }
 
     internal bool RequestSearchFocus()
     {
-        if (_options || (!_open && !_treeOpen && !ShowRight)) return false;
-        _focusSearch = true;
+        if (!_open && !_treeOpen && !ShowRight || _options && !ShowRight) return false;
+        _focusSearch = !_options && (_open || _treeOpen) ? SearchControl : CatalogSearchControl;
         return true;
     }
 
@@ -333,7 +339,6 @@ internal sealed partial class NeiWindow
         _item = id;
         _lookupContents = Array.Empty<string>();
         _lookupItem = null;
-        _tooltipSlots.Clear(); _tooltipFrame = -1;
         _selectedRecipeBookmark = null;
         _craftableOnly = false;
         _activeRecipe = null;
@@ -376,12 +381,10 @@ internal sealed partial class NeiWindow
         }
         _tipTitle = _tipBody = null;
         _bookmarkTip = null;
-        _searchRect = _groupRect = _quantityRect = _leftTools = default;
+        _searchRect = _groupRect = _catalogGroupRect = _quantityRect = _leftTools = default;
         if (e.type == EventType.Repaint)
         {
-            _itemTargets.Clear(); ClearBookmarkHits(); _tooltipSlots.Clear();
-            _tooltipFrame = Time.frameCount;
-            _hoveringItemSlot = false;
+            _itemTargets.Clear(); ClearBookmarkHits();
             if ((_bookmarkDrag is { } drag && !Input.GetMouseButton(drag.Button)) || !ShowLeft || _plugin.NativePointerActive) _bookmarkDrag = null;
         }
         Matrix4x4 savedMatrix = GUI.matrix;
@@ -392,14 +395,14 @@ internal sealed partial class NeiWindow
             bool modalAtStart = ModalOpen;
             if (ShowLeft) DrawBookmarkPanel(_left);
             if (ShowRight) DrawCatalog(_right);
-            DrawBottomRail(showSearch: !modalAtStart && ShowRight);
+            DrawLeftTools(NeiLayout.LeftTools(_height));
             if (modalAtStart && ModalOpen)
             {
                 if (_options) DrawOptions(_inspector);
                 else if (_treeOpen) DrawBookmarkTree(_inspector);
                 else DrawInspector(_inspector);
             }
-            if (e.type == EventType.Repaint && !_hoveringItemSlot)
+            if (e.type == EventType.Repaint)
             {
                 if (_bookmarkTip != null) DrawBookmarkChainTip(e.mousePosition);
                 else if (_tipTitle != null) NeiSkin.Tooltip(e.mousePosition, _tipTitle, _tipBody);
