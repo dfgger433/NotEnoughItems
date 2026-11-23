@@ -1,6 +1,5 @@
 using System;
 using System.Reflection;
-using BepInEx.Bootstrap;
 
 namespace NotEnoughItems;
 
@@ -11,8 +10,6 @@ internal readonly struct CheatSession(CheatAccess access, object? transport = nu
     internal CheatAccess Access { get; } = access;
     internal object? Transport { get; } = transport;
     private const BindingFlags PublicStatic = BindingFlags.Public | BindingFlags.Static;
-    private const string TogetherGuid = "CasualtiesMP";
-    private const string LegacyGuid = "KrokoshaCasualtiesMP";
     private delegate void AdminCommand(in string command);
 
     internal bool Supports(string name)
@@ -34,49 +31,21 @@ internal readonly struct CheatSession(CheatAccess access, object? transport = nu
 
     internal static CheatSession Detect(Body body)
     {
-        var plugins = Chainloader.PluginInfos;
-        if (plugins == null) return default;
-        // Unrecognized integrations and connecting legacy sessions cannot be treated as offline.
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            string? name = assembly.GetName().Name;
-            if ((name == TogetherGuid || name == LegacyGuid) && !plugins.ContainsKey(name)) return default;
-        }
-        if (plugins.TryGetValue(LegacyGuid, out var legacy))
-        {
-            var assembly = legacy.Instance?.GetType().Assembly;
-            var mp = assembly?.GetType("KrokoshaCasualtiesMP.KrokoshaScavMultiplayer");
-            var transport = assembly?.GetType("KrokoshaCasualtiesMP.Net")?.GetProperty("TRANSPORT", PublicStatic);
-            if (ReadBool(mp, "network_system_is_running") != false || ReadBool(mp, "network_system_is_client_and_waiting_connecting") != false ||
-                transport == null || transport.GetValue(null) != null) return default;
-        }
-        if (!plugins.TryGetValue(TogetherGuid, out var together)) return new(CheatAccess.Offline);
-        var mod = together.Instance?.GetType().Assembly;
-        var net = mod?.GetType("Together.Net");
-        var transportProperty = net?.GetProperty("Transport", PublicStatic);
-        if (transportProperty == null) return default;
-        object? currentTransport = transportProperty.GetValue(null);
-        bool? running = ReadBool(net, "IsRunning");
-        if (running == false && currentTransport == null) return new(CheatAccess.Offline);
-        if (running != true || currentTransport == null || ReadBool(net, "IsConnected") != true) return default;
-        var playerType = mod?.GetType("Together.ScavPlayer");
-        var localPlayer = playerType?.GetField("LocalPlayer", PublicStatic)?.GetValue(null);
-        if (localPlayer is not UnityEngine.Object player || !player ||
-            playerType?.GetField("body", BindingFlags.Public | BindingFlags.Instance)?.GetValue(localPlayer) is not Body localBody ||
-            localBody != body) return default;
-
-        var con = mod?.GetType("Together.Con");
+        var session = NativePlaySession.Detect(body);
+        if (session.Offline) return new(CheatAccess.Offline);
+        if (session.Together is not { } mod) return default;
+        var net = mod.GetType("Together.Net");
+        var con = mod.GetType("Together.Con");
         var dispatcher = con?.GetMethod("ExecuteCommandAdminNoLog", PublicStatic, null, [typeof(string).MakeByRefType()], null);
         if (dispatcher?.ReturnType != typeof(void)) return default;
-        bool? server = ReadBool(net, "IsServer"), client = ReadBool(net, "IsClient");
-        var rules = mod?.GetType("Together.Multiplayer")?.GetField("rules", PublicStatic)?.GetValue(null);
+        bool? server = NativePlaySession.ReadBool(net, "IsServer"), client = NativePlaySession.ReadBool(net, "IsClient");
+        var rules = mod.GetType("Together.Multiplayer")?.GetField("rules", PublicStatic)?.GetValue(null);
         // For forwarded requests, sv_cheats must also permit execution on the host.
         bool? canCheat = CallBool(con, "CanCheat");
         if (rules?.GetType().GetField("sv_cheats")?.GetValue(rules) is not true) canCheat = false;
-        CheatAccess access = CheatPermission.ForTogether(running, true, server, client, canCheat, CallBool(con, "CanExecuteAdminCommands"));
-        return new CheatSession(access, currentTransport, con);
+        CheatAccess access = CheatPermission.ForTogether(true, true, server, client, canCheat, CallBool(con, "CanExecuteAdminCommands"));
+        return new CheatSession(access, session.Transport, con);
     }
 
-    private static bool? ReadBool(Type? type, string property) => type?.GetProperty(property, PublicStatic)?.GetValue(null) as bool?;
     private static bool? CallBool(Type? type, string method) => type?.GetMethod(method, PublicStatic, null, Type.EmptyTypes, null)?.Invoke(null, null) as bool?;
 }

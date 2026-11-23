@@ -84,6 +84,7 @@ static int RunTests()
         ("native drag releases over NEI cancel only without a real drop target", DragReleaseOwnership),
         ("closing the inventory cancels a drag without cancelling ordinary radial transitions", DragInventoryClose),
         ("missed native release is cleared without stealing the release frame", MissedDragRelease),
+        ("Together request receipts are owned, matched and collected at most once", TogetherCraftRequestTests.Run),
         ("Together permissions distinguish hosts, authorized clients, and unknown sessions", MultiplayerPermissions),
         ("multiplayer give only targets the caller and accepts bounded item tokens", MultiplayerGiveCommand),
         ("Tab key and character events do not transfer focus to NEI search", TabDoesNotFocusSearch),

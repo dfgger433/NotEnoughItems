@@ -95,6 +95,8 @@ internal sealed partial class NeiWindow
         int generation = _productionContext;
         string page = _group;
         var body = camera.body;
+        var panel = camera.craftingPanel;
+        var world = WorldGeneration.world;
         int revision = _catalog.Revision;
         _producing = true;
         _plugin.StartCoroutine(Run());
@@ -103,8 +105,9 @@ internal sealed partial class NeiWindow
         IEnumerator Run()
         {
             var job = BookmarkCrafting.Execute(plan, Status, () => generation == _productionContext && _group == page && ShowLeft &&
-                _plugin.isActiveAndEnabled && !_plugin.NativePointerActive && camera && PlayerCamera.main == camera &&
-                camera.body == body && camera.craftingPanel && camera.craftingPanel.activeInHierarchy && !PauseHandler.paused && _catalog.Revision == revision, route, PreferredMaterials);
+                _plugin.isActiveAndEnabled && _plugin.IsCrafting && !_options && !_plugin.NativePointerActive && camera && PlayerCamera.main == camera &&
+                camera.body == body && camera.craftingPanel == panel && panel && panel.activeInHierarchy && WorldGeneration.world == world &&
+                !PauseHandler.paused && _catalog.Revision == revision, route, PreferredMaterials);
             try
             {
                 while (true)
