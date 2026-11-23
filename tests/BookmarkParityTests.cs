@@ -5,6 +5,7 @@ using NotEnoughItems;
 #if RECIPE_TESTS
 using System.Collections;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using ProviderRecipe = NotEnoughItems.Recipe;
 #endif
 
@@ -15,20 +16,32 @@ internal static class BookmarkParityTests
         Action[] checks =
         [
             GroupDropsRespectBrackets,
+            ReturningToEarlierGridUsesItsLastSlot,
+            ReturningToDefaultPageAppendsAndPersists,
             RangeAndResizePreserveBoundaries,
+            UngroupKeepsBookmarkedItemsAndRecipes,
             DisplayStateIsScoped,
             RecipeFoldKeepsSharedDependenciesVisible,
             GroupQuantityChangesAreScoped,
             LegacyGroupedSaveMigrates,
             RecipeStateRoundTrips,
+            FavoriteMaterialsRoundTrip,
             ClipboardScopesAndRemapsGroups,
             BadClipboardIsAtomic,
 #if RECIPE_TESTS
+            OrdinaryAndGroupedToolsFollowCarriedStock,
             GroupBalanceStaysWithinSavedRecipes,
             GroupBalanceReusesProductionAndTools,
             GroupBalanceKeepsConditionAndTypeBoundaries,
             VariantSelectionKeepsSlotsAndTypes,
+            ChainRequirementListsAndSwitchesAlternatives,
+            LiquidBookmarkPreviewsRotateWithoutSavingOrChangingChainAllocation,
+            LiquidPropertyLookupPreservesConcreteTargetsAndNavigation,
             ProductionUsesSelectedEntryAndCarriedStock,
+            ProductionDoesNotTurnComputedPrerequisitesIntoOrders,
+            ProductionUsesNearbyOnlyForInputs,
+            ProductionAllocatesDistinctGenericStock,
+            PreferredCarriedMaterialBeatsRicherAlternative,
             ProductionKeepsVariantsOfDuplicateRecipes,
             ProductionDoesNotDoubleCountStock,
             CircularProductionReportsCycle,
@@ -42,6 +55,22 @@ internal static class BookmarkParityTests
             catch (Exception error) { failures.Add(new InvalidOperationException(check.Method.Name, error)); }
         }
         if (failures.Count > 0) throw new AggregateException("Bookmark parity checks failed.", failures);
+    }
+
+    private static void FavoriteMaterialsRoundTrip()
+    {
+        var book = new BookmarkBook();
+        Check(book.ToggleFavoriteMaterial("liquid:water") && book.ToggleFavorite("recipe/game/filter"), "Raw and recipe favorites can coexist.");
+        var saved = new BookmarkBook();
+        Check(saved.Load(book.Serialize()) && saved.IsFavoriteMaterial("liquid:water") &&
+            saved.Favorites.SequenceEqual(new[] { "recipe/game/filter" }) && !saved.Entries.Any(),
+            "A favorite material persists without adding an ordinary bookmark or being parsed as a recipe.");
+        Check(saved.ToggleFavoriteMaterial("liquid:water") && !saved.IsFavoriteMaterial("liquid:water"), "Clicking again clears the preference.");
+        Check(saved.SetFavoriteRoute("item:filter", "recipe/game/filter") && saved.SetFavoriteRoute("liquid:water", "recipe/game/filter"), "Coproducts can have independent favorites.");
+        var copy = new BookmarkBook();
+        Check(copy.Load(saved.Serialize()) && copy.FavoriteRoute("liquid:water") == "recipe/game/filter" &&
+            copy.SetFavoriteRoute("item:filter", null) && copy.FavoriteRoute("item:filter") == null &&
+            copy.FavoriteRoute("liquid:water") != null, "Changing one route does not unfavorite its coproduct.");
     }
 
     private static void GroupDropsRespectBrackets()
@@ -72,6 +101,45 @@ internal static class BookmarkParityTests
         Check(book.RemoveGroup("page", "first"), "Remove both members of one bracket.");
         PageOrder(book, "page", c, d, loose);
         PageOrder(book, "other", otherPage);
+    }
+
+    private static void ReturningToEarlierGridUsesItsLastSlot()
+    {
+        foreach (bool fullTail in new[] { false, true })
+        {
+            var book = new BookmarkBook();
+            var first = Add(book, "0", "item:first", fullTail ? "" : "top-bracket");
+            var tail = Add(book, "0", "item:tail");
+            var remaining = Add(book, "0", "item:remaining", "next-bracket");
+            var moved = Add(book, "0", "item:moved", "next-bracket");
+            bool? before = BookmarkBoardPaging.EarlierGridDropBefore(1, 0, tailCanPack: true, tailSlots: fullTail ? 2 : 1, columns: 2);
+            Check(before == fullTail, "Use a free slot after the last bookmark, or make room before it if the row is full.");
+            Check(book.Move(moved, tail, reorderOnly: true, before: before.GetValueOrDefault()), "Move the bookmark from the second screen.");
+            PageOrder(book, "0", fullTail ? new[] { first, moved, tail, remaining } : new[] { first, tail, moved, remaining });
+        }
+        Check(BookmarkBoardPaging.EarlierGridDropBefore(1, 0, tailCanPack: false, tailSlots: 1, columns: 4) == true,
+            "A queue row cannot accept another bookmark even when it has empty cells.");
+        Check(BookmarkBoardPaging.EarlierGridDropBefore(1, 0, true, 4, 4, tailContinuesFromAbove: true) == false,
+            "A recipe spanning several rows must not send the returned bookmark to the top of the screen.");
+        Check(BookmarkBoardPaging.EarlierGridDropBefore(1, 1, true, 1, 2) == null &&
+            BookmarkBoardPaging.EarlierGridDropBefore(0, 1, true, 1, 2) == null,
+            "Same-screen and forward moves retain their pointer-selected insertion position.");
+    }
+
+    private static void ReturningToDefaultPageAppendsAndPersists()
+    {
+        var book = new BookmarkBook();
+        var first = Add(book, "0", "item:first");
+        var moved = Add(book, "0", "item:moved");
+        var last = Add(book, "0", "item:last", "chain");
+        var other = Add(book, "second", "item:other");
+        Check(book.DropAtEnd(moved, "second", entireGroup: false) && book.DropAtEnd(moved, "0", entireGroup: false),
+            "Move a bookmark to the second named page and back.");
+        PageOrder(book, "0", first, last, moved);
+        PageOrder(book, "second", other);
+        var restored = new BookmarkBook();
+        Check(restored.Load(book.Serialize()) && restored.Page("0").Select(entry => entry.Id).SequenceEqual(new[] { first.Id, last.Id, moved.Id }),
+            "The returned bookmark stays below the existing bookmarks after loading.");
     }
 
     private static void RangeAndResizePreserveBoundaries()
@@ -105,6 +173,21 @@ internal static class BookmarkParityTests
         Check(book.ResizeGroup("page", middle, d, fromStart: true, remove: true), "Pulling a handle past the opposite end dissolves the group.");
         Check(book.Page("page").All(entry => entry.Group == "") && !book.ToggleCompact("page", middle), "Dissolving leaves no orphan group state or members.");
         PageOrder(book, "page", left, a, b, c, d, right);
+    }
+
+    private static void UngroupKeepsBookmarkedItemsAndRecipes()
+    {
+        var book = new BookmarkBook();
+        var item = Add(book, "page", "item:shared", "group");
+        var recipe = Add(book, "page", "recipe/api/shared", "group");
+        var other = Add(book, "other", "item:shared", "group");
+        Check(book.SetQuantity(item, 6) && book.ToggleChain("page", "group") && book.ToggleCollapsed("page", "group"),
+            "Prepare a folded group with a quantity and a saved recipe.");
+        Check(book.Ungroup("page", "group") && item.Group == "" && recipe.Group == "" && other.Group == "group",
+            "Ungroup changes only the selected bracket, including its recipe.");
+        Check(item.Quantity == 6 && recipe.IsRecipe && !book.IsChainEnabled("page", "group") && !book.IsCollapsed("page", "group"),
+            "Ungroup retains entry data and removes stale bracket state.");
+        PageOrder(book, "page", item, recipe);
     }
 
     private static void DisplayStateIsScoped()
@@ -418,6 +501,248 @@ internal static class BookmarkParityTests
             "A chosen item uses quality as a threshold, a liquid uses it as strength, and an unmatched tag remains generic.");
     }
 
+    internal static void ChainNotesFollowInterfaceLanguage()
+    {
+        const string english = "No concrete item was selected for this requirement.";
+        const string chinese = "此原料需求尚未选定具体物品。";
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        var catalog = new Catalog();
+        var input = new RecipeIngredient("", qualityId: "test-material", displayName: "Test material");
+        var recipe = Recipe("localized-notes", [input], [new RecipeOutput("result")]);
+        catalog.RegisterRecipe(recipe);
+        var config = new BepInEx.Configuration.ConfigFile(System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "nei-language-test-" + Guid.NewGuid() + ".cfg"), saveOnInit: false) { SaveOnConfigSet = false };
+        var language = config.Bind("NotEnoughItems", "Language", "en");
+        var pluginType = PluginType("Plugin");
+        var plugin = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(pluginType);
+        pluginType.GetField("_language", instance)!.SetValue(plugin, language);
+        var windowType = PluginType("NeiWindow");
+        var window = Activator.CreateInstance(windowType, instance, null, [plugin, config], null)!;
+        windowType.GetField("_catalog", instance)!.SetValue(window, catalog);
+        var book = windowType.GetField("_book", instance)!.GetValue(window)!;
+        book.GetType().GetMethod("Add", instance)!.Invoke(book,
+            ["0", "recipe/" + recipe.Source + "/" + recipe.Id, 1, "chain", true, "item:result", true]);
+        var buildTip = windowType.GetMethod("BuildChainTip", instance)!;
+        var buildRows = windowType.GetMethod("BuildTreeRows", instance)!;
+        var view = windowType.GetField("_treeView", instance)!;
+        view.SetValue(window, Enum.Parse(view.FieldType, "Bill"));
+        var plan = Calculate(catalog, Entries(BalanceEntry("item:result", 1, recipe),
+            BalanceEntry("recipe/missing")));
+        var diagnostics = Rows(plan, "Diagnostics");
+        Check(diagnostics.Any(issue => Property<string>(issue, "Message") == english && Property<string>(issue, "ItemId") == input.BrowseId),
+            "The language-neutral plan still retains the same diagnostic data and English fallback.");
+
+        foreach (var (choice, expected, other, missing) in new[]
+        {
+            ("en", english, chinese, "Bookmark recipe could not be resolved."),
+            ("zh-CN", chinese, english, "找不到书签中保存的配方。"),
+            ("en", english, chinese, "Bookmark recipe could not be resolved.")
+        })
+        {
+            language.Value = choice;
+            var tip = buildTip.Invoke(window, ["key", "Chain", new[] { "chain" }, false])!;
+            var blocks = (IEnumerable)tip.GetType().GetField("Blocks", instance)!.GetValue(tip)!;
+            var notes = blocks.Cast<ITuple>().Select(row => (string)row[0]!).ToArray();
+            Check(notes.Contains(expected) && !notes.Contains(other), "The chain tooltip must only show the selected language.");
+
+            buildRows.Invoke(window, [plan]);
+            var rows = (IEnumerable)windowType.GetField("_treeRows", instance)!.GetValue(window)!;
+            var titles = rows.Cast<object>().Select(row => (string)row.GetType().GetField("Title", instance)!.GetValue(row)!).ToArray();
+            Check(titles.Contains(expected) && titles.Contains(missing) && !titles.Contains(other),
+                "The tree renders localized diagnostics from the same plan without changing IDs or recalculating it.");
+        }
+    }
+
+    private static void ChainRequirementListsAndSwitchesAlternatives()
+    {
+        const string quality = "bookmark-parity-rinse";
+        var catalog = new Catalog();
+        var water = new CatalogItem("parity-water", kind: CatalogItemKind.Liquid, qualities: [new CraftingQuality(quality, 1)]);
+        var diluted = new CatalogItem("parity-diluted", kind: CatalogItemKind.Liquid, qualities: [new CraftingQuality(quality, .25f)]);
+        var cloth = new CatalogItem("parity-cloth", qualities: [new CraftingQuality(quality, 2)]);
+        var paper = new CatalogItem("parity-paper", qualities: [new CraftingQuality(quality, 3)]);
+        foreach (var item in new[] { water, diluted, cloth, paper }) catalog.RegisterItem(item);
+        var liquidInput = new RecipeIngredient("", 100, isLiquid: true, qualityId: quality);
+        var itemInput = new RecipeIngredient("", 2, qualityId: quality);
+        var recipe = Recipe("rinse", [liquidInput, itemInput], [new RecipeOutput("rinse")]);
+        catalog.RegisterRecipe(recipe);
+
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
+        var windowType = PluginType("NeiWindow");
+        var config = new BepInEx.Configuration.ConfigFile(System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "nei-candidate-test-" + Guid.NewGuid() + ".cfg"), saveOnInit: false) { SaveOnConfigSet = false };
+        var window = Activator.CreateInstance(windowType, instance, null, [null, config], null)!;
+        windowType.GetField("_catalog", instance)!.SetValue(window, catalog);
+        var book = windowType.GetField("_book", instance)!.GetValue(window)!;
+        var add = book.GetType().GetMethod("Add", instance)!;
+        string recipeKey = "recipe/" + recipe.Source + "/" + recipe.Id;
+        var entry = add.Invoke(book, ["0", recipeKey, 1, "chain", true, "item:rinse", true]);
+        var otherEntry = add.Invoke(book, ["0", recipeKey, 1, "chain", true, "item:rinse", true]);
+        book.GetType().GetMethod("ToggleFavoriteMaterial", instance)!.Invoke(book, [water.BrowseId]);
+
+        var alternatives = windowType.GetMethod("DiagramAlternatives", instance)!;
+        var (_, liquids) = ((IReadOnlyList<CatalogItem>, IReadOnlyList<CatalogItem>))alternatives.Invoke(window, [recipe, 0, liquidInput])!;
+        Check(liquids.Select(item => item.BrowseId).ToHashSet().SetEquals([water.BrowseId, diluted.BrowseId]),
+            "The recipe page lists all eligible liquids regardless of stock (including weaker liquid by volume).");
+        var phase = windowType.GetField("_candidateCycleStep", instance)!;
+        var cycle = windowType.GetMethod("CycleCandidate", instance)!;
+        phase.SetValue(window, 0);
+        Check(ReferenceEquals(cycle.Invoke(window, [recipe, 0, liquids]), water), "The favorite is shown first.");
+        phase.SetValue(window, 1);
+        Check(ReferenceEquals(cycle.Invoke(window, [recipe, 0, liquids]), diluted), "A favorite cannot remove compatible liquids from rotation.");
+        var diagramAmount = windowType.GetMethod("DiagramAmount", statics)!;
+        string? Volume(CatalogItem item)
+        {
+            var amount = diagramAmount.Invoke(null, [liquidInput, item]);
+            return (string?)amount?.GetType().GetProperty("FullText", instance)?.GetValue(amount);
+        }
+        Check(Volume(water) == "100mL" && Volume(diluted) == "400mL", "Each fluid candidate shows its own required volume.");
+
+        var select = windowType.GetMethod("SelectBookmarkVariant", instance)!;
+        var variant = entry!.GetType().GetMethod("Variant", instance)!;
+        var open = windowType.GetMethod("OpenBookmarkRequirement", instance)!;
+        Check((bool)open.Invoke(window, [entry, 0])! &&
+            (string?)windowType.GetField("_selectedRecipeBookmark", instance)!.GetValue(window) == recipeKey &&
+            (int)windowType.GetField("_selectedRecipeIngredient", instance)!.GetValue(window)! == 0,
+            "A chain ingredient opens the saved recipe with its original requirement slot selected for expansion.");
+        select.Invoke(window, [entry, 0, diluted]);
+        select.Invoke(window, [entry, 1, paper]);
+        select.Invoke(window, [entry, 1, cloth]);
+        select.Invoke(window, [entry, 0, paper]);
+        Check((string?)variant.Invoke(entry, [0]) == diluted.BrowseId && (string?)variant.Invoke(entry, [1]) == cloth.BrowseId &&
+            variant.Invoke(otherEntry, [0]) == null && variant.Invoke(otherEntry, [1]) == null,
+            "A chain choice only edits the given bookmark and slot, and rejects a candidate of the wrong type.");
+        var plan = Calculate(catalog, Entries(windowType.GetMethod("BalanceEntry", instance)!.Invoke(window, [entry])!));
+        Amount(plan, "Inputs", diluted.BrowseId, 400);
+        Amount(plan, "Inputs", cloth.BrowseId, 1);
+        select.Invoke(window, [entry, 1, cloth]);
+        Check(variant.Invoke(entry, [1]) == null, "Selecting an already pinned material returns that slot to automatic.");
+
+        var items = new[] { cloth, paper };
+        var wheel = windowType.GetMethod("NextBookmarkVariant", statics)!;
+        Check((string?)wheel.Invoke(null, [items, null, cloth.BrowseId, 1]) == paper.BrowseId &&
+            (string?)wheel.Invoke(null, [items, null, paper.BrowseId, -1]) == cloth.BrowseId &&
+            wheel.Invoke(null, [items, paper.BrowseId, paper.BrowseId, 1]) == null,
+            "Shift+wheel changes the visible material from automatic and can also revert to automatic.");
+    }
+
+    private static void LiquidBookmarkPreviewsRotateWithoutSavingOrChangingChainAllocation()
+    {
+        const string quality = "preview-rinse";
+        var catalog = new Catalog();
+        var strong = new CatalogItem("rinse-a", kind: CatalogItemKind.Liquid, qualities: [new CraftingQuality(quality, 2)]);
+        var weak = new CatalogItem("rinse-b", kind: CatalogItemKind.Liquid, qualities: [new CraftingQuality(quality, .5f)]);
+        foreach (var item in new[] { strong, weak, new CatalogItem(weak.Id, qualities: [new CraftingQuality(quality, 1)]) })
+            catalog.RegisterItem(item);
+        var recipe = Recipe("rinse-preview", [new RecipeIngredient("", 100, isLiquid: true, qualityId: quality)], [new RecipeOutput("clean")]);
+        catalog.RegisterRecipe(recipe);
+        var (window, windowType, book) = CreateLiquidTestWindow(catalog);
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        var add = book.GetType().GetMethod("Add", instance)!;
+        var save = book.GetType().GetMethod("Serialize", instance)!;
+        var pin = book.GetType().GetMethod("SetVariant", instance)!;
+        string recipeKey = "recipe/" + recipe.Source + "/" + recipe.Id;
+        object ordinary = add.Invoke(book, ["0", recipeKey, 2, "", true, "item:clean", true])!;
+        object linked = add.Invoke(book, ["0", recipeKey, 2, "linked", true, "item:clean", true])!;
+        book.GetType().GetMethod("ToggleChain", instance)!.Invoke(book, ["0", "linked"]);
+        windowType.GetField("_bookmarkStock", instance)!.SetValue(window, new Dictionary<string, int> { [weak.BrowseId] = 1000 });
+        var cells = windowType.GetMethod("CellsForBookmark", instance)!;
+        object Cell(object entry, bool preview, object? owner = null) =>
+            ((IEnumerable)cells.Invoke(owner ?? window, [entry, false, preview])!).Cast<object>().Last();
+        static (string, double) Displayed(object cell, int phase)
+        {
+            cell.GetType().GetMethod("UpdatePreview", instance)!.Invoke(cell, [phase]);
+            return (Property<string>(cell, "Id"), Property<double>(cell, "Amount"));
+        }
+
+        string saved = (string)save.Invoke(book, [null])!;
+        var rotating = Cell(ordinary, true);
+        Check(Displayed(rotating, 0) == (strong.BrowseId, 100) && Displayed(rotating, 1) == (weak.BrowseId, 400) &&
+            Displayed(rotating, 2) == (strong.BrowseId, 100), "The same preview cell advances through liquids and recalculates mL for the whole batch.");
+        var stable = Cell(ordinary, false);
+        Check(Displayed(stable, 1) == (strong.BrowseId, 100), "Non-display consumers of bookmark cells do not inherit the animation phase.");
+        var chain = Cell(linked, true);
+        Check(Displayed(chain, 0) == (weak.BrowseId, 400) && Displayed(chain, 1) == (weak.BrowseId, 400), "Chain cells keep the planner's allocation.");
+        Check((string)save.Invoke(book, [null])! == saved, "Automatic cycling does not alter any saved bookmark fields.");
+
+        pin.Invoke(book, [ordinary, 0, weak.Id]); // old raw-ID pin; its ID is also used by a solid
+        string legacy = (string)save.Invoke(book, [null])!;
+        var (restored, _, restoredBook) = CreateLiquidTestWindow(catalog);
+        Check((bool)book.GetType().GetMethod("Load", instance)!.Invoke(restoredBook, [legacy, null])!, "Old raw-ID variant payload still loads.");
+        var loaded = ((IEnumerable)book.GetType().GetMethod("Page", instance)!.Invoke(restoredBook, ["0"])!).Cast<object>().First();
+        var pinned = Cell(loaded, true, restored);
+        Check(Displayed(pinned, 0) == (weak.BrowseId, 400) && Displayed(pinned, 1) == (weak.BrowseId, 400) &&
+            (string)save.Invoke(restoredBook, [null])! == legacy, "A persisted raw liquid pin wins by typed slot without changing its saved value.");
+    }
+
+    private static void LiquidPropertyLookupPreservesConcreteTargetsAndNavigation()
+    {
+        const string quality = "discovery-rinse";
+        var catalog = new Catalog();
+        var strong = new CatalogItem("query-rinse", kind: CatalogItemKind.Liquid, qualities: [new CraftingQuality(quality, 2), new CraftingQuality(quality, 3)]);
+        var weak = new CatalogItem("query-weak", kind: CatalogItemKind.Liquid, qualities: [new CraftingQuality(quality, .001f)]);
+        var solid = new CatalogItem(strong.Id, qualities: [new CraftingQuality(quality, 0)]);
+        var tagged = new CatalogItem("tagged-tool", tags: ["metal"]);
+        foreach (var item in new[] { strong, weak, solid, tagged,
+            new CatalogItem("placeholder", kind: CatalogItemKind.Virtual, qualities: [new CraftingQuality(quality, 1)]),
+            new CatalogItem("different-id", kind: CatalogItemKind.Liquid, qualities: [new CraftingQuality(quality + "-other", 1)]) })
+            catalog.RegisterItem(item);
+        var input = new RecipeIngredient("", 100, isLiquid: true, qualityId: quality);
+        Check(catalog.GetItemsWithQuality(quality.ToUpperInvariant()).Select(item => item.BrowseId).ToHashSet().SetEquals([strong.BrowseId, weak.BrowseId, solid.BrowseId]) &&
+            catalog.GetItemsWithQuality(quality).Count == 3 && catalog.GetItemsWithQuality("missing").Count == 0,
+            "Property discovery uses exact quality membership across item types, not eligible strength, duplicates, placeholders or partial IDs.");
+        Check(catalog.GetItemsWithProperty(input).Select(item => item.BrowseId).ToHashSet().SetEquals([strong.BrowseId, weak.BrowseId]) &&
+            catalog.GetItemsWithMatchingTag(new RecipeIngredient("", requiredTag: "metal")).Select(item => item.BrowseId).SequenceEqual([tagged.BrowseId]),
+            "Property queries preserve ingredient type and include below-threshold examples.");
+        Check(catalog.GetMatchingItems(input).All(item => item.IsLiquid), "The property list does not change recipe eligibility.");
+
+        var (window, windowType, _) = CreateLiquidTestWindow(catalog);
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        var propertyQuery = windowType.GetMethod("PropertyQuery", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var genericSolid = new RecipeIngredient("", 2, qualityId: quality);
+        Check(Equals(propertyQuery.Invoke(null, [input]), input) && Equals(propertyQuery.Invoke(null, [genericSolid]), genericSolid) &&
+            propertyQuery.Invoke(null, [new RecipeIngredient("water", isLiquid: true, qualityId: quality)]) == null,
+            "Generic fluid and solid properties are queryable while concrete requirements retain normal recipe lookup.");
+        var targets = (IList)windowType.GetField("_itemTargets", instance)!.GetValue(window)!;
+        var slot = new UnityEngine.Rect(0, 0, 20, 20);
+        var pointer = new UnityEngine.Vector2(10, 10);
+        targets.Add((slot, strong.BrowseId, input));
+        var lookup = windowType.GetMethod("TryLookupPropertyAt", instance)!;
+        var normal = windowType.GetMethod("Lookup", instance)!;
+        var itemAt = windowType.GetMethod("ItemAt", instance)!;
+        var property = windowType.GetField("_propertyQuery", instance)!;
+        var page = windowType.GetField("_propertyPage", instance)!;
+        var itemId = windowType.GetField("_item", instance)!;
+        normal.Invoke(window, ["item:prior", true, null, null]);
+        Check(Equals(itemAt.Invoke(window, [pointer]), strong.BrowseId) && (bool)lookup.Invoke(window, [pointer])! &&
+            Equals(property.GetValue(window), input), "The requirement opens a typed quality view but retains the displayed concrete ID for U and bookmarks.");
+        page.SetValue(window, 2);
+        Check((bool)lookup.Invoke(window, [pointer])! && Equals(page.GetValue(window), 2), "The same R query does not reopen an identical view.");
+        targets.Add((slot, weak.BrowseId, (RecipeIngredient?)null));
+        Check(!(bool)lookup.Invoke(window, [pointer])! && Equals(itemAt.Invoke(window, [pointer]), weak.BrowseId),
+            "A concrete result on top of the property target resolves as the concrete item.");
+        normal.Invoke(window, [weak.BrowseId, false, null, null]);
+        Check(property.GetValue(window) == null && Equals(itemId.GetValue(window), weak.BrowseId), "Result lookup uses its normal recipe context.");
+        var back = windowType.GetMethod("Back", instance)!;
+        back.Invoke(window, null);
+        Check(Equals(property.GetValue(window), input) && Equals(page.GetValue(window), 2), "Back restores the property result page.");
+        back.Invoke(window, null);
+        Check(property.GetValue(window) == null && Equals(itemId.GetValue(window), "item:prior") &&
+            Equals(windowType.GetField("_usage", instance)!.GetValue(window), true), "Back also restores the original usage lookup.");
+    }
+
+    private static (object Window, Type WindowType, object Book) CreateLiquidTestWindow(Catalog catalog)
+    {
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        var windowType = PluginType("NeiWindow");
+        var config = new BepInEx.Configuration.ConfigFile(System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "nei-liquid-test-" + Guid.NewGuid() + ".cfg"), saveOnInit: false) { SaveOnConfigSet = false };
+        var window = Activator.CreateInstance(windowType, instance, null, [null, config], null)!;
+        windowType.GetField("_catalog", instance)!.SetValue(window, catalog);
+        return (window, windowType, windowType.GetField("_book", instance)!.GetValue(window)!);
+    }
+
     private static void ProductionUsesSelectedEntryAndCarriedStock()
     {
         var makeCore = Recipe("make-core", [new RecipeIngredient("ore")], [new RecipeOutput("core", 3)]);
@@ -452,6 +777,111 @@ internal static class BookmarkParityTests
         var zeroTarget = Entries(BalanceEntry("liquid:oil", 0, press));
         Check(Rows(PlanCraft(catalog, zeroTarget, 0, topUp: false, stock), "Steps").Length == 0,
             "An explicit zero multiplier schedules no production.");
+    }
+
+    private static void ProductionDoesNotTurnComputedPrerequisitesIntoOrders()
+    {
+        var catalog = new Catalog();
+        var makeCore = Recipe("smelt-core", [new RecipeIngredient("ore")], [new RecipeOutput("core", 3)]);
+        var makeFrame = Recipe("build-frame", [new RecipeIngredient("core", 2)], [new RecipeOutput("frame")]);
+        var stock = new Dictionary<string, int> { ["item:ore"] = 8 };
+        var frame = BalanceEntry("item:frame", 2, makeFrame);
+        var defaultRoute = Entries(frame, BalanceEntry("item:core", 1, makeCore));
+        var extraRoute = Entries(frame, BalanceEntry("item:core", 2, makeCore));
+
+        var selectedDefault = Rows(PlanCraft(catalog, defaultRoute, 1, topUp: false, stock), "Steps").Single();
+        var selectedExtra = Rows(PlanCraft(catalog, extraRoute, 1, topUp: false, stock), "Steps").Single();
+        Check(Property<int>(selectedDefault, "EntryIndex") == 1 && Property<int>(selectedDefault, "Batches") == 1 &&
+            Property<int>(selectedExtra, "EntryIndex") == 1 && Property<int>(selectedExtra, "Batches") == 2,
+            "Selecting an intermediate requests its saved batches, not the work computed for downstream recipes.");
+        Check(Rows(PlanCraft(catalog, defaultRoute, null, topUp: false, stock), "Steps")
+            .Select(step => Property<int>(step, "Batches")).SequenceEqual(new[] { 2, 2 }),
+            "Two Frame batches require two Core batches when there is no separate Core order.");
+        Check(Rows(PlanCraft(catalog, extraRoute, null, topUp: false, stock), "Steps")
+            .Select(step => (Property<int>(step, "EntryIndex"), Property<int>(step, "Batches")))
+            .SequenceEqual(new[] { (1, 3), (0, 2) }),
+            "Whole-group append requests one extra Core batch on top of the two prerequisite batches, not three extra batches.");
+
+        stock["item:core"] = 3;
+        Check(Rows(PlanCraft(catalog, defaultRoute, 1, topUp: true, stock), "Steps").Length == 0,
+            "Three carried Cores cover the directly selected one-batch request.");
+        Check(Rows(PlanCraft(catalog, extraRoute, null, topUp: true, stock), "Steps")
+            .Select(step => (Property<int>(step, "EntryIndex"), Property<int>(step, "Batches")))
+            .SequenceEqual(new[] { (1, 2), (0, 2) }),
+            "Whole-group top-up credits the carried Cores to the one explicit extra batch, leaving only the two prerequisite batches.");
+    }
+
+    private static void ProductionUsesNearbyOnlyForInputs()
+    {
+        var makeCore = Recipe("nearby-core", [new RecipeIngredient("ore")], [new RecipeOutput("core", 3)]);
+        var makeFrame = Recipe("nearby-frame", [new RecipeIngredient("core", 2)], [new RecipeOutput("frame")]);
+        var entries = Entries(BalanceEntry("item:frame", 2, makeFrame), BalanceEntry("item:core", 1, makeCore));
+        var nearby = new Dictionary<string, int> { ["item:core"] = 2, ["item:frame"] = 50 };
+        var carried = new Dictionary<string, int> { ["item:frame"] = 1 };
+
+        object plan = PlanCraft(new Catalog(), entries, 0, topUp: true, carried, nearby: nearby);
+        var step = Rows(plan, "Steps").Single();
+        Check(Property<int>(step, "EntryIndex") == 0 && Property<int>(step, "Batches") == 1 &&
+            Rows(plan, "Missing").Length == 0,
+            "Nearby Cores replace prerequisite production, but nearby Frames do not count toward the carried target.");
+    }
+
+    private static void ProductionAllocatesDistinctGenericStock()
+    {
+        var catalog = new Catalog();
+        catalog.RegisterItem(new CatalogItem("parity-hemp", "Hemp", tags: ["parity-fiber"]));
+        catalog.RegisterItem(new CatalogItem("parity-flax", "Flax", tags: ["parity-fiber"]));
+        var fiber = new RecipeIngredient("", requiredTag: "parity-fiber");
+        var weave = Recipe("weave-two-fibers", [fiber, fiber], [new RecipeOutput("fabric")]);
+        var stock = new Dictionary<string, int> { ["item:parity-hemp"] = 1, ["item:parity-flax"] = 1 };
+        var entries = Entries(BalanceEntry("item:fabric", 1, weave));
+
+        object plan = PlanCraft(catalog, entries, 0, topUp: false, stock, favoriteMaterials: ["item:parity-hemp"]);
+        var inputs = Rows(Rows(plan, "Steps").Single(), "Inputs");
+        Check(Rows(plan, "Missing").Length == 0 && inputs.Select(input => Property<string>(input, "ItemId"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(stock.Keys),
+            "Two consumed slots can use one of each eligible material instead of reporting the preferred material missing twice.");
+    }
+
+    private static void PreferredCarriedMaterialBeatsRicherAlternative()
+    {
+        const string quality = "parity-wood";
+        var catalog = new Catalog();
+        catalog.RegisterItem(new CatalogItem("parity-plank", "Plank", qualities: [new global::CraftingQuality(quality, 1)]));
+        catalog.RegisterItem(new CatalogItem("parity-log", "Log", qualities: [new global::CraftingQuality(quality, 1)]));
+
+        var target = Recipe("build-fire", [new RecipeIngredient("", qualityId: quality)], [new RecipeOutput("fire")]);
+        var favorite = Recipe("make-plank", [], [new RecipeOutput("parity-plank", 1)]);
+        var alternative = Recipe("make-log", [], [new RecipeOutput("parity-log", 1)]);
+        var entries = Entries(
+            BalanceEntry("item:fire", 1, target),
+            PreferredBalanceEntry("item:parity-plank", 1, favorite),
+            BalanceEntry("item:parity-log", 1, alternative));
+
+        var carried = new Dictionary<string, int> { ["item:parity-plank"] = 1, ["item:parity-log"] = 20 };
+        object tree = Calculate(catalog, entries, carried);
+        var treeTarget = Rows(tree, "Steps").Single(step => Property<int>(step, "EntryIndex") == 0);
+        Check(Property<string>(Rows(treeTarget, "Inputs").Single(), "ItemId") == "item:parity-plank",
+            "The tree shows the favorite material selected for a generic slot.");
+        Check(Rows(tree, "Steps").All(step => Property<int>(step, "EntryIndex") != 1) &&
+            Rows(tree, "Links").Any(link => Property<bool>(link, "FromCarried") && Property<string>(link, "ItemId") == "item:parity-plank"),
+            "The tree credits the carried plank and skips unnecessary plank production.");
+        object preferred = PlanCraft(catalog, entries, 0, topUp: false, carried);
+        var preferredInput = Rows(Rows(preferred, "Steps").Single(), "Inputs").Single();
+        Check(Property<string>(preferredInput, "ItemId") == "item:parity-plank",
+            "A carried favorite sample wins over an alternative with more stock.");
+        Check(!HasDiagnostic(preferred, "RequirementUnresolved"), "The carried favorite satisfies the generic input.");
+
+        object fallback = PlanCraft(catalog, entries, 0, topUp: false,
+            new Dictionary<string, int> { ["item:parity-log"] = 20 });
+        var fallbackInput = Rows(Rows(fallback, "Steps").Single(), "Inputs").Single();
+        Check(Property<string>(fallbackInput, "ItemId") == "item:parity-log",
+            "When the favorite sample is unavailable, a carried eligible alternative is selected.");
+        Check(!HasDiagnostic(fallback, "RequirementUnresolved"), "The carried fallback satisfies the generic input.");
+
+        object rawPreference = PlanCraft(catalog, Entries(BalanceEntry("item:fire", 1, target)), 0, false, carried,
+            favoriteMaterials: ["item:parity-plank"]);
+        Amount(Rows(rawPreference, "Steps").Single(), "Inputs", "item:parity-plank", 1);
     }
 
     private static void ProductionKeepsVariantsOfDuplicateRecipes()
@@ -500,6 +930,61 @@ internal static class BookmarkParityTests
         object plan = PlanCraft(new Catalog(), entries, 0, topUp: false, new Dictionary<string, int>());
 
         Check(HasDiagnostic(plan, "Cycle"), "A mutually dependent production order with no initial supply must report a cycle.");
+        object seeded = PlanCraft(new Catalog(), entries, 0, topUp: false, new Dictionary<string, int> { ["item:cycle-a"] = 1 });
+        Check(!HasDiagnostic(seeded, "Cycle") && Rows(seeded, "Missing").Length == 0 &&
+            Rows(seeded, "Steps").Select(step => Property<int>(step, "EntryIndex")).SequenceEqual(new[] { 1, 0 }),
+            "One real seed resolves the cycle and puts the now-craftable dependency first.");
+    }
+
+    private static void OrdinaryAndGroupedToolsFollowCarriedStock()
+    {
+        const string quality = "preview-grip";
+        const string example = "item:preview-a", carried = "item:preview-b", other = "item:preview-c";
+        var catalog = new Catalog();
+        foreach (string id in new[] { example, carried, other })
+            catalog.RegisterItem(new CatalogItem(id.Substring(5), id, qualities: [new CraftingQuality(quality, 2)]));
+        var tool = new RecipeIngredient("", 2, isCatalyst: true, qualityId: quality, minimumCondition: .5f);
+        var material = new RecipeIngredient("", 2, qualityId: quality);
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        var windowType = PluginType("NeiWindow");
+        var config = new BepInEx.Configuration.ConfigFile(System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "nei-bookmark-test-" + Guid.NewGuid() + ".cfg"), saveOnInit: false) { SaveOnConfigSet = false };
+        object window = Activator.CreateInstance(windowType, instance, null, [null, config], null)!;
+        windowType.GetField("_catalog", instance)!.SetValue(window, catalog);
+        var book = windowType.GetField("_book", instance)!.GetValue(window)!;
+        var add = book.GetType().GetMethod("Add", instance)!;
+        var loose = add.Invoke(book, ["0", "recipe/api/tools-preview", 3, "", true, null, true]);
+        var grouped = add.Invoke(book, ["0", "recipe/api/tools-preview", 3, "group", true, null, true]);
+        var layout = windowType.GetField("_bookmarkLayout", instance)!;
+        var update = windowType.GetMethod("UpdateCarriedBookmarkTools", instance)!;
+        var select = windowType.GetMethod("SelectedBookmarkVariant", instance)!;
+
+        void Update(params (string Id, float Condition)[] stock) => update.Invoke(window, [stock.ToHashSet()]);
+        string? Select(object? entry, int slot, RecipeIngredient ingredient, bool preview = true) =>
+            (string?)select.Invoke(window, [entry, slot, ingredient, preview]);
+        void Expect(string expectedTool, string groupedTool) =>
+            Check(Select(loose, 0, tool) == expectedTool && Select(grouped, 0, tool) == groupedTool,
+                "Both ordinary and grouped slots must follow carried stock unless explicitly pinned.");
+
+        Expect(example, example);
+        object cached = Activator.CreateInstance(layout.FieldType)!;
+        layout.SetValue(window, cached);
+        Update((carried, .8f), (other, .4f));
+        Check(layout.GetValue(window) == null, "New carried tools invalidate the cached bookmark rows.");
+        Expect(carried, carried);
+        Check(Select(loose, 1, material) == example && Select(loose, 0, tool, preview: false) == example,
+            "Consumed materials and group pull targets keep their original selection.");
+        layout.SetValue(window, cached);
+        Update((other, .4f), (carried, .8f));
+        Check(ReferenceEquals(cached, layout.GetValue(window)), "Unchanged stock must not invalidate the bookmark rows.");
+        Update((carried, .4f), (other, .8f));
+        Check(layout.GetValue(window) == null, "Durability changes can change which carried tool qualifies.");
+        Expect(other, other);
+        book.GetType().GetMethod("SetVariant", instance)!.Invoke(book, [grouped, 0, carried]);
+        Update();
+        Expect(example, carried);
+        Update((other, .9f));
+        Expect(other, carried);
     }
 
     private static ProviderRecipe Recipe(string id, RecipeIngredient[] inputs, RecipeOutput[] outputs) =>
@@ -511,6 +996,10 @@ internal static class BookmarkParityTests
     private static object BalanceEntry(string id, int quantity = 1, ProviderRecipe? recipe = null, IReadOnlyDictionary<int, string>? variants = null) =>
         Activator.CreateInstance(PluginType("BookmarkChainBalanceEntry"), [id, quantity, recipe, false, variants])!;
 
+    private static object PreferredBalanceEntry(string id, int quantity = 1, ProviderRecipe? recipe = null) =>
+        Activator.CreateInstance(PluginType("BookmarkChainBalanceEntry"),
+            [id, quantity, recipe, false, null, true])!;
+
     private static Array Entries(params object[] entries)
     {
         var typed = Array.CreateInstance(PluginType("BookmarkChainBalanceEntry"), entries.Length);
@@ -519,10 +1008,11 @@ internal static class BookmarkParityTests
     }
 
     private static object Calculate(Catalog catalog, Array entries, IReadOnlyDictionary<string, int>? carried = null) =>
-        Balance("Calculate", catalog, entries, carried);
+        Balance("Calculate", catalog, entries, carried, null);
 
-    private static object PlanCraft(Catalog catalog, Array entries, int? targetIndex, bool topUp, IReadOnlyDictionary<string, int> carried) =>
-        Balance("PlanCraft", catalog, entries, targetIndex, topUp, carried);
+    private static object PlanCraft(Catalog catalog, Array entries, int? targetIndex, bool topUp, IReadOnlyDictionary<string, int> carried,
+        IReadOnlyCollection<string>? favoriteMaterials = null, IReadOnlyDictionary<string, int>? nearby = null) =>
+        Balance("PlanCraft", catalog, entries, targetIndex, topUp, carried, favoriteMaterials, nearby);
 
     private static object Balance(string method, params object?[] args) =>
         (PluginType("BookmarkChainBalance").GetMethod(method, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)

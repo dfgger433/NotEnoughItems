@@ -6,12 +6,10 @@ namespace NotEnoughItems;
 
 // Use only Together's registered admin dispatcher; never mutate a multiplayer body
 // directly or construct our own network request.
-internal readonly struct CheatSession(CheatAccess access, object? transport = null, Type? console = null, bool timeManipulation = false)
+internal readonly struct CheatSession(CheatAccess access, object? transport = null, Type? console = null)
 {
     internal CheatAccess Access { get; } = access;
     internal object? Transport { get; } = transport;
-    internal bool TimeManipulation { get; } = timeManipulation;
-
     private const BindingFlags PublicStatic = BindingFlags.Public | BindingFlags.Static;
     private const string TogetherGuid = "CasualtiesMP";
     private const string LegacyGuid = "KrokoshaCasualtiesMP";
@@ -76,8 +74,7 @@ internal readonly struct CheatSession(CheatAccess access, object? transport = nu
         bool? canCheat = CallBool(con, "CanCheat");
         if (rules?.GetType().GetField("sv_cheats")?.GetValue(rules) is not true) canCheat = false;
         CheatAccess access = CheatPermission.ForTogether(running, true, server, client, canCheat, CallBool(con, "CanExecuteAdminCommands"));
-        bool canChangeSpeed = rules?.GetType().GetProperty("DisableTimeManipulation")?.GetValue(rules) is false;
-        return new CheatSession(access, currentTransport, con, canChangeSpeed);
+        return new CheatSession(access, currentTransport, con);
     }
 
     private static bool? ReadBool(Type? type, string property) => type?.GetProperty(property, PublicStatic)?.GetValue(null) as bool?;

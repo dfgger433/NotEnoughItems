@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using BepInEx;
+using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using CUCoreLib.Data;
 using CUCoreLib.Registries;
@@ -13,10 +14,11 @@ using UnityEngine.UI;
 namespace NotEnoughItems;
 
 /// <summary>BepInEx entry point for the Casualties: Unknown NEI port.</summary>
-[BepInPlugin(Guid, "Not Enough Items", "1.3.1")]
+[BepInPlugin(Guid, "Not Enough Items", "1.3.2")]
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("casualtiesunknown.uei", BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency(PinyinSearch.PluginGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [DefaultExecutionOrder(-300)]
 public sealed class Plugin : BaseUnityPlugin
 {
@@ -26,12 +28,14 @@ public sealed class Plugin : BaseUnityPlugin
     // link its saved game-setting value back into the config before our callback runs.
     private const string OverlaySetting = "NotEnoughItems.ShowOverlay";
     internal static Plugin? Instance { get; private set; }
+    internal PinyinSearch? Pinyin { get; private set; }
     private GameSurface _surface = null!;
     private NeiWindow _window = null!;
     private Harmony? _harmony;
     private ConfigEntry<bool> _enabled = null!;
     private ConfigEntry<bool> _replaceUei = null!;
     private ConfigEntry<bool> _allowCheats = null!;
+    private ConfigEntry<SpawnMode> _spawnMode = null!;
     private ConfigEntry<float> _scale = null!;
     private ConfigEntry<KeyCode> _toggle = null!;
     private ConfigEntry<KeyCode> _recipes = null!;
@@ -44,18 +48,23 @@ public sealed class Plugin : BaseUnityPlugin
     private Rect _bounds;
     private int _layoutWidth, _layoutHeight;
     private float _layoutScale;
+    private (int Bookmark, int Catalog, int Y, int Icon, bool History, int LeftX, int LeftY, int RightX, int RightY) _layoutOptions;
     private bool _positioned;
     private Toggle? _visibilityToggle;
     private int _capturedFrame = -1;
+    private GameSurface.Kind _capturedSurface;
+    private UnityEngine.Object? _capturedHost;
     private int _nativePressFrame = -1;
     private int _nativeCancelFrame = -1;
     private bool _pointerCapture;
     private int _ownedHotControl;
     private PlayerCamera? _observedDragCamera;
     private bool _clearFocus;
-    private bool _escapeDown;
+    private bool _escapeDown, _backspaceDown;
     private float _nextRefresh;
     private int _updatedFrame = -1;
+    private int _bindingFrame = -1;
+    internal IReadOnlyList<(ConfigEntry<KeyCode> Entry, string English, string Chinese)> ShortcutBindings { get; private set; } = null!;
 
     internal bool SuppressNativeTooltip
     {
@@ -70,7 +79,7 @@ public sealed class Plugin : BaseUnityPlugin
     }
 
     internal bool SuppressDuplicate => OverlayActive && _replaceUei.Value;
-    private bool OverlayActive => isActiveAndEnabled && _enabled.Value && _active != GameSurface.Kind.Closed && !GameSurface.MedicalPanelOpen;
+    private bool OverlayActive => isActiveAndEnabled && _enabled.Value && _surface.IsCurrent(_active, _host);
     internal bool NativePointerActive => _nativePressFrame == Time.frameCount ||
         (PlayerCamera.main && PlayerCamera.main.dragItem);
     internal bool CanShieldPointer => OverlayActive && !NativePointerActive;
@@ -79,6 +88,7 @@ public sealed class Plugin : BaseUnityPlugin
     internal bool OwnsKeyboard => OverlayActive && !NativePointerActive &&
         (_window.SearchFocused || _capturedFrame == Time.frameCount);
     internal bool IsNativeInventory => _active == GameSurface.Kind.Inventory;
+    internal bool IsCrafting => _active == GameSurface.Kind.Crafting;
     internal bool NativeDragCancelledThisFrame => _nativeCancelFrame == Time.frameCount;
     internal bool TracksNativeDrag(PlayerCamera camera) => OverlayActive || _observedDragCamera == camera;
     internal bool PointerOverOverlay
@@ -87,7 +97,8 @@ public sealed class Plugin : BaseUnityPlugin
         {
             if (!OverlayActive) return false;
             var point = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
-            return _window.Hit(point) && (_active != GameSurface.Kind.Terminal || !_bounds.Contains(point));
+            return _window.OptionsHit(point) || _window.CandidatePopupHit(point) || _window.ItemTooltipPopupHit(point) ||
+                _window.Hit(point) && (_active != GameSurface.Kind.Terminal || !_bounds.Contains(point));
         }
     }
 
@@ -105,9 +116,9 @@ public sealed class Plugin : BaseUnityPlugin
         GameSurface.ClearNativeDrag(camera);
         _observedDragCamera = null;
     }
-    internal bool ShouldBlockInput => isActiveAndEnabled && !GameSurface.MedicalPanelOpen && !NativePointerActive &&
-        (_capturedFrame == Time.frameCount ||
-         (_active is GameSurface.Kind.Inventory or GameSurface.Kind.NativePanel && (OwnsKeyboard || OwnsPointer && AnyInteractTransition())));
+    internal bool ShouldBlockInput => isActiveAndEnabled && !NativePointerActive &&
+        (_capturedFrame == Time.frameCount && _surface.IsCurrent(_capturedSurface, _capturedHost) ||
+         _active == GameSurface.Kind.Inventory && (OwnsKeyboard || OwnsPointer && AnyInteractTransition()));
 
     internal void YieldToNativePointer()
     {
@@ -119,12 +130,31 @@ public sealed class Plugin : BaseUnityPlugin
     internal string RecipeKey => _recipes.Value.ToString();
     internal string UsageKey => _usages.Value.ToString();
     internal string BookmarkKey => _bookmark.Value.ToString();
+    internal bool BookmarkKeyBound => _bookmark.Value != KeyCode.None;
     internal bool Chinese => _language.Value == "zh-CN" || (_language.Value == "auto" &&
         ((Locale.currentLangName?.IndexOf("zh", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
-        (Locale.currentLangName?.Contains("中文") ?? false) || Application.systemLanguage == SystemLanguage.ChineseSimplified ||
-        Application.systemLanguage == SystemLanguage.ChineseTraditional));
+        (Locale.currentLangName?.Contains("中文") ?? false) || SystemUsesChinese()));
+
+    private static bool SystemUsesChinese() => Application.systemLanguage is SystemLanguage.ChineseSimplified or SystemLanguage.ChineseTraditional;
+
     internal bool AllowCheats => _allowCheats.Value;
-    internal float Scale => Mathf.Clamp(_scale.Value, 0.7f, 1.4f);
+    internal SpawnMode ItemSpawnMode
+    {
+        get => _spawnMode.Value == SpawnMode.SpawnToPlayer ? SpawnMode.SpawnToPlayer : SpawnMode.Nei;
+        set => _spawnMode.Value = value;
+    }
+    internal float Scale { get => _scale.Value; set => _scale.Value = value; }
+    internal bool ReplaceUei { get => _replaceUei.Value; set => _replaceUei.Value = value; }
+    internal string Language
+    {
+        get => _language.Value;
+        set
+        {
+            bool wasChinese = Chinese;
+            _language.Value = value;
+            if (Chinese != wasChinese) Catalog.Shared.Invalidate();
+        }
+    }
 
     /// <summary>Updates the explicit local-cheat opt-in from NEI's own settings screen.</summary>
     internal void SetAllowCheats(bool value)
@@ -133,17 +163,25 @@ public sealed class Plugin : BaseUnityPlugin
         if (!value) NeiActions.DisableOfflineCheats();
     }
 
-    /// <summary>Cycles Recipe → Utility → Cheat and returns a localized notice for the UI.</summary>
+    /// <summary>Cycles Recipe → Cheat and returns a localized notice for the UI.</summary>
     internal bool TryCycleMode(out string notice) => NeiActions.TryCycleMode(out notice);
 
     /// <summary>Compatibility overload for icon handlers that only need to know whether cycling succeeded.</summary>
     internal bool TryCycleMode() => NeiActions.TryCycleMode(out _);
 
+    internal static ConfigEntry<SpawnMode> BindSpawnMode(ConfigFile config) => config.Bind("NotEnoughItems", "SpawnMode",
+        SpawnMode.Nei, "Single-player cheat delivery. Nei stows without replacing gear; SpawnToPlayer uses vanilla automatic pickup.");
+
+    internal static ConfigEntry<int> BindSpawnAmount(ConfigFile config) => config.Bind("NotEnoughItems", "SpawnAmount", 1,
+        new ConfigDescription("Shared quantity for left-click item giving in Cheat mode and bookmark quantity shortcuts.",
+            new AcceptableValueRange<int>(1, NeiActions.MaxGiveAmount)));
+
     private void Awake()
     {
-        _enabled = Config.Bind("NotEnoughItems", "Enabled", true, "Show NEI beside inventory and the optional Inventory Terminal. Also changed by Game Settings, the toggle key, and Hide overlay.");
+        _enabled = Config.Bind("NotEnoughItems", "Enabled", true, "Show NEI beside inventory and the optional Inventory Terminal. Also changed by Game Settings and the toggle key.");
         _replaceUei = Config.Bind("NotEnoughItems", "ReplaceUEIPanel", true, "Hide the legacy UEI panel while NEI is visible; other UEI functions are untouched.");
         _allowCheats = Config.Bind("NotEnoughItems", "AllowLocalCheats", false, "Opt in to cheats in single-player. Multiplayer mode uses the server's Together permissions instead.");
+        _spawnMode = BindSpawnMode(Config);
         _scale = Config.Bind("NotEnoughItems", "Scale", 1f, new ConfigDescription("Sidebar scale multiplier.", new AcceptableValueRange<float>(0.7f, 1.4f)));
         _toggle = Config.Bind("NotEnoughItems", "Toggle", KeyCode.O, "Show or hide the NEI overlay on the open surface.");
         _recipes = Config.Bind("NotEnoughItems", "RecipesKey", KeyCode.R, "Look up recipes for the hovered item.");
@@ -151,6 +189,14 @@ public sealed class Plugin : BaseUnityPlugin
         _bookmark = Config.Bind("NotEnoughItems", "BookmarkKey", KeyCode.A, "Bookmark the hovered item.");
         _toggleBookmarks = Config.Bind("NotEnoughItems", "ToggleBookmarks", KeyCode.B, "Show or hide the bookmark panel.");
         _language = Config.Bind("NotEnoughItems", "Language", "auto", new ConfigDescription("Interface language.", new AcceptableValueList<string>("auto", "en", "zh-CN")));
+        Pinyin = PinyinSearch.Connect(Chainloader.PluginInfos.TryGetValue(PinyinSearch.PluginGuid, out var pinyinPlugin)
+            ? pinyinPlugin.Instance?.GetType().Assembly : null);
+        ShortcutBindings = new[]
+        {
+            (_toggle, "Show / hide NEI", "显示／隐藏 NEI"), (_recipes, "Show recipes", "查看配方"),
+            (_usages, "Show uses", "查看用途"), (_bookmark, "Bookmark item", "收藏物品"),
+            (_toggleBookmarks, "Show / hide bookmarks", "显示／隐藏书签栏")
+        };
         _surface = new GameSurface(Logger);
         _window = new NeiWindow(this, Config);
         Instance = this;
@@ -170,18 +216,6 @@ public sealed class Plugin : BaseUnityPlugin
             Chinese ? "NEI · 显示侧栏" : "NEI · Show overlay",
             Chinese ? "在背包和库存终端显示 NEI；隐藏后可在这里重新开启。" : "Show NEI in inventory and the Inventory Terminal. You can re-enable it here after hiding it.",
             category, _enabled.Value, _ => MirrorVisibility()));
-        ModOptionsRegistry.Register(ModOptionDefinition.Bool("NotEnoughItems.AllowLocalCheats",
-            Chinese ? "NEI · 允许单机作弊" : "NEI · Allow single-player cheats",
-            Chinese ? "仅控制单机。多人实用／作弊模式由 Together 的服务器权限决定。" : "Single-player opt-in only. In multiplayer, Together checks the server's permissions.",
-            category, _allowCheats.Value, value =>
-            {
-                _allowCheats.Value = value;
-                if (!value) NeiActions.DisableOfflineCheats();
-            }));
-        ModOptionsRegistry.Register(ModOptionDefinition.Float("NotEnoughItems.Scale", "NEI · Sidebar scale", "Change the size of the item and bookmark panels.", category, _scale.Value, 0.7f, 1.4f, v => _scale.Value = v));
-        foreach (var bind in new[] { _toggle, _recipes, _usages, _bookmark, _toggleBookmarks })
-            ModOptionsRegistry.Register(ModOptionDefinition.Keybind("NotEnoughItems." + bind.Definition.Key,
-                "NEI · " + bind.Definition.Key, bind.Description.Description, category, bind.Value, v => bind.Value = v));
     }
 
     private static void InstallVisibilityPatch(Harmony harmony) =>
@@ -222,8 +256,8 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void SetOverlayVisible(bool visible)
     {
-        // ConfigEntry persists this value; every writer, including O and Hide overlay,
-        // goes through it. Never save settings.json to change unrelated game rows.
+        // Both the native setting and the toggle key share this persistent value.
+        // Never save settings.json to change unrelated game rows.
         _enabled.Value = visible;
     }
 
@@ -259,16 +293,23 @@ public sealed class Plugin : BaseUnityPlugin
     {
         if (_window == null || !isActiveAndEnabled || _updatedFrame == Time.frameCount) return;
         _updatedFrame = Time.frameCount;
-        _escapeDown = false;
+        _escapeDown = _backspaceDown = false;
         bool togglePressed = Pressed(_toggle) && _toggle.Value != KeyBinds.GetBind("toggleinventory");
         if (!_enabled.Value && !togglePressed) return;
         DetectSurface();
         if (_active == GameSurface.Kind.Closed) return;
+        // Read a new binding before its old or new action (including the overlay toggle) can run.
+        if (_window.CaptureShortcutBinding())
+        {
+            _bindingFrame = Time.frameCount;
+            CaptureKey();
+            return;
+        }
         bool typing = _window.SearchFocused || GameSurface.OtherTextInputFocused() || _surface.TerminalTextInputFocused;
         if (!typing && togglePressed)
         {
-            SetOverlayVisible(!_enabled.Value);
             CaptureKey();
+            SetOverlayVisible(!_enabled.Value);
             if (_enabled.Value) DetectSurface();
         }
         if (!_enabled.Value) return;
@@ -277,6 +318,7 @@ public sealed class Plugin : BaseUnityPlugin
             _nextRefresh = Time.unscaledTime + 1.3f;
             _window.RefreshCatalog(Logger);
         }
+        if (_window.LayoutEditing) return;
         if (NativePointerActive || NativeSlotPress())
         {
             var camera = PlayerCamera.main;
@@ -293,38 +335,60 @@ public sealed class Plugin : BaseUnityPlugin
                 _pointerCapture = true;
                 if (EventSystem.current) EventSystem.current.SetSelectedGameObject(null);
             }
-            if (!_window.SearchHit(mouse) && !_window.GroupHit(mouse) && _window.SearchFocused) _clearFocus = true;
+            if (!_window.TextInputHit(mouse) && _window.SearchFocused) _clearFocus = true;
         }
-        _escapeDown = _active is GameSurface.Kind.Inventory or GameSurface.Kind.NativePanel && Input.GetKeyDown(KeyBinds.GetBind("pause")) &&
+        bool pausePressed = Input.GetKeyDown(KeyBinds.GetBind("pause"));
+        bool dismissLanguageMenu = _window.LanguageMenuOpen && (pausePressed || Input.GetKeyDown(KeyCode.Escape));
+        _escapeDown = dismissLanguageMenu || _active == GameSurface.Kind.Inventory && pausePressed &&
             (_window.ModalOpen || _window.SearchFocused);
         if (_escapeDown)
         {
             CaptureKey();
-            if (_window.SearchFocused) _clearFocus = true;
+            if (dismissLanguageMenu) _window.CloseLanguageMenu();
+            else if (_window.SearchFocused) _clearFocus = true;
             else _window.Back();
             return;
         }
         if (typing) return;
+        if (Input.GetKeyDown(KeyCode.Backspace) && _window.ModalOpen)
+        {
+            _backspaceDown = true;
+            CaptureKey();
+            _window.NavigateBack();
+            return;
+        }
         if (Pressed(_toggleBookmarks))
         {
             _window.ToggleBookmarks();
             CaptureKey();
             return;
         }
-        if ((Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && Input.GetKeyDown(KeyCode.F))
+        if (!IsCrafting && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) && Input.GetKeyDown(KeyCode.F))
         {
             if (_window.RequestSearchFocus()) CaptureKey();
             return;
         }
         bool control = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
         bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-        if (TryBookmarkKey(mouse, control, shift))
+        if (_window.ItemTooltipPopupHit(mouse)) return;
+        bool candidatePopup = _window.CandidatePopupHit(mouse);
+        if (!candidatePopup && TryBookmarkKey(mouse, control, shift))
         {
             CaptureKey();
             return;
         }
+        if (IsCrafting)
+        {
+            if (Pressed(_bookmark) && _window.Hit(mouse) && _window.HandleBookmarkShortcut(mouse, _window.ItemAt(mouse), control, shift)) CaptureKey();
+            return;
+        }
         bool recipes = Pressed(_recipes), usages = Pressed(_usages), bookmark = Pressed(_bookmark);
         if (!recipes && !usages && !bookmark) return;
+        if (recipes && !usages && !bookmark && _window.TryLookupPropertyAt(mouse))
+        {
+            CaptureKey();
+            return;
+        }
         var id = _window.ItemAt(mouse);
         string[]? contents = null;
         Item? lookupItem = null;
@@ -338,7 +402,7 @@ public sealed class Plugin : BaseUnityPlugin
         }
         if (bookmark)
         {
-            if (_window.HandleBookmarkShortcut(mouse, id, control, shift)) CaptureKey();
+            if (!candidatePopup && _window.HandleBookmarkShortcut(mouse, id, control, shift)) CaptureKey();
             return;
         }
         if (string.IsNullOrEmpty(id)) return;
@@ -353,7 +417,9 @@ public sealed class Plugin : BaseUnityPlugin
         foreach (var key in BookmarkActionKeys)
         {
             if (!Input.GetKeyDown(key)) continue;
-            bool handled = BookmarkKeys.Resolve(key, control, shift) switch
+            var action = BookmarkKeys.Resolve(key, control, shift);
+            if (IsCrafting && action is BookmarkShortcut.Tree or BookmarkShortcut.OrderTree or BookmarkShortcut.OrderFavorite or BookmarkShortcut.Pull or BookmarkShortcut.PullMissing) continue;
+            bool handled = action switch
             {
                 BookmarkShortcut.Tree => _window.OpenBookmarkTree(mouse),
                 BookmarkShortcut.OrderTree => _window.OrderAndInspectAt(mouse),
@@ -376,7 +442,8 @@ public sealed class Plugin : BaseUnityPlugin
         if (_window == null) return;
         if (_enabled.Value) DetectSurface(refresh: true);
         var dragCamera = _observedDragCamera;
-        if (!dragCamera || dragCamera != PlayerCamera.main || (!dragCamera!.dragItem && (!dragCamera.dragImage || !dragCamera.dragImage.enabled)))
+        if (!dragCamera || dragCamera != PlayerCamera.main || !GameSurface.NativeDragCleanupAllowed(dragCamera!) ||
+            (!dragCamera!.dragItem && (!dragCamera.dragImage || !dragCamera.dragImage.enabled)))
             _observedDragCamera = null;
         else
         {
@@ -408,13 +475,15 @@ public sealed class Plugin : BaseUnityPlugin
         if (!_enabled.Value || _active == GameSurface.Kind.Closed) return;
 
         float scale = Scale;
-        if (!switched && _positioned && _bounds.Equals(bounds) && _layoutWidth == Screen.width && _layoutHeight == Screen.height && _layoutScale == scale)
+        if (!switched && _positioned && _bounds.Equals(bounds) && _layoutWidth == Screen.width && _layoutHeight == Screen.height &&
+            _layoutScale == scale && _layoutOptions == _window.LayoutOptions)
             return;
         _positioned = true;
         _bounds = bounds;
         _layoutWidth = Screen.width;
         _layoutHeight = Screen.height;
         _layoutScale = scale;
+        _layoutOptions = _window.LayoutOptions;
         _window.Position(bounds, scale);
     }
 
@@ -429,9 +498,14 @@ public sealed class Plugin : BaseUnityPlugin
             _window.SearchFocused = false;
             _clearFocus = false;
         }
-        if (_escapeDown && Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyBinds.GetBind("pause")) Event.current.Use();
         if (!OverlayActive) return;
+        if (Event.current.type == EventType.KeyDown &&
+            ((_escapeDown && (Event.current.keyCode == KeyCode.Escape || Event.current.keyCode == KeyBinds.GetBind("pause"))) ||
+             (_backspaceDown && Event.current.keyCode == KeyCode.Backspace))) Event.current.Use();
         var guiEvent = Event.current;
+        if (_bindingFrame == Time.frameCount && guiEvent.type is EventType.KeyDown or EventType.MouseDown)
+        { guiEvent.Use(); return; }
+        if (TabFocusPolicy.Consume(guiEvent.type == EventType.KeyDown, guiEvent.keyCode == KeyCode.Tab)) { guiEvent.Use(); return; }
         if (NativePointerActive && guiEvent.type is not (EventType.Layout or EventType.Repaint)) return;
         int originalDepth = GUI.depth;
         int previousControl = GUIUtility.hotControl;
@@ -452,16 +526,28 @@ public sealed class Plugin : BaseUnityPlugin
         }
     }
 
-    private bool NativeSlotPress() => Input.GetKeyDown(KeyBinds.GetBind("iteminteract")) &&
-        _active != GameSurface.Kind.Terminal && _surface.HoveredItem(_active, forDrag: true) != null;
+    internal static bool ConsumesTabFocus(EventType type, KeyCode key, bool overlayActive) =>
+        overlayActive && type == EventType.KeyDown && key == KeyCode.Tab;
+
+    private bool NativeSlotPress()
+    {
+        if (_active == GameSurface.Kind.Terminal || !Input.GetKeyDown(KeyBinds.GetBind("iteminteract"))) return false;
+        var pointer = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+        return !_window.OptionsHit(pointer) && !_window.CandidatePopupHit(pointer) && !_window.ItemTooltipPopupHit(pointer) &&
+            _surface.HoveredItem(_active, forDrag: true) != null;
+    }
 
     private static bool Pressed(ConfigEntry<KeyCode> key) => key.Value != KeyCode.None && Input.GetKeyDown(key.Value);
     private static bool AnyInteractTransition() => Input.GetKeyDown(KeyBinds.GetBind("iteminteract")) ||
         Input.GetKeyUp(KeyBinds.GetBind("iteminteract")) || Input.GetKey(KeyBinds.GetBind("attack")) || Input.mouseScrollDelta.y != 0;
-    private void CaptureKey() => _capturedFrame = Time.frameCount;
+    private void CaptureKey()
+    {
+        _capturedFrame = Time.frameCount;
+        _capturedSurface = _active;
+        _capturedHost = _host;
+    }
     internal bool OpenCrafting(global::Recipe recipe) => _surface.OpenCrafting(_active, recipe);
     internal bool CanOpenCrafting(global::Recipe recipe) => GameSurface.CanOpenCrafting(recipe);
-    internal void HideOverlay() => SetOverlayVisible(false);
     internal void LogCraftFailure(Exception error) => Logger.LogError("NEI bookmark crafting stopped: " + error);
 
     private void OnDisable()
@@ -480,6 +566,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         if (_enabled != null) _enabled.SettingChanged -= OnVisibilityChanged;
         BookmarkCrafting.Release();
+        NativeTooltipPreview.Release();
         _harmony?.UnpatchSelf();
         NeiSkin.Release();
         NeiActions.Enabled = false;

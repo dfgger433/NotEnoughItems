@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -6,15 +7,20 @@ namespace NotEnoughItems;
 
 internal sealed partial class NeiWindow
 {
-    private void ItemSlot(Rect rect, string id, bool bookmarked = false, Sprite? overrideIcon = null, string? amount = null,
+    private void ItemSlot(Rect rect, string id, bool bookmarked = false, Sprite? overrideIcon = null, SlotQuantity? amount = null,
         string? fallback = null, Rect? clipping = null, Vector2? globalOffset = null, string? details = null,
         int requirement = -1, bool belowRequirement = false, bool catalogSlot = false,
-        bool interactive = true, Color? backing = null, string? corner = null)
+        bool interactive = true, Color? backing = null, string? corner = null, bool diagram = false,
+        IReadOnlyList<CatalogItem>? candidates = null, string? candidateRequirement = null, bool iconOnly = false,
+        RecipeIngredient? requirementIngredient = null, Action<CatalogItem>? selectCandidate = null,
+        CandidateSource candidateSource = CandidateSource.Inspector)
     {
         _catalog.TryGetItem(id, out var item);
         var recipeBookmark = id.StartsWith("recipe/", StringComparison.Ordinal) ? _catalog.Recipes.FirstOrDefault(r => RecipeKey(r) == id) : null;
-        if (recipeBookmark?.Outputs.FirstOrDefault() is { } result) _catalog.TryGetItem(result.BrowseId, out item);
-        string title = !string.IsNullOrWhiteSpace(fallback) ? fallback! : recipeBookmark?.Name ?? item?.DisplayName ?? id;
+        var result = recipeBookmark?.Outputs.FirstOrDefault();
+        if (result != null) _catalog.TryGetItem(result.BrowseId, out item);
+        string title = !string.IsNullOrWhiteSpace(fallback) ? fallback! : recipeBookmark?.Name ??
+            (requirementIngredient?.MatchesAny == true && SameId(id, requirementIngredient.BrowseId) ? RequirementTitle(requirementIngredient) : item?.DisplayName ?? id);
         var e = Event.current;
         bool hover = rect.Contains(e.mousePosition);
         Vector2 position = globalOffset.GetValueOrDefault();
@@ -27,20 +33,27 @@ internal sealed partial class NeiWindow
             hover &= absolute.width > 0 && absolute.height > 0 && area.Contains(e.mousePosition + position);
         }
         bool expanded = requirement >= 0 && _expandedRequirement == requirement;
+        if (diagram) NeiSkin.RecipeSlot(rect);
         if (backing is { } tint) NeiSkin.BookmarkTint(rect, tint);
         if (hover || bookmarked || expanded) NeiSkin.Slot(rect, hover, bookmarked || expanded);
-        DrawSprite(new Rect(rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8), overrideIcon ?? item?.Icon, item?.IconTint ?? Color.white, title);
-        if (!string.IsNullOrEmpty(corner)) NeiSkin.Label(new Rect(rect.x + 1, rect.y, rect.width - 2, 12), corner!);
-        if (requirement >= 0)
+        DrawItemSprite(new Rect(rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8), result?.BrowseId ?? id,
+            item, iconOnly ? null : title, requirementIngredient, overrideIcon, result?.IsLiquid == true);
+        if (!iconOnly && !string.IsNullOrEmpty(corner)) NeiSkin.Label(new Rect(rect.x + 1, rect.y, rect.width - 2, 12), corner!);
+        if (!iconOnly && requirement >= 0)
             NeiSkin.Label(new Rect(rect.x + 2, rect.y + 1, rect.width - 4, 13), expanded ? "−" : "+", TextAnchor.MiddleRight);
         if (belowRequirement)
-            NeiSkin.Label(new Rect(rect.x + 3, rect.y + 1, rect.width - 5, 13), "!");
-        if (!string.IsNullOrEmpty(amount)) NeiSkin.Label(new Rect(rect.x + 2, rect.yMax - 14, rect.width - 4, 13), amount!, TextAnchor.MiddleRight);
+            NeiSkin.SlotWarning(rect);
+        if (amount is { } quantity) NeiSkin.SlotAmount(rect, quantity);
         if (e.type == EventType.Repaint && absolute.width > 0 && absolute.height > 0)
         {
-            _itemTargets.Add((absolute, id));
-            // Keep NEI's recipe and bookmark annotations without opening the stock item tooltip.
-            if (hover && !string.IsNullOrWhiteSpace(details)) Tip(title, details);
+            _itemTargets.Add((absolute, id, PropertyQuery(requirementIngredient)));
+            if (hover)
+            {
+                if (amount is { Liquid: true } volume)
+                    details = (string.IsNullOrEmpty(details) ? string.Empty : details + "\n") + L("Volume: ", "容量：") + volume.FullText;
+                ItemHover(absolute, title, item, details, candidates, candidateRequirement, selectCandidate, candidateSource,
+                    requirementIngredient, amount?.LiquidVolume);
+            }
         }
         if (!hover || !interactive) return;
         if (e.type != EventType.MouseDown || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
@@ -51,37 +64,104 @@ internal sealed partial class NeiWindow
         e.Use();
     }
 
+    private readonly Dictionary<RecipeIngredient, CatalogItem?> _requirementPreviews = new();
+    private int _requirementPreviewRevision = -1;
+
+    private CatalogItem? RequirementPreview(RecipeIngredient ingredient)
+    {
+        if (_requirementPreviewRevision != _catalog.Revision)
+        {
+            _requirementPreviewRevision = _catalog.Revision;
+            _requirementPreviews.Clear();
+        }
+        if (!_requirementPreviews.TryGetValue(ingredient, out var preview))
+        {
+            // This is only artwork, not a material allocation. The chain plan can leave
+            // a slot generic when neither inventory nor a producer supplies an item.
+            var matches = _catalog.GetMatchingItems(ingredient, includeBelowRequirement: true);
+            preview = matches.FirstOrDefault(candidate => candidate.Icon && ingredient.Matches(candidate)) ??
+                matches.FirstOrDefault(candidate => candidate.Icon);
+            _requirementPreviews.Add(ingredient, preview);
+        }
+        return preview;
+    }
+
+    private void DrawItemSprite(Rect rect, string id, CatalogItem? item, string? fallback,
+        RecipeIngredient? ingredient = null, Sprite? overrideIcon = null, bool liquid = false)
+    {
+        if (Event.current.type != EventType.Repaint) return;
+        var icon = overrideIcon ? overrideIcon : item?.Icon;
+        var tint = item?.IconTint ?? Color.white;
+        if (!icon && ingredient?.MatchesAny == true && SameId(id, ingredient.BrowseId) && RequirementPreview(ingredient) is { } preview)
+        {
+            icon = preview.Icon;
+            tint = preview.IconTint;
+        }
+        if (!icon && (liquid || ingredient?.IsLiquid == true || item?.IsLiquid == true || id.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase)))
+            icon = Catalog.LoadDroplet();
+        DrawSprite(rect, icon, tint, fallback);
+    }
+
     private static bool CanGiveSlot(bool source, string id, CatalogItem? item, int button, bool shift, bool alt) =>
         CanGiveSlot(source, id, item, button, shift, alt, cheatMode: true) && NeiActions.CanGive;
 
     internal static bool CanGiveSlot(bool source, string id, CatalogItem? item, int button, bool shift, bool alt, bool cheatMode) =>
         source && cheatMode && (button == 0 || button == 1) && !shift && !alt &&
-        item is { Kind: CatalogItemKind.Item, IsVirtual: false } && !id.StartsWith("recipe/", StringComparison.Ordinal);
+        item is { Kind: CatalogItemKind.Item or CatalogItemKind.Liquid, IsVirtual: false } &&
+        !id.StartsWith("recipe/", StringComparison.Ordinal);
 
     private void GiveSlot(CatalogItem item, int button)
     {
-        if (ModalOpen || (PlayerCamera.main && PlayerCamera.main.dragItem)) return;
-        if (NeiActions.TryHandleGiveFromSlot(item.Id, button, false, GiveQuantity, out var error, out int dropped, out bool submitted))
-            Status(error ?? (submitted ? L("Give command submitted to Together", "已向 Together 提交发放命令") :
-                dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品")));
+        // Catalog, history and item bookmarks stay interactive beside the inspector.
+        if (PlayerCamera.main && PlayerCamera.main.dragItem) return;
+        if (!NeiActions.TryHandleGiveFromSlot(item, button, false, _spawnAmount.Value, out var error, out int dropped, out bool submitted)) return;
+        if (error != null) Status(error);
+        else if (submitted) Status(L("Give command submitted to Together", "已向 Together 提交发放命令"));
+        else if (item.IsLiquid)
+            Status(dropped > 0 ? L($"Liquid given; {dropped} full bottles left nearby", $"已刷取液体；{dropped} 瓶放在地上")
+                : L("Liquid given in full temporary bottles", "已刷取装满液体的临时瓶"));
+        else Status(dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品"));
     }
 
-    private static void DrawSprite(Rect rect, Sprite? sprite, Color tint, string fallback)
+    private static void DrawSpriteFallback(Rect rect, string? fallback)
+    {
+        if (fallback != null)
+            NeiSkin.Label(rect, fallback.Length == 0 ? "?" : fallback.Substring(0, 1).ToUpperInvariant(), TextAnchor.MiddleCenter, true);
+    }
+
+    private static void DrawSprite(Rect rect, Sprite? sprite, Color tint, string? fallback)
     {
         if (Event.current.type != EventType.Repaint) return;
         var originalColor = GUI.color;
         GUI.color = tint;
         if (!sprite || !sprite!.texture)
         {
-            NeiSkin.Label(rect, string.IsNullOrEmpty(fallback) ? "?" : fallback.Substring(0, 1).ToUpperInvariant(), TextAnchor.MiddleCenter, true);
+            if (fallback != null)
+                NeiSkin.Label(rect, fallback.Length == 0 ? "?" : fallback.Substring(0, 1).ToUpperInvariant(), TextAnchor.MiddleCenter, true);
             GUI.color = originalColor;
             return;
         }
         var tex = sprite.texture;
         Rect src;
-        try { src = sprite.textureRect; }
-        catch (UnityException) { src = sprite.rect; }
-        if (src.width <= 0 || src.height <= 0) { GUI.color = originalColor; return; }
+        try
+        {
+            // textureRect is the only safe UV source for a rectangular sprite. Unity
+            // throws for tight/rotated atlas entries; sprite.rect is in source-image
+            // coordinates and would sample an unrelated tile from the packed texture.
+            src = sprite.textureRect;
+        }
+        catch (UnityException)
+        {
+            DrawSpriteFallback(rect, fallback);
+            GUI.color = originalColor;
+            return;
+        }
+        if (src.width <= 0 || src.height <= 0)
+        {
+            DrawSpriteFallback(rect, fallback);
+            GUI.color = originalColor;
+            return;
+        }
         var ratio = Mathf.Min(rect.width / src.width, rect.height / src.height);
         float w = src.width * ratio, h = src.height * ratio;
         var dst = new Rect(rect.center.x - w / 2, rect.center.y - h / 2, w, h);

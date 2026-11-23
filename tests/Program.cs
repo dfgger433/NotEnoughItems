@@ -11,17 +11,24 @@ static int RunTests()
 {
     (string Name, Action Check)[] tests =
     [
+        ("optional pinyin search falls back without disrupting literal search", PinyinSearchTests.OptionalProvider),
+        ("pinyin search preserves query operators and field isolation", PinyinSearchTests.SearchSyntax),
         ("plain search combines case-insensitive terms", PlainSearch),
         ("prefixes limit search to their corresponding field", PrefixedSearch),
+        ("mod searches ignore spaces and recognize the base game's displayed name", ModSourceSearch),
         ("quotes preserve phrases and can follow a prefix", QuotedSearch),
         ("minus excludes plain and prefixed terms", ExcludedSearch),
         ("screen rectangles round-trip between bottom-left and top-left", ScreenConversion),
-        ("wide-screen panels avoid the host and each other", WideLayout),
-        ("off-center host leaves layout asymmetric", OffCenterLayout),
-        ("narrow-screen panels shrink without covering the host", NarrowLayout),
-        ("recipe inspector is clamped to screen margins", InspectorLayout),
-        ("catalog controls stay inside the right panel at wide and narrow widths", CatalogPanelLayout),
-        ("catalog groups retain independent queries through edits and reload", CatalogGroupsTests.Run),
+        ("shared overlay regions match the reference pixels and scale with the viewport", OverlayLayout),
+        ("inspectors stay in the viewport and the recipe panel is vertically centered", InspectorLayout),
+        ("options center on screen regardless of the inventory or terminal anchor", OptionsLayout),
+        ("recipe pages keep rows reachable, with a 3×3 minimum and clipped actions", RecipeListLayoutTests.Run),
+        ("catalog controls and history stay in the footer below the item grid", CatalogPanelLayout),
+        ("history and quantity use the requested catalog footer bounds", HistoryCatalogTests.Run),
+        ("only visible buttons intercept clicks inside the left tool area", LeftToolsLayout),
+        ("item tooltips stay inside the scaled viewport and flip at its right and bottom edges", TooltipBounds),
+        ("liquid slot quantities use the bottom-left corner and fit with decimal suffixes", LiquidSlotAmounts),
+        ("long supported-item lists page through every candidate without gaps", SupportedItemsPagination),
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
         ("reordering and clipboard import preserve independent groups", BookmarkGroups),
         ("dragging a bracket to a new page preserves its settings without merging IDs", () =>
@@ -36,6 +43,24 @@ static int RunTests()
             Check(book.DropAtEnd(a, "B", false) && a.Group == "" && book.Page("B").Last() == a, "An empty-space drop removes just the selected entry from the bracket.");
         }),
         ("bookmark groups, saved recipe routes and crafting targets", BookmarkParityTests.Run),
+        ("legacy Alt-click dissolves a bracket without changing the other bracket clicks", () =>
+        {
+            Check(BookmarkClicks.Bracket(0, true, false, false) == BookmarkBracketClick.Ungroup &&
+                BookmarkClicks.Bracket(1, false, true, false) == BookmarkBracketClick.Ungroup &&
+                BookmarkClicks.Bracket(0, false, false, false) == BookmarkBracketClick.ToggleLayout &&
+                BookmarkClicks.Bracket(0, false, true, false) == BookmarkBracketClick.ToggleCollapse &&
+                BookmarkClicks.Bracket(1, false, false, false) == BookmarkBracketClick.ToggleChain &&
+                BookmarkClicks.Bracket(0, false, false, true) == BookmarkBracketClick.None,
+                "Group clicks must not alias toggles or drag modifiers.");
+        }),
+        ("Alt-click distinguishes splitting a bookmark from expanding or folding a chain", () =>
+        {
+            Check(BookmarkClicks.Slot(0, true, false, true, false, true) == BookmarkSlotClick.Split &&
+                BookmarkClicks.Slot(0, true, false, false, true, true) == BookmarkSlotClick.ExpandLane &&
+                BookmarkClicks.Slot(0, true, true, true, false, true) == BookmarkSlotClick.ToggleRecipeCollapse &&
+                BookmarkClicks.Slot(0, true, true, true, false, false) == BookmarkSlotClick.None,
+                "Alt-click removes membership without deleting a bookmark; Shift+Alt must never split it.");
+        }),
         ("craft, top-up, clipboard and native menu shortcuts never alias", () =>
         {
             Check(BookmarkKeys.Resolve(KeyCode.C, true, false) == BookmarkShortcut.Copy &&
@@ -46,6 +71,7 @@ static int RunTests()
                 BookmarkKeys.Resolve(KeyCode.V, false, true) == BookmarkShortcut.PullMissing &&
                 BookmarkKeys.Resolve(KeyCode.S, false, true) == BookmarkShortcut.OpenNative, "Only explicit crafting chords can start an order.");
         }),
+        ("bookmark shortcut help follows chain, page, crafting and rebound-key contexts", BookmarkShortcutHelp),
         ("long chain tooltip rows expose every ingredient including the last", () =>
         {
             var rows = BookmarkBoardPaging.Rows(new[] { 0, 100, 1 }, 3).ToArray();
@@ -58,14 +84,38 @@ static int RunTests()
         ("missed native release is cleared without stealing the release frame", MissedDragRelease),
         ("Together permissions distinguish hosts, authorized clients, and unknown sessions", MultiplayerPermissions),
         ("multiplayer give only targets the caller and accepts bounded item tokens", MultiplayerGiveCommand),
+        ("Tab does not transfer focus to the catalog search field", TabDoesNotFocusSearch),
 #if RECIPE_TESTS
+        ("NEI exposes only recipe and cheat modes", NeiModeContract),
+        ("Tab does not transfer text focus to the catalog search field", TabDoesNotFocusSearch),
+        ("the installed JUC dictionary provides catalog pinyin", () =>
+        {
+            string provider = Path.Combine(AppContext.BaseDirectory, "JustUnknownCharacters.dll");
+            if (File.Exists(provider)) PinyinSearchTests.InstalledProvider(provider);
+        }),
+        ("NEI resolves inventory, terminal and bookmark-only crafting with native blockers first", SurfaceSmoke.Run),
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
+        ("catalog search preserves all matches and updates favorite and carried priorities", CatalogListingTests.Run),
         ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
         ("native tooltip suppression is bounded by visible NEI regions", TooltipSmoke.Run),
+        ("item and liquid tooltips keep native data separate from IDs and mod origins", TooltipSmoke.ItemContent),
+        ("tooltip IDs default on, persist, and copy only on Shift-left-click", TooltipSmoke.IdSettingAndInput),
+        ("item tooltip text retains native TMP colors, alpha and line breaks", TooltipSmoke.Colors),
+        ("ingredient tooltips list all and only supported items", TooltipSmoke.SupportedIngredientNames),
         ("drag hooks match the installed game's native entry points", TooltipSmoke.DragEndpoints),
         ("bookmark crafting and pickup hooks match the installed game", TooltipSmoke.BookmarkNativeEndpoints),
-        ("bookmark cheat clicks preserve lookup, drag modifiers and recipe bookmarks", BookmarkCheatClicks),
+        ("item and liquid cheat clicks preserve lookup, drag modifiers and recipe bookmarks", BookmarkCheatClicks),
+        ("catalog and bookmark giving share a 1–64 count and right click stays at one", SharedSlotGiveAmount),
+        ("multi-digit quantities parse, clamp and survive config reload", CatalogQuantityTests.Run),
+        ("spawn mode defaults to NEI and persists both choices in BepInEx config", SpawnModeConfig),
+        ("vanilla spawning uses the player position for items and preserves NEI liquid delivery", SpawnPlacement),
+        ("temporary bottles hold only the selected liquid at native capacity", FullTemporaryBottle),
         ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
+        ("chain tooltip and dependency tree follow explicit language changes", BookmarkParityTests.ChainNotesFollowInterfaceLanguage),
+        ("production and usage methods retain alternative rows in index order", RecipeMethodsTests.AlternateRows),
+        ("native crafting, cooking and provider machines are distinct lookup methods", RecipeMethodsTests.NativeAndMachineMethods),
+        ("built-in cooker labels are bilingual without changing recipe identity", RecipeMethodsTests.BuiltInCookingLocalization),
+        ("method groups handle empty lookups and missing process metadata", RecipeMethodsTests.MissingMetadataAndEmptyMatches),
         ("public recipe registrations appear in production and use indexes", RecipeRegistration),
         ("usage queries share ingredient matching semantics without false positives", RecipeUsageMatching),
         ("source replacement clears stale recipes without affecting other sources", RecipeSourceReplacement),
@@ -115,6 +165,17 @@ static void PrefixedSearch()
     Check(!Search("&shell"), "Tooltip text cannot satisfy an ID term.");
 }
 
+static void ModSourceSearch()
+{
+    static bool Native(string term) => NeiSearch.Matches(term, "Rope", "native", "", "", "rope");
+    foreach (string query in new[] { "@CasualtiesUnknown", "@casualtiesunknown", "@\"Casualties: Unknown\"", "@\"Casualties Unknown\"", "@native" })
+        Check(Native(query), $"The base game must match '{query}'.");
+    Check(Search("@FORGEGUILD steel") && Search("@\"Forge\tGuild\" steel") && !Search("-@ForgeGuild") &&
+        Search("@WrongSource | @forgeguild"), "Normalize only the mod field, without changing AND, OR or exclusion.");
+    Check(!Search("@forge guild") && !Search("heavyplate") && !Search("$metaltools") && !Search("#heatresistant") &&
+        !Search("&plateheavy02") && !Search("@\"   \""), "Other fields and unquoted query separators must not change.");
+}
+
 static void QuotedSearch()
 {
     Check(Search("\"heavy plate\" @\"forge guild\" #\"heat resistant\""), "Quoted prefixed terms must keep their spaces.");
@@ -133,6 +194,91 @@ static void ExcludedSearch()
     Check(!Search("steel -&heavy_02"), "A present excluded ID term must reject a match.");
 }
 
+static void LiquidSlotAmounts()
+{
+    string Fit(double volume, int width) => new SlotQuantity(volume, true).Fit(text => text.Length <= width);
+    Check(Fit(1250, 6) == "1250mL" && Fit(1250, 5) == "1.25k" && Fit(1250, 3) == "1k",
+        "Keep mL when it fits; otherwise keep as much precision as possible in the abbreviated value.");
+    Check(Fit(999, 2) == "999mL" && Fit(.125, 3) == "0.13mL" && Fit(0, 3) == "0mL",
+        "Small quantities preserve units and are scaled by the renderer rather than rounded into a different tier.");
+    Check(Fit(1_500_000, 4) == "1.5m" && Fit(2_000_000_000, 2) == "2g" &&
+        Fit(3_000_000_000_000, 2) == "3t" && Fit(4_000_000_000_000_000, 2) == "4p",
+        "Suffixes represent successive powers of 1000, not powers of 1024.");
+    Check(Fit(999_999, 3) == "1m" && Fit(1e33, 8) == "1e+33",
+        "Promote a rounded overflow and use bounded scientific notation beyond the suffix table.");
+    var slot = new Rect(30, 50, 25, 24);
+    var size = new Vector2(12, 10);
+    RectEqual(new Rect(31, 63, 12, 10), new SlotQuantity(1250, true).LabelBounds(slot, size), "liquid label is bottom-left");
+    var solid = new SlotQuantity(1500, false);
+    Check(solid.Fit(_ => false) == "1500", "Solid counts do not change notation.");
+    RectEqual(new Rect(42, 63, 12, 10), solid.LabelBounds(slot, size), "solid label stays bottom-right");
+}
+
+static void TooltipBounds()
+{
+    // A 1280×720 screen at 150% UI scale has an ~853×480 logical viewport.
+    var viewport = new Rect(4, 4, 845, 472);
+    RectEqual(new Rect(112, 115, 200, 60),
+        TooltipPlacement.AtPointer(new Vector2(100, 100), new Vector2(200, 60), viewport), "follow the pointer when there is room");
+    RectEqual(new Rect(630, 402, 200, 60),
+        TooltipPlacement.AtPointer(new Vector2(838, 470), new Vector2(200, 60), viewport), "flip inward at the edge");
+    RectEqual(viewport, TooltipPlacement.AtPointer(new Vector2(70, 100), new Vector2(900, 800), viewport),
+        "an oversized tooltip is clamped to the logical viewport");
+    var resultArea = new Rect(30, 40, 120, 100);
+    var loneResult = TooltipPlacement.CenteredGridCell(resultArea, 30, 4, 1, 0);
+    RectEqual(new Rect(75, 75, 30, 30), loneResult, "A lone property result is centered horizontally and vertically.");
+    var shortTail = TooltipPlacement.CenteredGridCell(resultArea, 30, 4, 6, 4);
+    var lastResult = TooltipPlacement.CenteredGridCell(resultArea, 30, 4, 6, 5);
+    RectEqual(new Rect(60, 90, 30, 30), shortTail, "An incomplete second row is centered horizontally.");
+    RectEqual(new Rect(90, 90, 30, 30), lastResult, "The last item shares the centered incomplete row.");
+    foreach (var anchor in new[] { new Vector2(100, 100), new Vector2(838, 470) })
+    {
+        var source = new Rect(anchor - new Vector2(8, 8), new Vector2(16, 16));
+        var box = TooltipPlacement.AtPointer(anchor, new Vector2(200, 60), viewport);
+        var idRow = new Vector2(box.center.x, box.yMax - 20);
+        for (int i = 0; i <= 20; i++)
+            Check(TooltipPlacement.KeepItemTip(Vector2.Lerp(anchor, idRow, i / 20f), anchor, source, box),
+                "Shift must hold the tip while moving across the gap into the ID row, even when flipped.");
+        Check(!TooltipPlacement.KeepItemTip(new Vector2(12, 450), anchor, source, box),
+            "Moving away from the source and popup must dismiss the pinned item.");
+    }
+}
+
+static void TabDoesNotFocusSearch()
+{
+    Check(TabFocusPolicy.Consume(keyDown: true, isTab: true),
+        "The active NEI window consumes Tab before Unity's default focus traversal.");
+    Check(!TabFocusPolicy.Consume(keyDown: false, isTab: true) &&
+        !TabFocusPolicy.Consume(keyDown: true, isTab: false),
+        "Other keys and event types retain native behavior.");
+}
+
+static void SupportedItemsPagination()
+{
+    const int count = 103;
+    var visible = new List<int>();
+    for (int i = 0; i < TooltipPlacement.ItemListPage(count, 0, 265, 18).Pages; i++)
+    {
+        var page = TooltipPlacement.ItemListPage(count, i, 265, 18);
+        Check(page.Index == i, "Every page index must be reachable.");
+        visible.AddRange(Enumerable.Range(page.Start, page.End - page.Start));
+    }
+    Check(visible.SequenceEqual(Enumerable.Range(0, count)), "Every supported candidate must appear exactly once across pages.");
+    Check(TooltipPlacement.ItemListPage(2, 12, 80, 18) == (0, 1, 0, 2), "A stale scroll position must not hide a short list.");
+
+    var viewport = new Rect(4, 4, 500, 350);
+    RectEqual(new Rect(124, 72, 132, 110), TooltipPlacement.AtSlot(new Rect(90, 72, 28, 28), new Vector2(132, 110), viewport),
+        "A pinned popup must stay beside its source slot.");
+    RectEqual(new Rect(332, 244, 132, 110), TooltipPlacement.AtSlot(new Rect(470, 326, 28, 28), new Vector2(132, 110), viewport),
+        "A pinned popup should flip and clamp at the right and bottom edges.");
+    var grid = new Rect(200, 100, 128, 64);
+    var last = TooltipPlacement.CandidateCell(grid, 4, 32, 5);
+    Check(TooltipPlacement.CandidateAt(grid, 4, 32, 16, 22, last.center) == 21 &&
+        TooltipPlacement.CandidateAt(grid, 4, 32, 16, 22, new Vector2(295, 145)) == -1 &&
+        TooltipPlacement.CandidateAt(grid, 4, 32, 16, 22, new Vector2(199, 106)) == -1,
+        "Candidate clicks must respect the page offset and cannot select blank or out-of-tray cells.");
+}
+
 static void ScreenConversion()
 {
     var screen = new Rect(124, 73, 397, 184);
@@ -142,42 +288,31 @@ static void ScreenConversion()
     RectEqual(new Rect(0, 0, 1280, 720), NeiLayout.FromScreen(new Rect(0, 0, 1280, 720), 720), "full-screen rectangle");
 }
 
-static void WideLayout()
+static void OverlayLayout()
 {
-    var center = new Rect(630, 32, 660, 1016);
-    var (left, right) = NeiLayout.Sides(center, 1920, 1080, 1);
-    RectEqual(new Rect(293, 32, 330, 1016), left, "left side caps its width at scale 1");
-    RectEqual(new Rect(1297, 32, 330, 1016), right, "right side caps its width at scale 1");
-    CheckSides(center, left, right, 1920, 1080);
+    foreach (float zoom in new[] { .7f, 1f, 1.4f })
+    {
+        Verify(2560, 1440, new(10, 135, 741, 1025), new(1831, 135, 719, 1042),
+            new(104, 1198, 640, 96), new(1831, 1178, 719, 184));
+        Verify(1280, 720, new(5, 67.5f, 370.5f, 512.5f), new(915.5f, 67.5f, 359.5f, 521),
+            new(52, 599, 320, 48), new(915.5f, 589, 359.5f, 92));
+        Verify(1920, 1080, new(7.5f, 101.25f, 555.75f, 768.75f), new(1373.25f, 101.25f, 539.25f, 781.5f),
+            new(78, 898.5f, 480, 72), new(1373.25f, 883.5f, 539.25f, 138));
+        Verify(1280, 1080, new(5, 101.25f, 370.5f, 768.75f), new(915.5f, 101.25f, 359.5f, 781.5f),
+            new(52, 898.5f, 320, 72), new(915.5f, 883.5f, 359.5f, 138));
 
-    var scaled = NeiLayout.Sides(center, 1920, 1080, .75f);
-    Equal(247.5f, scaled.Left.width, "left side width scales");
-    Equal(247.5f, scaled.Right.width, "right side width scales");
-    CheckSides(center, scaled.Left, scaled.Right, 1920, 1080);
-}
-
-static void OffCenterLayout()
-{
-    var center = new Rect(150, 100, 910, 430);
-    var (left, right) = NeiLayout.Sides(center, 1280, 720, 1);
-    Equal(135, left.width, "left side uses only the actual available width");
-    Equal(205, right.width, "right side uses its own separate available width");
-    CheckSides(center, left, right, 1280, 720);
-}
-
-static void NarrowLayout()
-{
-    var center = new Rect(29, 72, 584, 190);
-    var (left, right) = NeiLayout.Sides(center, 640, 360, 1);
-    Equal(14, left.width, "left side shrinks below the UI drawing threshold");
-    Equal(12, right.width, "right side shrinks below the UI drawing threshold");
-    Equal(352, left.yMax, "minimum requested height must not extend beyond the viewport");
-    CheckSides(center, left, right, 640, 360);
-
-    var fillsScreen = new Rect(0, 0, 640, 360);
-    var (noLeft, noRight) = NeiLayout.Sides(fillsScreen, 640, 360, 1);
-    Equal(0, noLeft.width, "left side collapses when no gap remains");
-    Equal(0, noRight.width, "right side collapses when no gap remains");
+        void Verify(float width, float height, Rect left, Rect right, Rect tools, Rect footer)
+        {
+            float scale = NeiLayout.GuiScale(width, height, zoom);
+            var layout = NeiLayout.Overlay(width / scale, height / scale);
+            Rect Pixels(Rect rect) => new(rect.x * scale, rect.y * scale, rect.width * scale, rect.height * scale);
+            RectEqual(left, Pixels(layout.Bookmarks), "Bookmark bounds in top-left screen pixels");
+            RectEqual(right, Pixels(layout.Catalog), "Catalog bounds in top-left screen pixels");
+            RectEqual(tools, Pixels(layout.Tools), "Tool placement area in top-left screen pixels");
+            RectEqual(footer, Pixels(layout.CatalogControls), "Search and history area in top-left screen pixels");
+            Check(!left.Overlaps(tools) && !left.Overlaps(right) && footer.yMin > right.yMax, "Regions must not collide.");
+        }
+    }
 }
 
 static void InspectorLayout()
@@ -189,36 +324,73 @@ static void InspectorLayout()
     var narrow = new Rect(30, 20, 200, 320);
     RectEqual(new Rect(8, 8, 244, 344), NeiLayout.Inspector(narrow, 260, 360, 1),
         "narrow screen constrains both dimensions without a negative rectangle");
+    var displaced = new RecipePanelLayout(new Rect(150, 8, 300, 300), centerX: 280);
+    var clamped = new RecipePanelLayout(new Rect(150, 8, 300, 300), centerX: 100);
+    Check(displaced.Bounds.center.x == 280 && clamped.Bounds.xMin == 150,
+        "Dragging sidebar panels keeps the recipe centered until the available boundary requires a clamp.");
+    foreach (float height in new[] { 300f, 432f, 720f })
+    {
+        var recipe = new RecipePanelLayout(new Rect(100, 8, 245, height - 16));
+        Check(Mathf.Abs(recipe.Bounds.center.y - height / 2) < .01f, "Recipe window must center on screen, not on the inventory anchor.");
+        float inset = NeiAssets.RecipeBackgroundSlice;
+        var inner = Rect.MinMaxRect(recipe.Frame.xMin + inset, recipe.Frame.yMin + inset,
+            recipe.Frame.xMax - inset, recipe.Frame.yMax - inset);
+        Check(new[] { recipe.Method, recipe.Pages, recipe.Content }.All(row => ContainsRect(inner, row) &&
+            row.xMin == inner.xMin && row.xMax == inner.xMax) &&
+            recipe.Method.yMax < recipe.Pages.yMin && recipe.Pages.yMax < recipe.Content.yMin,
+            "Method, page controls and diagrams stay inside the frame in order.");
+        Check(ContainsRect(recipe.Header, recipe.Back) && ContainsRect(recipe.Frame, recipe.Method) &&
+            !recipe.Back.Overlaps(recipe.Method) && recipe.PreviousMethod.xMin == recipe.Pages.xMin &&
+            recipe.NextMethod.xMax == recipe.Pages.xMax,
+            "Method switching is inside the recipe frame and shares page arrow columns.");
+        var diagram = RecipePanelLayout.DiagramArea(recipe.Content, 0);
+        Check(Mathf.Abs(recipe.Content.x + diagram.center.x - inner.center.x) < .01f &&
+            recipe.Content.x + diagram.xMin > recipe.Catalyst.xMax &&
+            diagram.xMax < recipe.Content.width - RecipePanelLayout.ScrollbarAllowance,
+            "Catalyst and scrollbar cannot move or overlap the centered diagram.");
+    }
 }
 
 static void CatalogPanelLayout()
 {
-    var terminal = new Rect(480, 8, 320, 704);
-    var (_, wide) = NeiLayout.VisibleSides(terminal, 1280, 720);
-    var (_, narrow) = NeiLayout.VisibleSides(new Rect(115, 8, 250, 394), 480, 410);
-    RectEqual(new Rect(54, 689, 49, 23), NeiLayout.LeftTools(720), "Left controls clear the native HUD.");
-    Check(!wide.Overlaps(terminal), "A tall terminal still has an independent catalog gutter.");
-    foreach (var panel in new[] { wide, narrow })
+    foreach (var (width, height) in new[] { (2560, 1440), (1280, 720), (640, 480), (360, 640), (3440, 1440) })
+    foreach (float zoom in new[] { .7f, 1f, 1.4f })
     {
-        var layout = new NeiLayout.CatalogPanel(panel);
-        Rect[] regions = [layout.Previous, layout.Page, layout.Group, layout.Next, layout.Grid,
-            layout.Search, layout.Name, layout.Add, layout.Remove];
+        float scale = NeiLayout.GuiScale(width, height, zoom);
+        var (_, catalog, _, footer) = NeiLayout.Overlay(width / scale, height / scale);
+        var layout = new NeiLayout.CatalogPanel(catalog, footer);
+        Rect[] regions = [layout.Search, layout.Quantity, layout.Increase, layout.Decrease, layout.History];
         for (int i = 0; i < regions.Length; i++)
         {
-            Rect a = regions[i];
-            Check(a.width > 0 && a.height > 0 && a.xMin >= panel.xMin && a.xMax <= panel.xMax &&
-                a.yMin >= panel.yMin && a.yMax <= panel.yMax, "Each catalog control must fit inside the right panel.");
+            Check(ContainsRect(footer, regions[i]), "Each editor, stepper and history slot must fit inside the footer.");
             for (int j = i + 1; j < regions.Length; j++)
-                Check(!a.Overlaps(regions[j]), "Controls and the item grid must not overlap.");
+                Check(!regions[i].Overlaps(regions[j]), "Footer controls must not overlap.");
         }
-        Check(layout.Search.width >= 40 && layout.Name.width >= 40 && layout.Search.y > layout.Grid.yMax &&
-            layout.Name.yMax == panel.yMax - 3, "Both editors remain usable in the catalog footer.");
-        Check(layout.Group.x < layout.Next.x && layout.Group.y == layout.Next.y, "The group button belongs beside next page.");
+        Check(layout.Search.width >= 40 && layout.Quantity.width >= 40 && layout.Search.height >= 15 && layout.History.height >= 15,
+            "Both editors and the history strip remain usable in compact layouts.");
+        Check(ContainsRect(catalog, layout.Grid) && layout.Grid.yMax <= footer.yMin && layout.Grid.height >= 28 && layout.Grid.width >= 28,
+            "The item grid fits above the footer, independent of whether history is visible.");
+        Check(new[] { layout.Previous, layout.Page, layout.Next }.All(button => ContainsRect(catalog, button) && button.yMax < layout.Grid.yMin),
+            "Page navigation stays above the item grid, not in the footer.");
     }
-    var normal = new NeiLayout.CatalogPanel(wide);
-    Equal(normal.Name.y, normal.Search.y, "Wide gutters keep both editors in one row.");
-    var compact = new NeiLayout.CatalogPanel(narrow);
-    Check(compact.Search.yMax < compact.Name.y, "Narrow gutters stack the search above the group name.");
+}
+
+static void LeftToolsLayout()
+{
+    var (bookmarks, _, area, _) = NeiLayout.Overlay(1280, 720);
+    var buttons = new NeiLayout.ToolButtons(area);
+    Check(ContainsRect(area, buttons.Settings) && ContainsRect(area, buttons.Bookmarks) && !area.Overlaps(bookmarks),
+        "Both buttons fit in the separate tool area.");
+    Check(buttons.Settings.size == new Vector2(30, 30) && buttons.Settings.size == buttons.Bookmarks.size &&
+        buttons.Settings.y == buttons.Bookmarks.y && NeiLayout.BookmarkCellSize == 34f && NeiLayout.BookmarkControlSize == 28f,
+        "Settings and bookmarks have enlarged, aligned tools, with larger bookmark cells and page controls.");
+    var compact = new NeiLayout.ToolButtons(new Rect(0, 0, 45, 19));
+    Check(compact.Settings.size == new Vector2(19, 19) && compact.Bookmarks.xMax <= 45,
+        "Both tools scale down when the reserved area is compact.");
+    Check(!buttons.Settings.Overlaps(buttons.Bookmarks) && buttons.Hit(buttons.Settings.center, false) &&
+        buttons.Hit(buttons.Bookmarks.center, true) && !buttons.Hit(buttons.Bookmarks.center, false) && !buttons.Hit(area.center, true) &&
+        !buttons.Hit(new Vector2(buttons.Settings.xMax + 1, buttons.Settings.center.y), true),
+        "Unused space and a hidden bookmark button do not capture the pointer.");
 }
 
 static void BookmarkMigration()
@@ -256,6 +428,27 @@ static void BookmarkGroups()
     Check(!book.Load("0:item%3Atest", "Imported"), "Clipboard import only accepts the documented format.");
 }
 
+static void BookmarkShortcutHelp()
+{
+    var ordinary = BookmarkHelp.Rows(page: false, hasEntries: true, chain: false, crafting: false, chinese: false, bookmarkKey: "Q").Split('\n');
+    var active = BookmarkHelp.Rows(page: false, hasEntries: true, chain: true, crafting: false, chinese: false, bookmarkKey: "Q").Split('\n');
+    Check(ordinary.Contains("Right click: enable chain") && !ordinary.Any(line => line.StartsWith("T:")), "Only an enabled chain opens a tree.");
+    Check(active.Contains("Right click: disable chain") && active.Contains("T: inspect the crafting tree") &&
+        active.Contains("Hold Shift: pin totals and show steps"), "Enabled chains retain shortcut help alongside their totals view.");
+    Check(active.All(line => line.Count(character => character == ':') == 1) &&
+        active.Contains("Alt+left click: ungroup without deleting") && active.Contains("Ctrl+right click: ungroup without deleting"),
+        "Each gesture has a separate display row, even when two gestures do the same thing.");
+    Check(active.Contains("Shift+Q: remove group") && !active.Any(line => line.StartsWith("Shift+A:")), "Display the current bookmark binding.");
+
+    var page = BookmarkHelp.Rows(page: true, hasEntries: true, chain: true, crafting: true, chinese: true, bookmarkKey: null).Split('\n');
+    Check(page.Contains("右键：关闭未分组合成链") && page.Contains("Ctrl＋右键：切换整页合成链") &&
+        page.Contains("Ctrl＋C：复制整页"), "Do not confuse ungrouped chain actions with entire-page actions.");
+    Check(page.Contains("Shift＋C：制作目标") && page.Contains("Ctrl＋Shift＋C：补齐目标数量") &&
+        !page.Any(line => line.StartsWith("T：") || line.Contains("删除")), "Crafting uses production shortcuts; unbound actions are hidden.");
+    var empty = BookmarkHelp.Rows(page: true, hasEntries: false, chain: true, crafting: false, chinese: false, bookmarkKey: "A");
+    Check(empty == "Left click: switch grid / queue\nCtrl+V: paste into this page", "Empty pages still allow paste, but no chain actions.");
+}
+
 static void TextureLocations()
 {
     Check(NeiAssets.RelativePath(NeiAssets.Modernity("nei_sprites.png")) == "assets/notenoughitems/textures/gui/modernity/nei_sprites.png",
@@ -266,9 +459,42 @@ static void TextureLocations()
         NeiAssets.LegacyPath(NeiAssets.Modernity("widgets.png")) == null, "Legacy backgrounds stay readable, not obsolete control art.");
     Check(ModernityFrames.Caption("previous") == "<" && ModernityFrames.Caption("next") == ">" &&
         ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" }, "Official sprite positions and paging glyphs.");
+    string original = NeiAssets.ResourceName(NeiAssets.OriginalDirectory + "nei_sprites.png");
+    Check(NeiAssets.TextureSources(NeiAssets.Modernity("nei_sprites.png"), true).Take(2).SequenceEqual(new[]
+    {
+        (NeiAssets.ActivePackDirectory + "/" + NeiAssets.RelativePath(NeiAssets.Modernity("nei_sprites.png")), false), (original, true)
+    }), "An active material pack takes precedence, then the pinned original atlas is used.");
+    var ink = new Color[18 * 20];
+    for (int y = 4; y <= 17; y++)
+        for (int x = 3; x <= 16; x++) ink[y * 18 + x] = new Color(1, 1, 1, 1);
+    Check(ModernityFrames.InkBounds(18, 20, ink) == (3, 4, 14, 14) &&
+        ModernityFrames.InkBounds(18, 20, new Color[18 * 20]) == (0, 0, 18, 20),
+        "The favorite button centers visible ink despite asymmetric transparency.");
+    Check(ModernityFrames.Find("favorite") is { X: 20, Y: 152, Width: 18, Height: 20 } heart &&
+        NeiAssets.TextureSources(heart.ResourcePath, false).First() == (original, true), "The default favorite icon uses the original NEI atlas.");
     Check(ModernityFrames.Find("search_field") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 12, Width: 128, Height: 12 } &&
-        ModernityFrames.Find("search_field_focused") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 0, Width: 128, Height: 12 },
-        "Search uses individual rows of the supplied atlas, not the transparent 128×128 canvas.");
+        ModernityFrames.Find("search_field_focused") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 0, Width: 128, Height: 12 } &&
+        ModernityFrames.Find("tooltip_background") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 0, Width: 128, Height: 12 },
+        "Search and tooltip surfaces use individual rows of the supplied atlas, not the transparent 128×128 canvas.");
+    Check(NeiAssets.ExpectedSize(NeiAssets.DropDownAtlas) == (256, 256) &&
+        ModernityFrames.Find("dropdown_closed") is { ResourcePath: NeiAssets.DropDownAtlas, X: 0, Y: 0, Width: 112, Height: 20 } &&
+        ModernityFrames.Find("dropdown_open_hover") is { ResourcePath: NeiAssets.DropDownAtlas, X: 112, Y: 64, Width: 112, Height: 19 } &&
+        ModernityFrames.Find("dropdown_option_hover") is { ResourcePath: NeiAssets.DropDownAtlas, X: 0, Y: 192, Width: 112, Height: 18 },
+        "The trigger and rows use the supplied frames without the transparent gutters.");
+    Check(NeiAssets.ExpectedSize(NeiAssets.CheckboxAtlas) == (64, 64) &&
+        NeiAssets.TextureSources(NeiAssets.CheckboxAtlas, true).Last() == (NeiAssets.ResourceName(NeiAssets.CheckboxAtlas), true),
+        "Checkbox replacements require the original atlas dimensions and have an embedded fallback.");
+    foreach (var (on, hover, x, y) in new[] { (false, false, 0, 28), (false, true, 22, 28), (true, false, 0, 40), (true, true, 22, 40) })
+    {
+        Check(ModernityFrames.Find(ModernityFrames.CheckboxFace(on, hover)) is
+            { ResourcePath: NeiAssets.CheckboxAtlas, Width: 22, Height: 12 } frame && frame.X == x && frame.Y == y,
+            "Each checked and hover combination uses its own complete switch frame.");
+    }
+    Check(NeiAssets.ExpectedSize(NeiAssets.RecipeBackgroundTexture) == (256, 256) &&
+        ModernityFrames.Find("recipe_background") is { ResourcePath: NeiAssets.RecipeBackgroundTexture, X: 0, Y: 0,
+            Width: NeiAssets.RecipeBackgroundWidth, Height: NeiAssets.RecipeBackgroundHeight } &&
+        NeiAssets.RecipeBackgroundSlice == 9,
+        "Recipe panels use the 184x174 source frame with nine-pixel nine-slice borders.");
 }
 
 static void DragReleaseOwnership()
@@ -313,34 +539,63 @@ static void MultiplayerGiveCommand()
         Check(CheatPermission.GiveCommand(id, 1, 64) == null, $"Reject non-item or unsafe command token {id}.");
     Check(CheatPermission.GiveCommand("rope", 0, 64) == null && CheatPermission.GiveCommand("rope", 65, 64) == null,
         "Only quantities from 1 to 64 are valid.");
+    Check(CheatPermission.GiveCommand("rope", 64, 64)?.Split(' ').Skip(2).SequenceEqual(Enumerable.Repeat("rope", 64)) == true,
+        "A full batch sends all 64 items to the caller.");
+}
+
+#if RECIPE_TESTS
+static void NeiModeContract()
+{
+    var assembly = typeof(Catalog).Assembly;
+    var actions = assembly.GetType("NotEnoughItems.NeiActions", throwOnError: true)!;
+    var mode = actions.GetNestedType("LocalMode", System.Reflection.BindingFlags.NonPublic)!;
+    var names = Enum.GetNames(mode);
+    Check(names.SequenceEqual(new[] { "Recipe", "Cheat" }), "The removed Utility mode must not remain in the mode contract.");
+    Check(actions.GetMethod("Heal", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic) == null &&
+        actions.GetMethod("SetSpeed", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic) == null,
+        "Healing and game-speed actions must not remain as hidden Utility-mode entry points.");
+}
+#endif
+
+static void OptionsLayout()
+{
+    foreach (var (pixelWidth, pixelHeight, zoom) in new[] { (2560, 1440, 1f), (480, 410, 1.4f), (1920, 1080, .7f), (3440, 1440, 1f) })
+    {
+        float scale = NeiLayout.GuiScale(pixelWidth, pixelHeight, zoom);
+        float width = pixelWidth / scale, height = pixelHeight / scale;
+        var (left, right, _, _) = NeiLayout.Overlay(width, height);
+        foreach (var host in new[] { new Rect(40, 0, 300, 40), new Rect(width - 500, height - 70, 400, 70) })
+        {
+            var (options, optionsZoom) = NeiLayout.OptionsBetween(host, left, right, width, height);
+            var content = NeiLayout.OptionsContentBounds(options, optionsZoom);
+            Equal(pixelHeight * .5f, options.center.y * scale, "Complete options frame centered in screen pixels");
+            Check(ContainsRect(new Rect(8, 8, width - 16, height - 16), options) &&
+                !options.Overlaps(left) && !options.Overlaps(right), "Settings fit in the viewport between both sidebars.");
+            Check(content.position == options.position && content.width >= 244.99f && content.height >= 419.99f &&
+                optionsZoom > 0f && optionsZoom <= NeiLayout.OptionsZoom, "Scaled drawing keeps its pivot and room for all rows.");
+            if (pixelWidth >= 1920) Equal(1.2f, optionsZoom, "Settings and text grow by 20% when there is room");
+        }
+    }
 }
 
 static void FullWidthHostLayout()
 {
-    foreach (var host in new[] { new Rect(0, 0, 480, 410), new Rect(280, 36, 200, 400), new Rect(0, 115, 290, 380) })
+    float scale = NeiLayout.GuiScale(480, 410, 1.4f);
+    float width = 480 / scale, height = 410 / scale;
+    var (left, right, tools, _) = NeiLayout.Overlay(width, height);
+    var viewport = new Rect(0, 0, width, height);
+    Check(ContainsRect(viewport, left) && ContainsRect(viewport, right) && ContainsRect(viewport, tools),
+        "All overlay regions must remain inside a narrow viewport.");
+    foreach (var host in new[] { viewport, new Rect(width * .6f, 36, 200, 400), new Rect(0, 115, 290, 380) })
     {
-        var (left, right) = NeiLayout.VisibleSides(host, 480, 410);
-        var inspector = NeiLayout.InspectorBetween(host, left, right, 480, 410);
-        Check(left.width >= 104 && right.width >= 104 && left.height >= 180 && right.height >= 180,
-            "A wide or off-center native panel must not make either grid collapse.");
-        Check(!left.Overlaps(right) && !inspector.Overlaps(left) && !inspector.Overlaps(right) && inspector.width >= 245,
-            "Both grids and recipe controls remain visible independently.");
-        Check(left.xMin >= 8 && right.xMax <= 472 && right.yMax <= 402, "All controls remain inside the viewport.");
+        var inspector = NeiLayout.InspectorBetween(host, left, right, width, height);
+        Check(!inspector.Overlaps(left) && !inspector.Overlaps(right) && inspector.width >= 244.999f,
+            "Wide or off-center hosts must leave room for the inspector without moving either sidebar.");
     }
-    var normal = new Rect(410, 260, 460, 400);
-    var panels = NeiLayout.VisibleSides(normal, 1280, 720);
-    CheckSides(normal, panels.Left, panels.Right, 1280, 720);
 }
 
-static void CheckSides(Rect host, Rect left, Rect right, float width, float height)
-{
-    Check(left.width > 0 && right.width > 0, "Fixture must leave room for both sides.");
-    Check(!left.Overlaps(host) && !right.Overlaps(host) && !left.Overlaps(right),
-        $"Panels overlap: host {host}, left {left}, right {right}.");
-    Check(left.xMin >= 8 && right.xMax <= width - 8, "Panels must stay inside the horizontal screen margins.");
-    Check(left.yMin >= 8 && right.yMin >= 8 && left.yMax <= height - 8 && right.yMax <= height - 8,
-        "Panels must stay inside the vertical screen margins.");
-}
+static bool ContainsRect(Rect bounds, Rect rect) => rect.width > 0 && rect.height > 0 &&
+    rect.xMin >= bounds.xMin && rect.yMin >= bounds.yMin && rect.xMax <= bounds.xMax && rect.yMax <= bounds.yMax;
 
 static void RectEqual(Rect expected, Rect actual, string message)
 {
@@ -365,7 +620,8 @@ static void EmbeddedGuiTextures()
     var assembly = typeof(Catalog).Assembly;
     Span<byte> header = stackalloc byte[24];
     foreach (string path in new[] { NeiAssets.Modernity("widgets.png"), NeiAssets.Modernity("nei_tabbed_sprites.png"),
-        NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png"), "gui/controls/text_field.png" })
+        NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png"), "gui/controls/text_field.png", NeiAssets.DropDownAtlas,
+        NeiAssets.RecipeBackgroundTexture, NeiAssets.CheckboxAtlas })
     {
         using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
         Check(png != null, "Missing namespaced resource: " + path);
@@ -375,6 +631,21 @@ static void EmbeddedGuiTextures()
         uint height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[20..]);
         Check(width > 0 && (width & (width - 1)) == 0 && height > 0 && (height & (height - 1)) == 0,
             "Texture canvas dimensions must be powers of two: " + path);
+        if (path == NeiAssets.RecipeBackgroundTexture)
+            Check(width == 256 && height == 256, "The recipe panel atlas must retain its 256x256 canvas.");
+        if (path == NeiAssets.CheckboxAtlas)
+            Check(width == 64 && height == 64, "The checkbox atlas must retain its 64x64 canvas.");
+    }
+    foreach (var (path, height) in new[] { (NeiAssets.RecipeTabSelected, NeiAssets.RecipeTabSelectedHeight),
+        (NeiAssets.RecipeTabCandidate, NeiAssets.RecipeTabCandidateHeight) })
+    {
+        using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
+        Check(png != null, "Missing crafting method tab resource: " + path);
+        png!.ReadExactly(header);
+        Check(header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) &&
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[16..]) == NeiAssets.RecipeTabWidth &&
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[20..]) == height,
+            "Crafting method tab keeps the provided PNG pixel dimensions: " + path);
     }
 }
 
@@ -383,12 +654,116 @@ static void BookmarkCheatClicks()
     var window = typeof(CatalogItem).Assembly.GetType("NotEnoughItems.NeiWindow", throwOnError: true)!;
     var check = window.GetMethod("CanGiveSlot", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
         null, [typeof(bool), typeof(string), typeof(CatalogItem), typeof(int), typeof(bool), typeof(bool), typeof(bool)], null)!;
-    var item = new CatalogItem("rope", "Rope");
-    bool Can(string id = "item:rope", int button = 0, bool shift = false, bool alt = false, bool cheat = true, bool source = true) =>
-        (bool)check.Invoke(null, [source, id, item, button, shift, alt, cheat])!;
-    Check(Can() && Can(button: 1), "Both ordinary bookmark click actions reach item giving in Cheat mode.");
-    Check(!Can(shift: true) && !Can(alt: true) && !Can(button: 2), "Lookup/drag and bookmark gestures do not give items.");
-    Check(!Can(cheat: false) && !Can(source: false) && !Can(id: "recipe/native/rope"), "Recipe browsing, other menus and recipe bookmarks never give an item.");
+    bool Can(CatalogItem? item, string? id = null, int button = 0, bool shift = false, bool alt = false, bool cheat = true, bool source = true) =>
+        (bool)check.Invoke(null, [source, id ?? item?.BrowseId ?? "missing", item, button, shift, alt, cheat])!;
+    foreach (var item in new[] { new CatalogItem("water"), new CatalogItem("water", kind: CatalogItemKind.Liquid) })
+    {
+        Check(Can(item) && Can(item, button: 1), "Both physical and liquid entries accept left and right clicks in Cheat mode.");
+        Check(!Can(item, shift: true) && !Can(item, alt: true) && !Can(item, button: 2), "Lookup/drag and bookmark gestures never give either kind.");
+        Check(!Can(item, cheat: false) && !Can(item, source: false) && !Can(item, id: "recipe/native/water"),
+            "Recipe browsing, other menus and recipe bookmarks never give either kind.");
+    }
+    Check(!Can(null) && !Can(new CatalogItem("water", kind: CatalogItemKind.Liquid, isVirtual: true)),
+        "Missing and virtual liquid entries cannot be given.");
+}
+
+static void SharedSlotGiveAmount()
+{
+    var actions = typeof(Catalog).Assembly.GetType("NotEnoughItems.NeiActions", throwOnError: true)!;
+    var slotAmount = actions.GetMethod("SlotGiveAmount", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    int Amount(int button, int value) => (int)slotAmount.Invoke(null, [button, value])!;
+    for (int count = 1; count <= 64; count++)
+        Check(Amount(0, count) == count && Amount(1, count) == 1, "Left gives the selected count; right gives one.");
+    Check(Amount(0, 0) == 1 && Amount(0, 65) == 64, "Invalid counts cannot give outside the configured 1–64 range.");
+}
+
+static void SpawnModeConfig()
+{
+    // Keep scratch config in the writable test output rather than touching the live BepInEx config.
+    string path = Path.Combine(AppContext.BaseDirectory, $"nei-spawn-mode-{Guid.NewGuid():N}.cfg");
+    var plugin = typeof(Catalog).Assembly.GetType("NotEnoughItems.Plugin", throwOnError: true)!;
+    var bind = plugin.GetMethod("BindSpawnMode", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    BepInEx.Configuration.ConfigEntryBase Reload() => (BepInEx.Configuration.ConfigEntryBase)bind.Invoke(null,
+        [new BepInEx.Configuration.ConfigFile(path, saveOnInit: false)])!;
+
+    try
+    {
+        var entry = Reload();
+        Check(entry.BoxedValue.ToString() == "Nei", "Existing installations without this setting keep NEI pickup.");
+        Check(Enum.GetNames(entry.SettingType).SequenceEqual(new[] { "Nei", "SpawnToPlayer" }), "Offer exactly the two spawn modes.");
+        foreach (string mode in new[] { "SpawnToPlayer", "Nei" })
+        {
+            entry.BoxedValue = Enum.Parse(entry.SettingType, mode);
+            entry = Reload();
+            Check(entry.BoxedValue.ToString() == mode, $"BepInEx reload restores {mode}.");
+        }
+    }
+    finally { File.Delete(path); }
+}
+
+static void SpawnPlacement()
+{
+    var assembly = typeof(Catalog).Assembly;
+    var mode = assembly.GetType("NotEnoughItems.SpawnMode", throwOnError: true)!;
+    var actions = assembly.GetType("NotEnoughItems.NeiActions", throwOnError: true)!;
+    const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+    var pickup = actions.GetMethod("UsesVanillaPickup", flags)!;
+    bool UsesVanilla(string choice, CatalogItemKind kind) => (bool)pickup.Invoke(null, [Enum.Parse(mode, choice), kind])!;
+    Check(UsesVanilla("SpawnToPlayer", CatalogItemKind.Item) && !UsesVanilla("Nei", CatalogItemKind.Item) &&
+        !UsesVanilla("SpawnToPlayer", CatalogItemKind.Liquid), "Only physical items use the vanilla pickup path when selected.");
+
+    var spawnPosition = actions.GetMethod("SpawnPosition", flags)!;
+    var player = new Vector2(12f, -8f);
+    for (int i = 0; i < 9; i++)
+    {
+        Vector2 Position(bool vanilla) => (Vector2)spawnPosition.Invoke(null, [player, i, vanilla])!;
+        var original = Position(vanilla: false);
+        var native = Position(vanilla: true);
+        Equal(player.x + (i % 7 - 3) * .10f, original.x, "NEI spawn spreads multiple drops horizontally");
+        Equal(player.y + .4f, original.y, "NEI spawn stays above the player position");
+        Equal(player.x, native.x, "Vanilla spawn uses same player X for all items");
+        Equal(player.y, native.y, "Vanilla spawn uses the player Y");
+    }
+    Check(typeof(Body).GetMethod("AutoPickUpItem", [typeof(Item)])?.ReturnType == typeof(void),
+        "The installed game exposes the native automatic pickup endpoint.");
+}
+
+static void FullTemporaryBottle()
+{
+    const System.Reflection.BindingFlags privateInstance = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+    const System.Reflection.BindingFlags privateStatic = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+    var actions = typeof(Catalog).Assembly.GetType("NotEnoughItems.NeiActions", throwOnError: true)!;
+    var fill = actions.GetMethod("FillTemporaryBottle", privateStatic)!;
+    var prefabId = (string)actions.GetField("TemporaryBottleId", privateStatic)!.GetRawConstantValue()!;
+    Equal(300f, (float)actions.GetField("TemporaryBottleLifetime", privateStatic)!.GetRawConstantValue()!, "Native crafting bottle lifetime");
+    Check(prefabId == "craftingbottle", "Liquid giving uses the native temporary crafting bottle.");
+
+    // Use the game's managed liquid methods without requiring a Unity scene or native constructors.
+    var item = (Item)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Item));
+    item.id = prefabId;
+    var bottle = (WaterContainerItem)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(WaterContainerItem));
+    typeof(WaterContainerItem).GetField("item", privateInstance)!.SetValue(bottle, item);
+    var previous = Item.GlobalItems;
+    var stats = new LiquidItemInfo { capacity = 750f };
+    Item.GlobalItems = new Dictionary<string, ItemInfo> { [item.id] = stats };
+    try
+    {
+        bottle.stack = [new LiquidStack("other", 12f), new LiquidStack("water", 25f)];
+        fill.Invoke(null, [bottle, "water"]);
+        Check(bottle.stack.Count == 1 && bottle.stack[0].liquidId == "water", "The bottle must not retain default or mixed contents.");
+        Equal(stats.capacity, bottle.AmountOf("water"), "The selected liquid fills the whole current capacity");
+        Equal(0f, bottle.SpaceLeft, "No space remains");
+        Equal(1f, item.condition, "Native liquid condition reports a full bottle");
+
+        stats.capacity = 0f;
+        try
+        {
+            fill.Invoke(null, [bottle, "water"]);
+            throw new Exception("A zero-capacity bottle must not be delivered.");
+        }
+        catch (System.Reflection.TargetInvocationException error) when (error.InnerException is InvalidOperationException) { }
+    }
+    finally { Item.GlobalItems = previous; }
 }
 
 static void NativeInventoryAnchor()
@@ -396,13 +771,10 @@ static void NativeInventoryAnchor()
     var adapter = typeof(Catalog).Assembly.GetType("NotEnoughItems.GameSurface", throwOnError: true)!;
     var anchor = adapter.GetMethod("AnchorInventory", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
     var radial = new Rect(-297, -292, 594, 601);
-    var container = new Rect(390, -345, 200, 690);
-    Rect Resolve(Rect? currentContainer, float screenWidth, float screenHeight, float scale) =>
-        (Rect)anchor.Invoke(null, [radial, currentContainer, screenWidth, screenHeight, scale])!;
-    RectEqual(new Rect(343, 68, 594, 601), Resolve(null, 1280, 720, 1), "Centered vanilla inventory");
-    var withContainer = Resolve(container, 1280, 720, 1);
-    Check(withContainer.xMin <= 343 && withContainer.xMax >= 1230, "The open container reserves the right side at full size.");
-    RectEqual(new Rect(514.5f, 102, 891, 901.5f), Resolve(null, 1920, 1080, 1.5f), "Screen/UI scaling");
+    Rect Resolve(float screenWidth, float screenHeight, float scale) =>
+        (Rect)anchor.Invoke(null, [radial, screenWidth, screenHeight, scale])!;
+    RectEqual(new Rect(343, 68, 594, 601), Resolve(1280, 720, 1), "Centered vanilla inventory");
+    RectEqual(new Rect(514.5f, 102, 891, 901.5f), Resolve(1920, 1080, 1.5f), "Screen/UI scaling");
 }
 
 static void BookmarkChainBalances()

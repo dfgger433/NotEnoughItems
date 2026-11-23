@@ -63,7 +63,7 @@ internal sealed partial class NeiWindow
                     // For a co-product slot, top up the pointed-at product, not the first output.
                     var selectedEntry = route[target.Value];
                     route[target.Value] = new BookmarkChainBalanceEntry(cell.Id, selectedEntry.Quantity, recipe,
-                        selectedEntry.ShowRecipe, selectedEntry.PreferredIngredients);
+                        selectedEntry.ShowRecipe, selectedEntry.PreferredIngredients, selectedEntry.PreferredRecipe);
                 }
             }
             else
@@ -85,7 +85,8 @@ internal sealed partial class NeiWindow
             route = new[] { route[selected] };
             target = 0;
         }
-        var plan = BookmarkChainBalance.PlanCraft(_catalog, route, target, topUp, CarriedQuantities(camera.body));
+        var plan = BookmarkChainBalance.PlanCraft(_catalog, route, target, topUp, NativeCraftStock.Quantities(camera.body),
+            PreferredMaterials, NativeCraftStock.Quantities(camera.body, nearby: true));
         if (plan.Steps.Count == 0 && plan.Diagnostics.Count == 0)
         {
             Status(topUp ? L("Order already covered by carried stock.", "随身库存已满足目标数量。") : L("No recipe steps.", "没有制作步骤。"));
@@ -103,7 +104,7 @@ internal sealed partial class NeiWindow
         {
             var job = BookmarkCrafting.Execute(plan, Status, () => generation == _productionContext && _group == page && ShowLeft &&
                 _plugin.isActiveAndEnabled && !_plugin.NativePointerActive && camera && PlayerCamera.main == camera &&
-                camera.body == body && camera.craftingPanel && camera.craftingPanel.activeInHierarchy && !PauseHandler.paused && _catalog.Revision == revision, route);
+                camera.body == body && camera.craftingPanel && camera.craftingPanel.activeInHierarchy && !PauseHandler.paused && _catalog.Revision == revision, route, PreferredMaterials);
             try
             {
                 while (true)
@@ -128,20 +129,5 @@ internal sealed partial class NeiWindow
         (output.IsLiquid || (output.Condition >= input.MinimumCondition && (!input.NoMaxCondition || output.Condition < .991f))) &&
         (input.MatchesAny ? _catalog.TryGetItem(output.BrowseId, out var item) && input.Matches(item) : SameId(output.BrowseId, input.BrowseId));
 
-    private static Dictionary<string, int> CarriedQuantities(Body? body)
-    {
-        var totals = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-        if (body && body!.GetAllItemsThorough() is { } carried)
-            foreach (var item in carried.Distinct())
-            {
-                if (!item || item.favourited || string.IsNullOrEmpty(item.id)) continue;
-                if (!item.TryGetComponent<Container>(out var storage) || storage.itemCount == 0) Count("item:" + item.id, 1);
-                if (item.TryGetComponent<WaterContainerItem>(out var container) && container.stack != null)
-                    foreach (var stack in container.stack)
-                        if (stack != null && stack.amount > 0 && !string.IsNullOrWhiteSpace(stack.liquidId)) Count("liquid:" + stack.liquidId, stack.amount);
-            }
-        return totals.ToDictionary(pair => pair.Key, pair => (int)Math.Min(int.MaxValue, Math.Floor(pair.Value)), StringComparer.OrdinalIgnoreCase);
 
-        void Count(string key, double amount) { totals.TryGetValue(key, out double prior); totals[key] = prior + amount; }
-    }
 }

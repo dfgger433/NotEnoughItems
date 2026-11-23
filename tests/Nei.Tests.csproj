@@ -17,8 +17,9 @@
     <IntermediateOutputPath>obj/$(Configuration)/core-only/</IntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs;BookmarkParityTests.cs;CatalogGroupsTests.cs;../CatalogGroups.cs;../BookmarkBoardPaging.cs;../BookmarkShortcut.cs" />
-    <Compile Include="../NeiSearch.cs;../NeiLayout.cs;../BookmarkBook.cs;../NeiAssets.cs;../ModernityFrames.cs;../DragInputPolicy.cs;../CheatPermission.cs" />
+    <Compile Include="Program.cs;BookmarkParityTests.cs;PinyinSearchTests.cs;../BookmarkBoardPaging.cs;../BookmarkShortcut.cs;../BookmarkHelp.cs;../PinyinSearch.cs;../PanelLayoutDrag.cs;../SlotQuantity.cs" />
+    <Compile Include="RecipeListLayoutTests.cs;HistoryCatalogTests.cs;../RecipeListLayout.cs;../Screens/RecipeGridLayout.cs;../Screens/RecipePageLayout.cs;../TooltipPlacement.cs" />
+    <Compile Include="../NeiSearch.cs;../NeiLayout.cs;../BookmarkBook.cs;../NeiAssets.cs;../ModernityFrames.cs;../DragInputPolicy.cs;../CheatPermission.cs;../TabFocusPolicy.cs" />
     <Reference Include="UnityEngine" HintPath="$(ManagedDir)/UnityEngine.dll" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)/UnityEngine.CoreModule.dll" />
   </ItemGroup>
@@ -30,8 +31,11 @@
     <Reference Include="BepInEx" HintPath="$(GameRoot)/BepInEx/core/BepInEx.dll" />
     <Reference Include="0Harmony" HintPath="$(GameRoot)/BepInEx/core/0Harmony.dll" />
     <Reference Include="UnityEngine.UI" HintPath="$(ManagedDir)/UnityEngine.UI.dll" />
+    <Reference Include="UnityEngine.IMGUIModule" HintPath="$(ManagedDir)/UnityEngine.IMGUIModule.dll" />
     <Reference Include="Unity.TextMeshPro" HintPath="$(ManagedDir)/Unity.TextMeshPro.dll" />
-    <Compile Include="TooltipSmoke.cs" />
+    <Compile Include="TooltipSmoke.cs;SurfaceSmoke.cs;CatalogQuantityTests.cs" />
+        <None Include="$(GameRoot)/BepInEx/plugins/JustUnknownCharacters.dll" Link="JustUnknownCharacters.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(GameRoot)/BepInEx/plugins/JustUnknownCharacters.dll')" />
+    <Compile Include="RecipeMethodsTests.cs;../RecipeMethods.cs;CatalogListingTests.cs;../CatalogListing.cs" />
   </ItemGroup>
   <PropertyGroup Condition="'$(SkipRecipeTests)' != 'true'">
     <DefineConstants>$(DefineConstants);RECIPE_TESTS</DefineConstants>

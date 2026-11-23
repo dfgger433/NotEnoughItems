@@ -1,10 +1,11 @@
 using System;
-using System.Globalization;
 using CUCoreLib.Helpers;
 using CUCoreLib.Registries;
 using UnityEngine;
 
 namespace NotEnoughItems;
+
+internal enum SpawnMode { Nei, SpawnToPlayer }
 
 /// <summary>Optional sandbox actions routed to the local game or the authorized Together command dispatcher.</summary>
 internal static class NeiActions
@@ -12,23 +13,52 @@ internal static class NeiActions
     internal enum LocalMode
     {
         Recipe,
-        Utility,
         Cheat
     }
 
+    // Ordinary NEI item counts use 64 per stack. Keep at most one such batch per click:
+    // the native spawn loop and Together's give command each create one real object per item.
     internal const int MaxGiveAmount = 64;
+    private const string TemporaryBottleId = "craftingbottle";
+    private const float TemporaryBottleLifetime = 300f; // Same scaled lifetime as the native crafting output.
+
+    internal static int ClampGiveAmount(int amount) => Math.Clamp(amount, 1, MaxGiveAmount);
+    internal static int SlotGiveAmount(int button, int configuredAmount) => button == 1 ? 1 : ClampGiveAmount(configuredAmount);
+    internal static string? MultiplayerGiveCommand(string itemId, int amount) => CheatPermission.GiveCommand(itemId, amount, MaxGiveAmount);
+
+    // A blank or zero draft doesn't replace the current setting. Saturate oversized
+    // digit-only pastes while parsing, without overflowing even for very long input.
+    internal static bool TryReadGiveAmount(string text, out int? amount)
+    {
+        amount = null;
+        int value = 0;
+        foreach (char digit in text.AsSpan().Trim())
+        {
+            if (digit is < '0' or > '9') return false;
+            value = Math.Min(MaxGiveAmount, value * 10 + (digit - '0'));
+        }
+        if (value > 0) amount = value;
+        return true;
+    }
+
     private static WorldGeneration? _enabledWorld;
     private static Body? _enabledBody;
     private static CheatSession _enabledSession;
     private static LocalMode _mode;
 
-    /// <summary>The three-state NEI mode, matching the original recipe/utility/cheat switch.</summary>
+    /// <summary>The two-state NEI mode: recipe browsing or cheat actions.</summary>
     internal static LocalMode Mode => _mode;
 
-    /// <summary>Whether the optional local action panel is in utility or cheat mode.</summary>
+    /// <summary>Whether item-giving shortcuts are active for the current mode.</summary>
+    internal static bool CanGive => _mode == LocalMode.Cheat && GetContext(out _, out var session) == null && session.Supports("give");
+
+    /// <summary>Whether a cheat mode can be entered. This deliberately excludes opt-in so the UI can explain it.</summary>
+    internal static bool CanEnter => GetContext(out _, out _, requireEnabled: false, requireOptIn: false) == null;
+
+    /// <summary>Whether cheat mode is currently enabled.</summary>
     internal static bool Enabled
     {
-        get => _mode != LocalMode.Recipe;
+        get => _mode == LocalMode.Cheat;
         set => SetEnabled(value);
     }
 
@@ -37,19 +67,7 @@ internal static class NeiActions
         if (_enabledSession.Access == CheatAccess.Offline) SetMode(LocalMode.Recipe);
     }
 
-    /// <summary>Whether utility actions are visible for the current mode.</summary>
-    internal static bool ShowsUtilities => _mode is LocalMode.Utility or LocalMode.Cheat;
-
-    /// <summary>Whether item-giving shortcuts are active for the current mode.</summary>
-    internal static bool CanGive => _mode == LocalMode.Cheat && GetContext(out _, out var session) == null && session.Supports("give");
-
-    /// <summary>Whether a local mode can be entered. This deliberately excludes opt-in so the UI can explain it.</summary>
-    internal static bool CanEnter => GetContext(out _, out _, requireEnabled: false, requireOptIn: false) == null;
-    internal static bool CanHeal => GetContext(out _, out var session) == null && session.Supports("heal");
-    internal static bool CanSetSpeed => GetContext(out _, out var session) == null &&
-        (session.Access == CheatAccess.Offline || session.TimeManipulation && session.Supports("timescale"));
-
-    /// <summary>Changes the mode for compatibility with existing reset paths.</summary>
+    /// <summary>Changes cheat mode for compatibility with existing shutdown/reset paths.</summary>
     internal static bool SetEnabled(bool value)
     {
         if (!value)
@@ -58,7 +76,7 @@ internal static class NeiActions
             return true;
         }
 
-        if (_mode == LocalMode.Recipe && TrySetMode(LocalMode.Utility)) return true;
+        if (_mode == LocalMode.Recipe && TrySetMode(LocalMode.Cheat)) return true;
         return Enabled;
     }
 
@@ -69,7 +87,7 @@ internal static class NeiActions
         set => SetEnabled(value);
     }
 
-    /// <summary>Cycles Recipe → Utility → Cheat, after the explicit local-cheat opt-in check.</summary>
+    /// <summary>Cycles Recipe → Cheat, after the explicit local-cheat opt-in check.</summary>
     internal static bool TryCycleMode(out string notice)
     {
         if (_mode == LocalMode.Cheat)
@@ -86,18 +104,13 @@ internal static class NeiActions
             return false;
         }
 
-        var next = _mode == LocalMode.Utility && SessionMatches(camera, session) ? LocalMode.Cheat : LocalMode.Utility;
-        EnterMode(next, camera, session);
-        notice = Text($"NEI mode: {ModeName(next)}.", $"NEI 模式：{ModeName(next)}。");
+        EnterMode(LocalMode.Cheat, camera, session);
+        notice = Text("NEI mode: Cheat.", "NEI 模式：作弊。");
         return true;
     }
 
-    internal static string ModeName(LocalMode mode) => mode switch
-    {
-        LocalMode.Utility => Text("Utility", "实用"),
-        LocalMode.Cheat => Text("Cheat", "作弊"),
-        _ => Text("Recipe", "配方")
-    };
+    internal static string ModeName(LocalMode mode) => mode == LocalMode.Cheat
+        ? Text("Cheat", "作弊") : Text("Recipe", "配方");
 
     private static void SetMode(LocalMode mode)
     {
@@ -138,8 +151,15 @@ internal static class NeiActions
         _enabledWorld == WorldGeneration.world && _enabledBody == camera.body && _enabledSession.Access == session.Access &&
         ReferenceEquals(_enabledSession.Transport, session.Transport);
 
-    /// <summary>Gives registered items to the local player. Returns null on success.</summary>
-    internal static string? Give(string itemId, int amount, out int dropped, out bool submitted)
+    // Vanilla has no filled-liquid spawn; preserve NEI's existing bottled-liquid delivery.
+    internal static bool UsesVanillaPickup(SpawnMode mode, CatalogItemKind kind) =>
+        mode == SpawnMode.SpawnToPlayer && kind == CatalogItemKind.Item;
+
+    internal static Vector2 SpawnPosition(Vector2 player, int index, bool vanilla) => vanilla
+        ? player : player + new Vector2((index % 7 - 3) * .10f, .4f);
+
+    /// <summary>Gives registered items or full temporary bottles to the local player. Returns null on success.</summary>
+    private static string? Give(CatalogItem entry, int amount, out int dropped, out bool submitted)
     {
         dropped = 0;
         submitted = false;
@@ -148,14 +168,18 @@ internal static class NeiActions
         var blocked = GetContext(out var camera, out var session);
         if (blocked != null) return blocked;
         if (camera.dragItem) return Text("Finish dragging the current item first.", "请先结束当前物品的拖拽。");
-        if (string.IsNullOrWhiteSpace(itemId)) return Text("No item ID was supplied.", "未提供物品 ID。");
+        if (entry.IsVirtual || entry.Kind is not (CatalogItemKind.Item or CatalogItemKind.Liquid))
+            return Text("This entry cannot be given.", "此条目无法刷取。");
         if (amount < 1 || amount > MaxGiveAmount)
             return Text($"Quantity must be 1–{MaxGiveAmount}.", $"数量必须在 1–{MaxGiveAmount} 之间。");
 
-        itemId = itemId.Trim();
+        string itemId = entry.Id;
         if (session.Access != CheatAccess.Offline)
         {
-            var command = CheatPermission.GiveCommand(itemId, amount, MaxGiveAmount);
+            if (entry.IsLiquid)
+                return Text("Together cannot give filled liquid bottles. Liquid giving is single-player only.",
+                    "Together 无法发放装满液体的瓶子；液体仅支持单机刷取。");
+            var command = MultiplayerGiveCommand(itemId, amount);
             if (command == null) return Text("Not a valid multiplayer item ID or quantity.", "联机物品 ID 或数量无效。");
             var prefab = Resources.Load<GameObject>(itemId);
             if (!prefab || !prefab.TryGetComponent<Item>(out _))
@@ -168,32 +192,51 @@ internal static class NeiActions
         int delivered = 0;
         try
         {
-            // The base-game resource and CUCoreLib registry are game-side sources of truth.
-            // Do not send a catalog object or a raw command, or instantiate a non-item prefab.
-            var prefab = Resources.Load<GameObject>(itemId);
-            bool custom = !prefab && ItemRegistry.TryGetCustomInfo(itemId, out _);
-            if (custom) prefab = CustomInstantiate.ResolvePrefab(itemId);
-            if (!prefab || !prefab.TryGetComponent<Item>(out _))
-                return Text($"No spawnable item prefab for '{itemId}'.", $"“{itemId}”没有可生成的物品预制件。");
+            // The catalog distinguishes item and liquid IDs, but the game registries decide what can be spawned.
+            bool liquid = entry.IsLiquid;
+            if (liquid && (Liquids.Registry == null || !Liquids.Registry.TryGetValue(itemId, out var type) || type == null))
+                return Text($"Liquid '{itemId}' is not registered in the game.", $"游戏中没有注册液体“{itemId}”。");
 
+            string prefabId = liquid ? TemporaryBottleId : itemId;
+            var prefab = Resources.Load<GameObject>(prefabId);
+            bool custom = !liquid && !prefab && ItemRegistry.TryGetCustomInfo(itemId, out _);
+            if (custom) prefab = CustomInstantiate.ResolvePrefab(itemId);
+            if (liquid && (!prefab || !prefab.TryGetComponent<WaterContainerItem>(out _)))
+                return Text("The game's temporary bottle is unavailable.", "游戏的临时瓶不可用。");
+            if (!prefab || !prefab.TryGetComponent<Item>(out _))
+                return Text($"No spawnable item prefab for '{prefabId}'.", $"“{prefabId}”没有可生成的物品预制件。");
+
+            // Follow `spawn … player` in single-player without opening or writing to the console.
+            bool vanilla = UsesVanillaPickup(Plugin.Instance?.ItemSpawnMode ?? SpawnMode.Nei, entry.Kind);
+            Vector2 playerPosition = vanilla ? (Vector2)body.transform.position : default;
             MarkCheat(world);
             for (; delivered < amount; delivered++)
             {
-                var position = (Vector2)body.transform.position + new Vector2(0f, 0.4f);
-                position.x += (delivered % 7 - 3) * 0.10f;
+                var position = SpawnPosition(vanilla ? playerPosition : (Vector2)body.transform.position, delivered, vanilla);
                 instance = custom
                     ? CustomInstantiate.InstantiateReturn(itemId, position, Quaternion.identity)
-                    : Utils.Create(itemId, position, 0f);
+                    : Utils.Create(prefabId, position, 0f);
                 if (!instance || !instance.TryGetComponent<Item>(out var item))
                     throw new InvalidOperationException("The item factory did not return an item.");
 
-                // Match the native spawn command's default condition and magazine setup.
-                item.SetCondition(1f);
-                if (instance.TryGetComponent<AmmoScript>(out var ammo) && ammo.itemType == AmmoScript.AmmoItemType.Magazine)
-                    ammo.rounds = ammo.maxRounds;
+                if (liquid)
+                {
+                    // Fill before checking carry capacity so stowing sees the full bottle's weight.
+                    if (!instance.TryGetComponent<WaterContainerItem>(out var bottle))
+                        throw new InvalidOperationException("The temporary bottle has no liquid container.");
+                    FillTemporaryBottle(bottle, itemId);
+                    UnityEngine.Object.Destroy(instance, TemporaryBottleLifetime);
+                }
+                else
+                {
+                    // Match the native spawn command's default condition and magazine setup.
+                    item.SetCondition(1f);
+                    if (instance.TryGetComponent<AmmoScript>(out var ammo) && ammo.itemType == AmmoScript.AmmoItemType.Magazine)
+                        ammo.rounds = ammo.maxRounds;
+                }
 
-                if (!TryStow(body, item)) dropped++;
-                instance = null; // This instance is now in inventory or deliberately left nearby.
+                if (!(vanilla ? TryVanillaPickup(body, item) : TryStow(body, item))) dropped++;
+                instance = null; // This instance is now with the player or deliberately left nearby.
             }
             return null;
         }
@@ -205,12 +248,23 @@ internal static class NeiActions
         }
     }
 
+    private static void FillTemporaryBottle(WaterContainerItem bottle, string liquidId)
+    {
+        float capacity = bottle.Capacity;
+        if (!float.IsFinite(capacity) || capacity <= 0f)
+            throw new InvalidOperationException("The temporary bottle has no usable capacity.");
+
+        bottle.DrainAll();
+        if (bottle.AddLiquid(liquidId, capacity) != capacity)
+            throw new InvalidOperationException("The temporary bottle could not be filled.");
+    }
+
     /// <summary>
     /// Handles the Cheat-mode click contract used by the item grid without making ItemSlot know game APIs.
     /// Left click uses the configured quantity, right click gives one. Shift deliberately returns false,
     /// preserving the original lookup gesture instead of silently giving items.
     /// </summary>
-    internal static bool TryHandleGiveFromSlot(string itemId, int button, bool shift, int configuredQuantity,
+    internal static bool TryHandleGiveFromSlot(CatalogItem entry, int button, bool shift, int configuredQuantity,
         out string? error, out int dropped, out bool submitted)
     {
         error = null;
@@ -225,63 +279,16 @@ internal static class NeiActions
             return true;
         }
 
-        int amount = button == 1 ? 1 : Mathf.Clamp(configuredQuantity, 1, MaxGiveAmount);
-        error = Give(itemId, amount, out dropped, out submitted);
+        int amount = SlotGiveAmount(button, configuredQuantity);
+        error = Give(entry, amount, out dropped, out submitted);
         return true;
     }
 
-    /// <summary>Uses the vanilla heal action without reattaching dismembered limbs.</summary>
-    internal static string? Heal(out bool submitted)
+    private static bool TryVanillaPickup(Body body, Item item)
     {
-        submitted = false;
-        var blocked = GetContext(out var camera, out var session);
-        if (blocked != null) return blocked;
-        if (session.Access != CheatAccess.Offline) return Submit(session, "heal", "heal @m", out submitted);
-        try
-        {
-            MarkCheat(WorldGeneration.world);
-            camera.body.Heal(ignoreDismembered: true);
-            return null;
-        }
-        catch (Exception error)
-        {
-            LogFailure("Heal", error);
-            return Text("The game could not complete healing.", "游戏未能完成治疗。");
-        }
-    }
-
-    /// <summary>Selects a native simulation speed: 1×, 5× or 20×, not a world-clock setting.</summary>
-    internal static string? SetSpeed(int multiplier, out bool submitted)
-    {
-        submitted = false;
-        var blocked = GetContext(out var camera, out var session);
-        if (blocked != null) return blocked;
-        if (WorldGeneration.world.biomeDepth == 11 || camera.body.forceNoMovement)
-            return Text("Speed controls are unavailable here.", "当前位置不允许切换游戏速度。");
-        var speed = multiplier switch
-        {
-            1 => PlayerCamera.SpeedType.Normal,
-            5 => PlayerCamera.SpeedType.Fast,
-            20 => PlayerCamera.SpeedType.SuperFast,
-            _ => (PlayerCamera.SpeedType?)null
-        };
-        if (!speed.HasValue) return Text("Choose 1×, 5× or 20×.", "请选择 1×、5× 或 20×。");
-        if (session.Access != CheatAccess.Offline)
-        {
-            if (!session.TimeManipulation) return Text("The server does not allow changing game speed.", "服务器未允许改变游戏速度。");
-            return Submit(session, "timescale", "timescale " + multiplier.ToString(CultureInfo.InvariantCulture), out submitted);
-        }
-        try
-        {
-            camera.SetTimeScale(speed.Value);
-            return camera.curTimeScale == speed.Value && Mathf.Approximately(Time.timeScale, multiplier)
-                ? null : Text("The game did not change speed.", "游戏未切换速度。");
-        }
-        catch (Exception error)
-        {
-            LogFailure("SetSpeed", error);
-            return Text("The game could not change speed.", "游戏未能切换速度。");
-        }
+        if (Vector2.Distance(item.transform.position, body.transform.position) < 2f)
+            body.AutoPickUpItem(item);
+        return item.transform.IsChildOf(body.transform);
     }
 
     private static bool TryStow(Body body, Item item)
@@ -323,8 +330,8 @@ internal static class NeiActions
         camera = PlayerCamera.main;
         var world = WorldGeneration.world;
         session = default;
-        if (requireEnabled && _mode == LocalMode.Recipe)
-            return Text("Select Utility or Cheat mode first.", "请先选择实用或作弊模式。");
+        if (requireEnabled && _mode != LocalMode.Cheat)
+            return Text("Select Cheat mode first.", "请先选择作弊模式。");
         if (!camera || !world || world.generatingWorld || world.cutsceneActive || PauseHandler.paused ||
             camera.didDeathScreen || camera.selfDestructActive || !camera.body || !camera.body.alive || !camera.body.conscious ||
             camera.gameObject.scene != world.gameObject.scene || camera.body.gameObject.scene != world.gameObject.scene)
@@ -336,7 +343,7 @@ internal static class NeiActions
         if (requireOptIn && session.Access == CheatAccess.Offline && Plugin.Instance?.AllowCheats != true)
             return Text("Enable single-player cheats in NEI settings first.", "请先在 NEI 设置中允许单机作弊。");
         if (requireEnabled && !SessionMatches(camera, session))
-            return Text("Re-enter Utility or Cheat mode for this session.", "请在当前会话重新进入实用或作弊模式。");
+            return Text("Re-enter Cheat mode for this session.", "请在当前会话重新进入作弊模式。");
         return null;
     }
 

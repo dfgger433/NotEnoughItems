@@ -24,6 +24,7 @@ internal sealed class BookmarkBook
     private readonly Dictionary<string, DisplayState> _pages = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Page, string Group), DisplayState> _groups = new();
     private readonly HashSet<string> _favorites = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _favoriteRoutes = new(StringComparer.OrdinalIgnoreCase);
     internal readonly List<Entry> Entries = new();
 
     private readonly struct DisplayState(bool compact, bool chain, bool collapsed)
@@ -54,7 +55,19 @@ internal sealed class BookmarkBook
     }
 
     internal IEnumerable<string> PageNames => _pages.Keys.Concat(Entries.Select(entry => entry.Page)).Distinct(StringComparer.Ordinal);
-    internal IEnumerable<string> Favorites => _favorites;
+    internal IEnumerable<string> Favorites => _favorites.Where(IsRecipeKey);
+    internal IEnumerable<string> FavoriteMaterials => _favorites.Where(IsMaterialKey);
+    internal IEnumerable<KeyValuePair<string, string>> FavoriteRoutes => _favoriteRoutes;
+    internal string? FavoriteRoute(string product) => _favoriteRoutes.TryGetValue(product, out var recipe) ? recipe : null;
+
+    internal bool SetFavoriteRoute(string product, string? recipe)
+    {
+        if (!IsMaterialKey(product) || !ValidId(product)) return false;
+        if (recipe == null) return _favoriteRoutes.Remove(product);
+        if (!TryRecipeKey(recipe, out var key) || (!_favoriteRoutes.ContainsKey(product) && _favoriteRoutes.Count >= Limit)) return false;
+        _favoriteRoutes[product] = key;
+        return true;
+    }
     internal IEnumerable<Entry> Page(string page) => Entries.Where(entry => entry.Page == page);
     internal Entry? Find(string page, string id) => Entries.Find(entry => entry.Page == page && entry.Id == id);
     internal Entry? Find(string page, string id, string group) => Entries.Find(entry => entry.Page == page && entry.Id == id && entry.Group == group);
@@ -68,6 +81,14 @@ internal sealed class BookmarkBook
         if (!TryRecipeKey(recipeKey, out var key)) return false;
         return _favorites.Remove(key) || (_favorites.Count < Limit && _favorites.Add(key));
     }
+
+    internal bool IsFavoriteMaterial(string id) => IsMaterialKey(id) && _favorites.Contains(id);
+
+    internal bool ToggleFavoriteMaterial(string id) => ValidId(id) && IsMaterialKey(id) &&
+        (_favorites.Remove(id) || (_favorites.Count < Limit && _favorites.Add(id)));
+
+    private static bool IsMaterialKey(string id) => id.StartsWith("item:", StringComparison.OrdinalIgnoreCase) ||
+        id.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase) || id.StartsWith("virtual:", StringComparison.OrdinalIgnoreCase);
 
     internal Entry? Add(string page, string id, int quantity, string group = "", bool showRecipe = true,
         string? productId = null, bool showQuantity = false)
@@ -404,10 +425,15 @@ internal sealed class BookmarkBook
     internal bool Ungroup(string page, string group)
     {
         if (string.IsNullOrEmpty(group)) return false;
-        var selected = Page(page).Where(entry => entry.Group == group).ToArray();
-        foreach (var entry in selected) entry.Group = "";
-        _groups.Remove((page, group));
-        return selected.Length > 0;
+        bool changed = false;
+        foreach (var entry in Page(page))
+        {
+            if (entry.Group != group) continue;
+            entry.Group = "";
+            changed = true;
+        }
+        if (changed) _groups.Remove((page, group));
+        return changed;
     }
 
     internal bool GroupRange(Entry first, Entry last)
@@ -517,7 +543,11 @@ internal sealed class BookmarkBook
                 .Append(':').Append(string.Join(",", entry.IngredientOrder.Select(Number)));
         }
         if (includeFavorites)
-            foreach (string recipe in _favorites.OrderBy(id => id, StringComparer.Ordinal)) text.Append("|F:").Append(Escape(recipe));
+        {
+            foreach (string favorite in _favorites.OrderBy(id => id, StringComparer.Ordinal)) text.Append("|F:").Append(Escape(favorite));
+            foreach (var pair in _favoriteRoutes.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                text.Append("|F:").Append(Escape(pair.Value)).Append(':').Append(Escape(pair.Key));
+        }
         return text.ToString();
     }
 
@@ -528,13 +558,14 @@ internal sealed class BookmarkBook
     private bool Read(string? data, string? targetPage, bool import)
     {
         if (string.IsNullOrWhiteSpace(data) || data!.Length > PayloadLimit || (targetPage != null && !ValidText(targetPage, NameLimit))) return false;
-        string[] records = data.Split(new[] { '|' }, Limit * 4 + 2);
-        if (records.Length > Limit * 4 + 1) return false;
+        string[] records = data.Split(new[] { '|' }, Limit * 5 + 2);
+        if (records.Length > Limit * 5 + 1) return false;
         bool v3 = records[0] == Format, v2 = records[0] == PreviousFormat;
         if (import && !v3 && !v2) return false;
         var pages = new Dictionary<string, DisplayState>(StringComparer.Ordinal);
         var groups = new Dictionary<(string Page, string Group), DisplayState>();
         var favorites = new HashSet<string>(StringComparer.Ordinal);
+        var routes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var entries = new List<Entry>();
         var legacyKeys = new HashSet<(string Page, string Group, string Id)>();
         for (int i = v3 || v2 ? 1 : 0; i < records.Length; i++)
@@ -554,8 +585,14 @@ internal sealed class BookmarkBook
                             ReadState(fields[3], out var groupState) && groups.Count < Limit && groups.TryAdd((groupPage, group), groupState);
                         break;
                     case "F":
-                        valid = fields.Length == 2 && Decode(fields[1], IdLimit, out var recipe) && IsRecipeKey(recipe) &&
-                            favorites.Count < Limit && favorites.Add(recipe);
+                        valid = false;
+                        if (fields.Length >= 2 && Decode(fields[1], IdLimit, out var favorite))
+                        {
+                            if (fields.Length == 2 && (IsRecipeKey(favorite) || IsMaterialKey(favorite)))
+                                valid = favorites.Count < Limit && favorites.Add(favorite);
+                            else if (!import && fields.Length == 3 && IsRecipeKey(favorite) && Decode(fields[2], IdLimit, out var product) && IsMaterialKey(product))
+                                valid = routes.Count < Limit && routes.TryAdd(product, favorite);
+                        }
                         break;
                     case "E":
                         var current = entries.Count < Limit ? ReadEntry(fields) : null;
@@ -595,6 +632,8 @@ internal sealed class BookmarkBook
         }
         foreach (string favorite in favorites)
             if (_favorites.Count < Limit) changed |= _favorites.Add(favorite);
+        foreach (var pair in routes)
+            if (_favoriteRoutes.Count < Limit) changed |= _favoriteRoutes.TryAdd(pair.Key, pair.Value);
 
         var replacements = new Dictionary<(string Page, string Group), string>();
         var seenLegacy = !v3 ? Entries.Select(entry => (entry.Page, entry.Group, entry.Id)).ToHashSet() : null;

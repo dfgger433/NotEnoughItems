@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
@@ -8,265 +7,353 @@ namespace NotEnoughItems;
 
 internal sealed partial class NeiWindow
 {
-    private void DrawInspector(Rect p)
+    private RecipeMethod[]? _recipeMethods;
+    private int _methodRevision = -1;
+    private bool _methodChinese;
+    private readonly RecipePages _recipePages = new();
+    private RecipeMethod? _pagedMethod;
+    private float _pageWidth, _pageHeight, _pageIconScale;
+    private int _recipeIndex;
+    private Vector2 _recipeScroll;
+    private readonly Dictionary<string, string> _categoryMachines = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<(Rect Row, Rect Heart, Recipe Recipe)> _recipeTargets = new();
+    private readonly List<RecipeDiagramPlan> _pagePlans = new();
+
+    private void DrawInspector(RecipePanelLayout panel)
     {
-        NeiSkin.Background(p, "recipe");
-        var all = _item == null ? _catalog.Recipes : _usage ? _catalog.GetRecipesUsing(_item) : _catalog.GetRecipesProducing(_item);
-        if (_usage && _lookupContents.Length > 0)
-            all = all.Concat(_lookupContents.SelectMany(_catalog.GetRecipesUsing)).Distinct().ToArray();
-        var categories = (_item == null ? _catalog.RecipeCategories : _catalog.RecipeCategories.Where(c => all.Any(r => SameId(r.CategoryId, c.Id)))).ToArray();
-        _catalog.TryGetItem(_item ?? string.Empty, out var subject);
-        _activeRecipe = null;
-        string name = subject?.DisplayName ?? _item ?? L("Bookmarked recipe", "收藏的配方");
-        Header(p, name, _item == null ? "NEI" : _usage ? L("Uses", "用途") : L("Recipes", "配方"));
-        float x = p.x + 8, w = p.width - 16, y = p.y + 31;
-        if (NeiSkin.Button(new Rect(x, y, 64, 23), L("Back", "返回"))) { Back(); return; }
-        if (NeiSkin.IconButton(new Rect(p.xMax - 31, y, 23, 23), "close", L("Close", "关闭"))) { _open = false; _back.Clear(); return; }
-        float mid = x + 68;
-        if (_item != null && w >= 245)
+        var e = Event.current;
+        if (e.type == EventType.MouseDown && e.button == 3 && panel.MethodTitle.Contains(e.mousePosition) && panel.Bounds.Contains(e.mousePosition))
         {
-            float half = (w - 138) / 2;
-            if (NeiSkin.Tab(new Rect(mid, y, half, 23), L("Recipes", "配方"), !_usage)) { Lookup(_item, false, _lookupContents, _lookupItem); return; }
-            if (NeiSkin.Tab(new Rect(mid + half + 4, y, half, 23), L("Uses", "用途"), _usage)) { Lookup(_item, true, _lookupContents, _lookupItem); return; }
-        }
-        y += 28;
-        int categoryIndex = Array.FindIndex(categories, c => SameId(c.Id, _category));
-        if (_category != null && categoryIndex < 0) _category = null;
-        int choice = categoryIndex + 1;
-        if (NeiSkin.IconButton(new Rect(x, y, 24, 23), "previous", L("Previous category", "上一个类别"), categories.Length != 0)) SetCategory(categories, Wrap(choice - 1, categories.Length + 1));
-        if (NeiSkin.IconButton(new Rect(p.xMax - 32, y, 24, 23), "next", L("Next category", "下一个类别"), categories.Length != 0)) SetCategory(categories, Wrap(choice + 1, categories.Length + 1));
-        var selectedCategory = categories.FirstOrDefault(c => SameId(c.Id, _category));
-        if (NeiSkin.Button(new Rect(x + 28, y, w - 56, 23), selectedCategory?.Name ?? L("All recipe categories", "全部配方类别"), categories.Length != 0, true))
-            SetCategory(categories, Wrap(choice + 1, categories.Length + 1));
-        y += 29;
-        _searchRect = new Rect(x, y, w, 22);
-        string filter = DrawSearchInput(_searchRect, _recipeQuery, L("Find a recipe…", "搜索配方…"));
-        if (filter != _recipeQuery) { _recipeIndex = 0; _recipeScroll = Vector2.zero; _recipeQuery = filter; }
-        if (_searchRect.Contains(Event.current.mousePosition) && GUI.GetNameOfFocusedControl() != SearchControl)
-            Tip(L("Recipe search", "配方搜索"), L("< input   > output   ^ machine or tool   ~ name or description", "< 输入   > 产物   ^ 机器或工具   ~ 名称或描述"));
-        y += 27;
-        IReadOnlyList<Recipe> recipes = _category == null ? all : _item == null ? _catalog.GetRecipesForCategory(_category) : all.Where(r => SameId(r.CategoryId, _category)).ToArray();
-        if (_recipeQuery.Length > 0) recipes = recipes.Where(MatchesRecipe).ToArray();
-        if (_craftableOnly) recipes = recipes.Where(IsCraftable).ToArray();
-        if (_selectedRecipeBookmark != null)
-        {
-            for (int i = 0; i < recipes.Count; i++)
-                if (RecipeKey(recipes[i]) == _selectedRecipeBookmark) { _recipeIndex = i; break; }
-            _selectedRecipeBookmark = null;
-        }
-        if (recipes.Count == 0)
-        {
-            NeiSkin.Label(new Rect(x, y + 20, w, 26), L("No matching recipes", "找不到匹配的配方"), TextAnchor.MiddleCenter);
-            if (_craftableOnly && NeiSkin.Button(new Rect(x + w * .25f, y + 56, w * .5f, 23), L("Show all recipes", "显示全部配方"))) _craftableOnly = false;
-            else if (_item != null && !_craftableOnly) ItemSlot(new Rect(p.center.x - 20, y + 55, 40, 40), _item, false);
+            Back();
+            e.Use();
             return;
         }
-        _recipeIndex = Mathf.Clamp(_recipeIndex, 0, recipes.Count - 1);
-        if (NeiSkin.IconButton(new Rect(x, y, 24, 23), "previous", L("Previous recipe", "上一条配方"), recipes.Count > 1)) StepRecipe(-1, recipes.Count);
-        if (NeiSkin.IconButton(new Rect(p.xMax - 32, y, 24, 23), "next", L("Next recipe", "下一条配方"), recipes.Count > 1)) StepRecipe(1, recipes.Count);
-        Recipe recipe = recipes[_recipeIndex];
-        NeiSkin.Label(new Rect(x + 25, y, w - 50, 23), $"{_recipeIndex + 1}/{recipes.Count}  ·  {recipe.Name}", TextAnchor.MiddleCenter);
-        y += 27;
-        _activeRecipe = recipe;
-        var heart = new Rect(x, y, 27, 22);
-        var e = Event.current;
-        if (e.type == EventType.Repaint) _favoriteRect = heart;
-        string key = RecipeKey(recipe);
-        bool favorite = _book.IsFavorite(key);
-        if (NeiSkin.Button(heart, favorite ? "♥" : "♡", selected: favorite)) ToggleFavorite(recipe, key);
-        if (favorite) NeiSkin.BookmarkTint(new Rect(heart.x + 4, heart.yMax - 4, heart.width - 8, 2), new Color32(87, 175, 103, 255));
-        if (heart.Contains(e.mousePosition)) Tip(L("Favorite recipe", "收藏配方样板"),
-            L($"Left: favorite · Shift+{_plugin.BookmarkKey}: place a crafting order", $"左键：收藏样板 · Shift＋{_plugin.BookmarkKey}：添加合成订单"));
-        float available = w - 31;
-        if (NeiSkin.Button(new Rect(x + 31, y, available * .6f - 2, 22), L("Bookmark", "加入书签")))
+        NeiSkin.RecipePanel(panel.Frame);
+        if (NeiSkin.RecipeTab(panel.Back, ModernityFrames.Caption("back"), tooltip: L("Back · Backspace", "返回 · 退格键")))
         {
-            if (_book.ToggleRecipe(_group, key, 1, true, recipe.Outputs.FirstOrDefault()?.BrowseId)) SaveBookmarks();
+            NavigateBack();
+            return;
         }
-        if (NeiSkin.Button(new Rect(x + 31 + available * .6f, y, available * .4f, 22), L("Craftable", "可制作"), selected: _craftableOnly)) { _craftableOnly = !_craftableOnly; _recipeIndex = 0; }
-        y += 27;
-        bool native = recipe.IsNative && recipe.NativeIndex >= 0;
-        float footer = native ? 33 : 9;
-        var viewport = new Rect(x, y, w, p.yMax - y - footer);
-        if (viewport.height >= 35) DrawRecipeBody(viewport, recipe);
-        if (native && recipe.NativeRecipe is { } definition)
+        if (_propertyQuery is { } property)
         {
-            bool known = _plugin.CanOpenCrafting(definition);
-            if (NeiSkin.Button(new Rect(x, p.yMax - 29, w, 23), known ? L("Open in game's crafting menu", "在游戏制作菜单中打开") :
-                L("Not available in the current crafting menu", "当前游戏制作菜单尚不可用"), known) && _plugin.OpenCrafting(definition)) _open = false;
+            DrawPropertyResults(panel, property);
+            return;
         }
+        EnsureDiagramRevision();
+        var methods = GetRecipeMethods();
+        NeiSkin.RecipeBar(panel.Method);
+        NeiSkin.RecipeBar(panel.Pages);
+
+        const float nav = RecipePanelLayout.RowNavWidth;
+        var pageLabel = RecipePanelLayout.RowTitle(panel.Pages);
+
+        int jump = -1;
+        int ingredientToExpand = _selectedRecipeIngredient;
+        _selectedRecipeIngredient = -1;
+        int current = Array.FindIndex(methods, method => SameId(method.Id, _method));
+        if (_selectedRecipeBookmark is { } bookmark)
+        {
+            for (int m = 0; m < methods.Length && jump < 0; m++)
+                for (int r = 0; r < methods[m].Recipes.Count; r++)
+                    if (RecipeKey(methods[m].Recipes[r]) == bookmark) { current = m; jump = r; break; }
+            _selectedRecipeBookmark = null;
+        }
+
+        if (methods.Length == 0)
+        {
+            DrawMethodArrows(panel, false, L("crafting method", "种合成方式"));
+            DrawRecipeArrows(panel.Pages, nav, false, L("recipe page", "配方页"));
+            NeiSkin.RecipeMethodTitle(panel.MethodTitle, _item is { } subject ? Display(subject) : L("Recipes", "配方"));
+            NeiSkin.Label(pageLabel, "0 / 0", TextAnchor.MiddleCenter);
+            DrawNoRecipe(panel.Content);
+            return;
+        }
+
+        current = DrawMethodTabs(panel, methods, Math.Max(0, current));
+        RecipeMethod method = methods[current];
+        if (!SameId(method.Id, _method))
+        {
+            _method = method.Id;
+            ResetRecipePosition();
+        }
+        DrawRecipeCatalyst(panel.Catalyst, method);
+        if (!_open || !SameId(method.Id, _method)) return; // the rail opens another lookup on mouse-down
+
+        float width = RecipePanelLayout.DiagramArea(panel.Content, 0).width;
+        if (!ReferenceEquals(_pagedMethod, method) || _pageWidth != width || _pageHeight != panel.Content.height || _pageIconScale != IconScale)
+        {
+            _recipePages.Build(method.Recipes, recipe => RecipeRowHeight(recipe, width), panel.Content.height);
+            _pagedMethod = method;
+            _pageWidth = width;
+            _pageHeight = panel.Content.height;
+            _pageIconScale = IconScale;
+        }
+        int page = _recipePages.PageOf(jump >= 0 ? jump : _recipeIndex);
+        int delta = DrawRecipeArrows(panel.Pages, nav, _recipePages.Count > 1, L("recipe page", "配方页"));
+        if (delta != 0) page = NavigateRecipePage(page, delta);
+        else if (jump >= 0)
+        {
+            _recipeIndex = jump;
+            var recipe = method.Recipes[jump];
+            if (ingredientToExpand >= 0 && ingredientToExpand < recipe.Inputs.Count && recipe.Inputs[ingredientToExpand].MatchesAny)
+                _expandedRequirement = RequirementToken(recipe, ingredientToExpand);
+        }
+        float height = PrepareRecipePage(panel.Content, method, page, jump >= 0 && delta == 0 && ingredientToExpand >= 0 ? jump : -1);
+        // Candidate popups handle input before the inspector. Resolve the favorite
+        // button ahead of paging and Unity's scroll view using the same clipped rect as its tooltip.
+        if (e.type == EventType.ScrollWheel && e.delta.y != 0 && !HandleRecipeFavoriteWheel(panel.Content, method, page, e))
+        {
+            delta = panel.PageWheelDirection(e.mousePosition, e.delta.y, _recipePages.Count, height);
+            if (delta != 0)
+            {
+                e.Use();
+                page = NavigateRecipePage(page, delta);
+                height = PrepareRecipePage(panel.Content, method, page, -1);
+            }
+        }
+        NeiSkin.Label(pageLabel, L($"Page {page + 1} / {_recipePages.Count}", $"第 {page + 1} / {_recipePages.Count} 页"), TextAnchor.MiddleCenter);
+        DrawRecipePage(panel.Content, method, page, height);
     }
 
-    private bool MatchesRecipe(Recipe recipe)
+    private void DrawNoRecipe(Rect viewport)
     {
-        string names = recipe.Name + " " + recipe.Description + " " + recipe.Id + " " + recipe.CategoryId;
-        return NeiSearch.MatchesFields(_recipeQuery, names, type => type switch
+        const float labelHeight = 22f, gap = 4f;
+        const float action = RecipeGridLayout.ActionSize, actionWidth = action + 3f;
+        float labelY = viewport.center.y - labelHeight * .5f;
+        if (_item is { } item && _catalog.TryGetItem(item, out _))
         {
-            '<' => string.Join(" ", recipe.Inputs.Select(IngredientSearchText)),
-            '>' => string.Join(" ", recipe.Outputs.Select(o => o.ItemId + " " + Display(o.BrowseId) + " " + o.DisplayName)),
-            '^' => recipe.MachineId + " " + Display(recipe.MachineId) + " " + string.Join(" ", recipe.Inputs.Where(i => i.IsCatalyst).Select(IngredientSearchText)),
-            '~' => names,
-            '@' => recipe.Source,
-            _ => null
-        });
-    }
-
-    private string IngredientSearchText(RecipeIngredient ingredient)
-    {
-        if (_ingredientSearch.TryGetValue(ingredient, out string text)) return text;
-        string title = ingredient.MatchesAny ? RequirementTitle(ingredient) : Display(ingredient.BrowseId);
-        text = $"{ingredient.ItemId} {title} {ingredient.DisplayName} {ingredient.QualityId} {ingredient.RequiredTag}";
-        if (ingredient.MatchesAny)
-            text += " " + string.Join(" ", _catalog.GetMatchingItems(ingredient, includeBelowRequirement: true)
-                .Select(candidate => $"{candidate.Id} {candidate.DisplayName}"));
-        return _ingredientSearch[ingredient] = text;
-    }
-
-    private string Display(string id) => _catalog.TryGetItem(id, out var item) ? item!.DisplayName : id;
-    private static string RecipeKey(Recipe recipe) => "recipe/" + recipe.Source + "/" + recipe.Id;
-    private static bool SameId(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-
-    private bool IsCraftable(Recipe recipe)
-    {
-        if (recipe.NativeRecipe is not { } native) return false;
-        if (Time.unscaledTime >= _craftableUntil)
-        {
-            _craftable.Clear();
-            _craftableUntil = Time.unscaledTime + .8f;
+            float size = Mathf.Min(36f, viewport.width - actionWidth, viewport.height - labelHeight - gap);
+            if (size >= 22f)
+            {
+                var slot = new Rect(viewport.center.x - (size + actionWidth) * .5f,
+                    viewport.center.y - (size + gap + labelHeight) * .5f, size, size);
+                ItemSlot(slot, item, diagram: true);
+                var favorite = new Rect(slot.xMax + 3f, slot.center.y - action * .5f, action, action);
+                bool selected = _book.IsFavoriteMaterial(item);
+                bool hover = favorite.Contains(Event.current.mousePosition);
+                if (selected || hover) NeiSkin.FavoriteMark(slot, selected, hover);
+                if (DrawFavorite(favorite, item, selected, hover, L("Favorite material", "收藏为首选原料")) &&
+                    _book.ToggleFavoriteMaterial(item)) SaveBookmarks();
+                labelY = slot.yMax + gap;
+            }
         }
-        if (!_craftable.TryGetValue(native, out var ready))
-        {
-            try { ready = GameSurface.CanOpenCrafting(native) && native.GetItemsForRecipe() != null; }
-            catch (Exception) { ready = false; }
-            _craftable.Add(native, ready);
-        }
-        return ready;
+        NeiSkin.Label(new Rect(viewport.x, labelY, viewport.width, labelHeight), L("No matching recipes", "找不到匹配的配方"), TextAnchor.MiddleCenter, true);
     }
 
-    private void DrawRecipeBody(Rect viewport, Recipe recipe)
+    private bool DrawFavorite(Rect button, string product, bool selected, bool hovered, string hint)
     {
-        const float cell = 37;
-        UpdateRequirements(recipe);
-        var inputs = recipe.Inputs;
-        var outputs = recipe.Outputs;
-        int cols = Mathf.Max(1, (int)((viewport.width - 26) / cell));
-        int requirementCols = Mathf.Max(1, (int)((viewport.width - 26) / 86));
-        float requirementWidth = (viewport.width - 26) / requirementCols;
-        const float requirementHeight = 54;
-        int materials = inputs.Count(input => !input.IsCatalyst);
-        int tools = inputs.Count - materials;
-        int expanded = _expandedRequirement;
-        var candidates = expanded >= 0 && expanded < inputs.Count ? Alternatives(expanded, inputs[expanded]).Related : Array.Empty<CatalogItem>();
-        float extra = string.IsNullOrWhiteSpace(recipe.Description) ? 0 : 69;
-        float h = 27 + Rows(outputs.Count, cols) * cell + extra;
-        if (materials > 0 || tools == 0) h += 27 + Rows(materials, requirementCols) * requirementHeight;
-        if (tools > 0) h += 27 + Rows(tools, requirementCols) * requirementHeight;
-        if (candidates.Count > 0) h += 29 + Rows(candidates.Count, cols) * cell;
-        if (!string.IsNullOrEmpty(recipe.MachineId)) h += cell + 11;
-        var content = new Rect(0, 0, viewport.width - 19, Mathf.Max(viewport.height, h));
-        _recipeScroll = GUI.BeginScrollView(viewport, _recipeScroll, content, false, h > viewport.height);
-        var offset = viewport.position - _recipeScroll;
+        bool clicked = NeiSkin.IconButton(button, "favorite", string.Empty, selected: selected, backed: true, maxIconSize: 10f);
+        if (hovered) Tip(Display(product), hint);
+        return clicked;
+    }
+
+    private void ResetRecipeResults()
+    {
+        _favoriteProductRecipe = _favoriteProductChoice = null;
+        _recipeMethods = null;
+        _pagedMethod = null;
+        ResetRecipePosition();
+    }
+
+    private void ResetRecipePosition()
+    {
+        _recipeIndex = 0;
+        _recipeTargets.Clear();
+        _recipeScroll = Vector2.zero;
+        CollapseRecipeRequirement();
+        ClearSupportedItemsTip();
+    }
+
+    private int NavigateRecipePage(int page, int direction)
+    {
+        int nextPage = Wrap(page + direction, _recipePages.Count);
+        ResetRecipePosition();
+        _recipeIndex = _recipePages.Range(nextPage).First;
+        return nextPage;
+    }
+
+    private RecipeMethod[] GetRecipeMethods()
+    {
+        int revision = _catalog.Revision;
+        bool chinese = _plugin.Chinese;
+        if (_recipeMethods != null && _methodRevision == revision && _methodChinese == chinese) return _recipeMethods;
+        _methodChinese = chinese;
+        var categories = _catalog.RecipeCategories;
+        if (_methodRevision != revision)
+        {
+            _categoryMachines.Clear();
+            foreach (var category in categories) _categoryMachines[category.Id] = category.MachineId;
+            ClearSupportedItemsTip();
+        }
+        _methodRevision = revision;
+        IEnumerable<Recipe> matches = _item == null ? _catalog.Recipes : _usage ? _catalog.GetRecipesUsing(_item) : _catalog.GetRecipesProducing(_item);
+        if (_usage && _lookupContents.Length > 0)
+            matches = matches.Concat(_lookupContents.SelectMany(_catalog.GetRecipesUsing)).Distinct();
+        // The host's ingredient list is not a Minecraft-style ordered crafting grid.
+        return _recipeMethods = RecipeMethods.Group(matches, categories, L("Crafting", "制作栏"));
+    }
+
+    private int DrawRecipeArrows(Rect row, float size, bool enabled, string description, bool methodSwitch = false)
+    {
+        var left = new Rect(row.x, row.y, size, row.height);
+        var right = new Rect(row.xMax - size, row.y, size, row.height);
+        bool previous = Arrow(left, "previous", L($"Previous {description}", $"上一{description}"));
+        bool next = Arrow(right, "next", L($"Next {description}", $"下一{description}"));
+        return previous ? -1 : next ? 1 : 0;
+
+        bool Arrow(Rect rect, string icon, string tooltip) => methodSwitch
+            ? NeiSkin.RecipeTab(rect, ModernityFrames.Caption(icon), enabled: enabled, tooltip: tooltip)
+            : NeiSkin.IconButton(rect, icon, tooltip, enabled);
+    }
+
+    private int DrawMethodTabs(RecipePanelLayout panel, RecipeMethod[] methods, int selected)
+    {
+        int delta = DrawMethodArrows(panel, methods.Length > 1, L("crafting method", "种合成方式"));
+        if (delta != 0) selected = Wrap(selected + delta, methods.Length);
+        NeiSkin.RecipeMethodTitle(panel.MethodTitle, methods[selected].Name);
+        if (panel.MethodTitle.Contains(Event.current.mousePosition))
+            Tip(methods[selected].Name, L("Right-click to go back", "右键返回"));
+        return selected;
+    }
+
+    private int DrawMethodArrows(RecipePanelLayout panel, bool enabled, string description)
+    {
+        bool previous = NeiSkin.IconButton(panel.PreviousMethod, "previous",
+            L($"Previous {description}", $"上一{description}"), enabled);
+        bool next = NeiSkin.IconButton(panel.NextMethod, "next",
+            L($"Next {description}", $"下一{description}"), enabled);
+        return previous ? -1 : next ? 1 : 0;
+    }
+
+    private void DrawRecipeCatalyst(Rect slot, RecipeMethod method)
+    {
+        string machine = RecipeMachine(method.Recipes[0]);
+        if (machine.Length == 0) return;
+        ItemSlot(slot, Catalog.ItemKey(machine, false), fallback: Display(Catalog.ItemKey(machine, false)), diagram: true);
+    }
+
+    private float RecipeRowHeight(Recipe recipe, float width) =>
+        new RecipeGridLayout(new Rect(0, 0, width, 0), recipe.Inputs.Count, recipe.Outputs.Count, IconScale).Plate.height
+        + RecipeDiagramBottom;
+
+    private float PrepareRecipePage(Rect viewport, RecipeMethod method, int page, int revealRecipe)
+    {
+        var (first, end) = _recipePages.Range(page);
+        float height = 0;
+        _pagePlans.Clear();
+        for (int i = first; i < end; i++)
+        {
+            if (i == revealRecipe) _recipeScroll.y = height;
+            _pagePlans.Add(BuildRecipeDiagramPlan(method.Recipes[i], RecipePanelLayout.DiagramArea(viewport, height)));
+            height += _recipePages.Height(i) + _pagePlans[^1].ExtraHeight;
+        }
+        _recipeScroll.y = Mathf.Clamp(_recipeScroll.y, 0, Mathf.Max(0, height - viewport.height));
+        return height;
+    }
+
+    private void DrawRecipePage(Rect viewport, RecipeMethod method, int page, float height)
+    {
+        var (first, end) = _recipePages.Range(page);
+        float scrollWidth = viewport.width - RecipePanelLayout.ScrollbarAllowance;
+        _recipeScroll = GUI.BeginScrollView(viewport, _recipeScroll, new Rect(0, 0, scrollWidth, height), false, height > viewport.height);
         try
         {
-            float y = 0;
-            if (!string.IsNullOrEmpty(recipe.MachineId))
+            Vector2 offset = viewport.position - _recipeScroll;
+            for (int i = first; i < end; i++)
             {
-                ItemSlot(new Rect(4, y + 2, cell - 2, cell - 2), recipe.MachineId!, false, clipping: viewport, globalOffset: offset);
-                NeiSkin.Label(new Rect(cell + 6, y + 3, content.width - cell - 10, cell), L("Machine / catalyst", "机器／催化剂"));
-                y += cell + 11;
-            }
-            if (materials > 0 || tools == 0)
-                y = DrawIngredients(inputs, false, L("Ingredients", "原料与性质"), y, requirementWidth, requirementHeight, requirementCols, viewport, offset);
-            if (tools > 0)
-                y = DrawIngredients(inputs, true, L("Tools · not consumed", "工具 · 不消耗"), y, requirementWidth, requirementHeight, requirementCols, viewport, offset);
-            if (candidates.Count > 0)
-            {
-                var requirement = inputs[expanded];
-                string title = RequirementTitle(requirement);
-                NeiSkin.Label(new Rect(4, y, viewport.width - 26, 22), $"{title} · {L("Matching items", "匹配物品")} ({candidates.Count})");
-                y += 22;
-                for (int i = 0; i < candidates.Count; i++)
-                {
-                    var rect = IngredientRect(i, y, cell, cols);
-                    float top = rect.y + offset.y;
-                    if (top + rect.height <= viewport.yMin || top >= viewport.yMax) continue;
-                    var candidate = candidates[i];
-                    bool below = !requirement.Matches(candidate);
-                    ItemSlot(rect, candidate.BrowseId, false, clipping: viewport, globalOffset: offset,
-                        details: below ? L("Has this quality, but below this recipe's requirement", "具有该性质，但未达本配方要求") : null,
-                        belowRequirement: below);
-                }
-                y += Rows(candidates.Count, cols) * cell + 7;
-            }
-            NeiSkin.Label(new Rect(4, y, viewport.width - 26, 19), L("Outputs", "产物"));
-            y += 20;
-            if (outputs.Count == 0) NeiSkin.Label(new Rect(4, y, viewport.width - 26, cell), "—", muted: true);
-            for (int i = 0; i < outputs.Count; i++)
-            {
-                var output = outputs[i];
-                ItemSlot(IngredientRect(i, y, cell, cols), output.BrowseId, false,
-                    amount: Amount(output.Amount, output.IsLiquid), fallback: output.DisplayName,
-                    clipping: viewport, globalOffset: offset,
-                    details: !output.IsLiquid && output.Condition < 1f ? L("Condition: ", "耐久：") + output.Condition.ToString("P0", CultureInfo.InvariantCulture) : null);
-            }
-            y += Rows(outputs.Count, cols) * cell + 7;
-            if (extra > 0)
-            {
-                NeiSkin.Text(new Rect(4, y, content.width - 8, extra), recipe.Description);
+                var plan = _pagePlans[i - first];
+                Rect area = RecipePanelLayout.DiagramArea(viewport, plan.Grid.Plate.y);
+                var row = new Rect(area.x, area.y, area.width, _recipePages.Height(i) + plan.ExtraHeight);
+                if (RecipeListLayout.VisibleHit(row, viewport, offset).height <= 0) continue;
+                DrawRecipeDiagram(area, plan, method.Recipes[i], viewport, offset);
+                DrawRecipeActions(row, plan.Grid, method.Recipes[i], viewport, offset);
             }
         }
         finally { GUI.EndScrollView(); }
     }
 
-    private float DrawIngredients(IReadOnlyList<RecipeIngredient> items, bool tools, string heading, float y, float width, float height, int cols, Rect viewport, Vector2 offset)
+    private void DrawRecipeActions(Rect row, RecipeGridLayout grid, Recipe recipe, Rect viewport, Vector2 offset)
     {
-        NeiSkin.Label(new Rect(4, y, viewport.width - 26, 19), heading);
-        y += 20;
-        int slot = 0;
-        for (int i = 0; i < items.Count; i++)
+        Rect heart = recipe.Outputs.Count > 0 ? grid.Favorite : default;
+        var pointer = Event.current.mousePosition + offset;
+        var heartHit = RecipeListLayout.VisibleHit(heart, viewport, offset);
+        bool hover = heartHit.Contains(pointer);
+        string? product = FavoriteProduct(recipe);
+        if (Event.current.type == EventType.Repaint)
         {
-            var ingredient = items[i];
-            if (ingredient.IsCatalyst != tools) continue;
-            float left = 4 + slot % cols * width;
-            float top = y + slot / cols * height;
-            slot++;
-            var rect = new Rect(left, top, 35, 35);
-            string caption = ingredient.MatchesAny ? RequirementTitle(ingredient) :
-                string.IsNullOrEmpty(ingredient.DisplayName) ? Display(ingredient.BrowseId) : ingredient.DisplayName;
-            NeiSkin.Label(new Rect(left, top + 35, width - 3, 16), caption);
-            string? detail = tools ? L("Tool / not consumed", "工具／不消耗") : null;
-            if (ingredient.MinimumCondition > 0 && !ingredient.IsLiquid)
-                detail = (detail == null ? "" : detail + "\n") + L("Minimum condition: ", "最低耐久：") + ingredient.MinimumCondition.ToString("P0", CultureInfo.InvariantCulture);
-            if (ingredient.NoMaxCondition && !ingredient.IsLiquid)
-                detail = (detail == null ? "" : detail + "\n") + L("Must not be at full condition", "不可为满耐久");
-            if (!ingredient.MatchesAny)
+            _recipeTargets.Add((RecipeListLayout.VisibleHit(row, viewport, offset), heartHit, recipe));
+            var clip = new Rect(viewport.position - offset, viewport.size);
+            var (first, end) = grid.VisibleOutputs(clip, recipe.Outputs.Count);
+            for (int i = first; i < Math.Min(end, recipe.Outputs.Count); i++)
             {
-                ItemSlot(rect, ingredient.BrowseId, false, amount: Amount(ingredient.Amount, ingredient.IsLiquid),
-                    fallback: ingredient.DisplayName, clipping: viewport, globalOffset: offset, details: detail);
-                continue;
-            }
-
-            var matches = Alternatives(i, ingredient);
-            var display = PreferredMatch(i, ingredient, matches.Eligible) ?? matches.Related.FirstOrDefault();
-            string requirementTitle = RequirementTitle(ingredient);
-            string required = requirementTitle + " · " + ingredient.Amount.ToString("0.##", CultureInfo.InvariantCulture);
-            if (display != null)
-            {
-                ItemSlot(rect, display.BrowseId, false, clipping: viewport, globalOffset: offset,
-                    details: required + "\n" + L($"{matches.Related.Count} items with this property", $"{matches.Related.Count} 个物品具有该性质") +
-                        (matches.Eligible.Count == 0 ? "\n" + L("None meet this recipe's requirement", "没有物品达到本配方要求") : "") +
-                        (detail == null ? "" : "\n" + detail), requirement: i, belowRequirement: !ingredient.Matches(display));
-            }
-            else
-            {
-                bool hover = rect.Contains(Event.current.mousePosition) && viewport.Contains(Event.current.mousePosition + offset);
-                NeiSkin.Slot(rect, hover);
-                NeiSkin.Label(rect, "?", TextAnchor.MiddleCenter);
-                if (hover) Tip(required, L("No matching items in the current catalog", "当前目录中没有匹配物品"));
+                string output = recipe.Outputs[i].BrowseId;
+                bool preview = hover && SameId(output, product);
+                bool selected = ReferenceEquals(FavoriteForProduct(output), recipe);
+                if (preview || selected) NeiSkin.FavoriteMark(grid.Output(i), selected, preview);
             }
         }
-        if (slot == 0) NeiSkin.Label(new Rect(4, y, viewport.width - 26, height), "—", muted: true);
-        return y + Rows(slot, cols) * height + 7;
+        if (product is not null)
+        {
+            bool favorite = ReferenceEquals(FavoriteForProduct(product), recipe);
+            if (DrawFavorite(heart, product, favorite, hover,
+                L($"Click: favorite · Wheel: switch output · Shift+{_plugin.BookmarkKey}: order",
+                    $"点击：收藏 · 滚轮：切换产物 · Shift＋{_plugin.BookmarkKey}：下单"))) ToggleFavorite(product, RecipeKey(recipe));
+        }
+        // The host has no ingredient-fill API on this surface. Its native crafting opener is the transfer equivalent.
+        Rect add = grid.Transfer;
+        var native = recipe.NativeRecipe;
+        bool enabled = native is not null && _plugin.CanOpenCrafting(native);
+        if (NeiSkin.IconButton(add, "add", L("Open in game's crafting menu", "在游戏制作菜单中打开"), enabled) && native is not null && _plugin.OpenCrafting(native))
+            CloseRecipe();
+        if (!enabled && RecipeListLayout.VisibleHit(add, viewport, offset).Contains(pointer))
+            Tip(L("Not available in this crafting menu", "当前无法在游戏制作菜单中打开"), null);
     }
+
+    private string? _favoriteProductRecipe, _favoriteProductChoice;
+
+    private string? FavoriteProduct(Recipe recipe)
+    {
+        string? selected = SameId(_favoriteProductRecipe, RecipeKey(recipe)) ? _favoriteProductChoice : _item;
+        return recipe.Outputs.FirstOrDefault(output => SameId(output.BrowseId, selected))?.BrowseId ?? recipe.Outputs.FirstOrDefault()?.BrowseId;
+    }
+
+    private bool HandleRecipeFavoriteWheel(Rect viewport, RecipeMethod method, int page, Event e)
+    {
+        if (!viewport.Contains(e.mousePosition)) return false;
+        Vector2 offset = viewport.position - _recipeScroll;
+        var (first, end) = _recipePages.Range(page);
+        for (int i = first; i < end; i++)
+        {
+            Recipe recipe = method.Recipes[i];
+            Rect heart = _pagePlans[i - first].Grid.Favorite;
+            if (recipe.Outputs.Count < 2 || !RecipeListLayout.VisibleHit(heart, viewport, offset).Contains(e.mousePosition)) continue;
+            var products = recipe.Outputs.Select(output => output.BrowseId).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (products.Count < 2) return false;
+            string? selected = FavoriteProduct(recipe);
+            _favoriteProductRecipe = RecipeKey(recipe);
+            _favoriteProductChoice = products[Wrap(products.FindIndex(product => SameId(product, selected)) + Math.Sign(e.delta.y), products.Count)];
+            e.Use();
+            return true;
+        }
+        return false;
+    }
+
+    private static Sprite? NativeCraftingButtonSprite()
+    {
+        var camera = PlayerCamera.main;
+        var button = camera ? camera.craftButton : null;
+        if (button == null) return null;
+        // The stock button may be a wrapper around an Image. Read it without touching the native UI.
+        var image = button.GetComponentInChildren<UnityEngine.UI.Image>(includeInactive: true);
+        return image == null ? null : image.overrideSprite ? image.overrideSprite : image.sprite;
+    }
+
+    private string RecipeMachine(Recipe recipe) => !string.IsNullOrWhiteSpace(recipe.MachineId) ? recipe.MachineId.Trim() :
+        _categoryMachines.TryGetValue(recipe.CategoryId, out var machine) ? machine.Trim() : string.Empty;
+
+    private string Display(string id) => _catalog.TryGetItem(id, out var item) ? item!.DisplayName : id;
+    private static string RecipeKey(Recipe recipe) => "recipe/" + recipe.Source + "/" + recipe.Id;
+    private static bool SameId(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     private string RequirementTitle(RecipeIngredient ingredient)
     {
@@ -281,86 +368,6 @@ internal sealed partial class NeiWindow
         return L("Any matching item", "任意匹配物品");
     }
 
-    private void UpdateRequirements(Recipe recipe)
-    {
-        int revision = _catalog.Revision;
-        if (!ReferenceEquals(_requirementRecipe, recipe) || revision != _requirementRevision)
-        {
-            // A catalog refresh may recreate the same recipe. Keep its open row, but refresh the contents.
-            if (_requirementRecipe == null || RecipeKey(_requirementRecipe) != RecipeKey(recipe)) _expandedRequirement = -1;
-            _requirementRecipe = recipe;
-            _requirementRevision = revision;
-            _alternatives.Clear();
-            _nativePreview = null;
-            _previewUntil = 0;
-        }
-        if (Time.unscaledTime < _previewUntil || recipe.NativeRecipe == null) return;
-        _previewUntil = Time.unscaledTime + 1f;
-        if (recipe.NativeRecipe is { } native && PlayerCamera.main && PlayerCamera.main.body)
-        {
-            try { _nativePreview = native.GetItemsForRecipeThorough(); }
-            catch (Exception) { _nativePreview = null; }
-        }
-    }
-
-    private (IReadOnlyList<CatalogItem> Related, IReadOnlyList<CatalogItem> Eligible) Alternatives(int index, RecipeIngredient ingredient)
-    {
-        if (!_alternatives.TryGetValue(index, out var matches))
-        {
-            var related = _catalog.GetMatchingItems(ingredient, includeBelowRequirement: true);
-            matches = (related, related.Where(ingredient.Matches).ToArray());
-            _alternatives.Add(index, matches);
-        }
-        return matches;
-    }
-
-    private CatalogItem? PreferredMatch(int index, RecipeIngredient ingredient, IReadOnlyList<CatalogItem> matches)
-    {
-        if (_nativePreview != null && index < _nativePreview.Count && _nativePreview[index] is { } native && native)
-        {
-            if (!ingredient.IsLiquid)
-            {
-                string key = "item:" + native.id;
-                var exact = matches.FirstOrDefault(item => SameId(item.BrowseId, key));
-                if (exact != null) return exact;
-            }
-            else if (native.TryGetComponent<WaterContainerItem>(out var container) && container.stack != null)
-            {
-                var inputDefinitions = _requirementRecipe?.NativeRecipe?.items;
-                var quality = inputDefinitions != null && index < inputDefinitions.Count ? inputDefinitions[index]?.quality : null;
-                foreach (var liquid in container.stack)
-                {
-                    var match = matches.FirstOrDefault(item => SameId(item.Id, liquid.liquidId));
-                    if (match != null &&
-                        (quality == null || Liquids.Registry.TryGetValue(liquid.liquidId, out var type) &&
-                            Item.GetQualityThatMeetsCriteria(quality, type.GetScaledQualities(liquid.amount)) != null)) return match;
-                }
-            }
-        }
-        if (ingredient.QualityId.Length > 0 && !ingredient.IsLiquid)
-        {
-            // Prefer the game's own examples if no eligible instance is currently available.
-            foreach (var example in Recipes.QualityExamples)
-            {
-                if (!SameId(example.Key.id, ingredient.QualityId)) continue;
-                var candidate = matches.FirstOrDefault(item => SameId(item.Id, example.Value));
-                if (candidate != null) return candidate;
-            }
-        }
-        return matches.FirstOrDefault();
-    }
-
     private static int Rows(int count, int columns) => Math.Max(1, (count + columns - 1) / columns);
-
-    private static Rect IngredientRect(int i, float y, float cell, int cols) =>
-        new(4 + i % cols * cell, y + i / cols * cell, cell - 2, cell - 2);
-    private static string? Amount(float amount, bool liquid) => amount == 1 && !liquid ? null :
-        amount.ToString("0.##", CultureInfo.InvariantCulture) + (liquid ? "mL" : "");
-
-    private void SetCategory(RecipeCategory[] categories, int choice)
-    {
-        _category = choice == 0 ? null : categories[choice - 1].Id;
-        _recipeIndex = 0; _recipeScroll = Vector2.zero;
-    }
-    private void StepRecipe(int delta, int count) { _recipeIndex = Wrap(_recipeIndex + delta, count); _recipeScroll = Vector2.zero; }
+    private static SlotQuantity? Amount(double amount, bool liquid) => amount == 1 && !liquid ? null : new SlotQuantity(amount, liquid);
 }

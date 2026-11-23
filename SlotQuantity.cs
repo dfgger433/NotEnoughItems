@@ -9,6 +9,7 @@ internal readonly struct SlotQuantity(double value, bool liquid)
 {
     private const string Prefixes = " kmgtpezy";
     internal bool Liquid { get; } = liquid;
+    internal float? LiquidVolume => Liquid ? (float)value : null;
     internal string FullText => Format(value) + (Liquid ? "mL" : string.Empty);
 
     internal string Fit(Func<string, bool> fits)

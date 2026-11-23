@@ -146,43 +146,44 @@ internal static class BookmarkChainBalance
     /// <param name="available">Optional snapshot of carried quantities.</param>
     /// <returns>Net bill and per-entry recipe details.</returns>
     public static BookmarkChainBalanceResult Calculate(Catalog catalog, IEnumerable<BookmarkChainBalanceEntry> entries,
-        IReadOnlyDictionary<string, int>? available = null) => new Calculator(catalog, entries, ToDouble(available)).Run(null, 0);
+        IReadOnlyDictionary<string, int>? available = null, IReadOnlyCollection<string>? favoriteMaterials = null) =>
+        new Calculator(catalog, entries, ToDouble(available), favoriteMaterials: favoriteMaterials).Run(null, 0);
 
     /// <summary>
     /// Creates a pure crafting plan from one bookmark group. Unlike <see cref="Calculate"/>,
-    /// ordinary item bookmarks are never treated as physical stock. <paramref name="carried"/>
-    /// is the only inventory snapshot used by the plan and is consumed once across all targets.
+    /// ordinary item bookmarks are never treated as physical stock. Carried and nearby stock
+    /// can satisfy inputs, but only carried stock counts towards a top-up target.
     /// </summary>
     /// <param name="catalog">Catalog used to normalize item IDs and resolve substitutions.</param>
     /// <param name="entries">The actual entries in one bookmark group, including plain item bookmarks.</param>
     /// <param name="targetIndex">Null for the whole group; otherwise the zero-based recipe entry index.</param>
     /// <param name="topUp">When true, subtract carried stock of each selected primary product before rounding batches up.</param>
-    /// <param name="carried">Snapshot of physical item/liquid quantities available for this crafting operation.</param>
+    /// <param name="carried">Snapshot of carried item/liquid quantities.</param>
+    /// <param name="favoriteMaterials">Optional preferred material IDs.</param>
+    /// <param name="nearby">Eligible nearby stock, excluding items already in the carried snapshot.</param>
     /// <returns>A producer-first plan. A cycle is diagnosed and never expanded recursively.</returns>
     public static BookmarkChainBalanceResult PlanCraft(Catalog catalog,
         IReadOnlyList<BookmarkChainBalanceEntry> entries, int? targetIndex, bool topUp,
-        IReadOnlyDictionary<string, int> carried)
+        IReadOnlyDictionary<string, int> carried, IReadOnlyCollection<string>? favoriteMaterials = null,
+        IReadOnlyDictionary<string, int>? nearby = null)
     {
         if (catalog == null) throw new ArgumentNullException(nameof(catalog));
         if (entries == null) throw new ArgumentNullException(nameof(entries));
         if (carried == null) throw new ArgumentNullException(nameof(carried));
 
-        // The ordinary balance establishes the group's already-balanced recipe multipliers. It
-        // deliberately has no carried snapshot: a craft action must not change the saved plan.
-        var balanced = new Calculator(catalog, entries, null).Run(null, 0);
+        // Start with saved demand, not the display balance's expanded batch counts. The
+        // latter already include upstream work and would count that work again as a target.
         var requested = new Dictionary<int, int>();
-        if (targetIndex.HasValue)
+        if (targetIndex is int selected)
         {
-            BookmarkChainBalanceStep? selected = balanced.Steps.FirstOrDefault(step => step.EntryIndex == targetIndex.Value);
-            requested[targetIndex.Value] = selected?.Batches ?? 0;
+            if (selected >= 0 && selected < entries.Count && entries[selected] is { Recipe: not null } entry)
+                requested[selected] = entry.Quantity;
         }
         else
         {
-            foreach (int index in balanced.ResultEntryIndices)
-            {
-                BookmarkChainBalanceStep? step = balanced.Steps.FirstOrDefault(candidate => candidate.EntryIndex == index);
-                requested[index] = step?.Batches ?? 0;
-            }
+            // Classify the saved group without physical stock, as the display balance does
+            // without stock. The craft calculator below allocates actual materials separately.
+            new Calculator(catalog, entries, favoriteMaterials: favoriteMaterials).GetGroupRequests(requested);
         }
 
         var physical = new Dictionary<string, double>(Ids);
@@ -196,21 +197,26 @@ internal static class BookmarkChainBalance
             // carried stack unavailable to the next target, including when two targets share an ID.
             foreach (int index in requested.Keys.OrderBy(index => index).ToArray())
             {
-                BookmarkChainBalanceStep? selected = balanced.Steps.FirstOrDefault(step => step.EntryIndex == index);
-                if (selected == null || selected.Batches <= 0) continue;
-                string key = BalancePrimaryId(entries, index, selected.Recipe);
-                RecipeOutput? primary = selected.Recipe.Outputs.FirstOrDefault(output => Ids.Equals(output.BrowseId, key)) ??
-                    selected.Recipe.Outputs.FirstOrDefault(output => output.Amount > 0);
+                int batches = requested[index];
+                if (batches <= 0 || entries[index].Recipe is not { } recipe) continue;
+                string key = BalancePrimaryId(entries, index, recipe);
+                RecipeOutput? primary = recipe.Outputs.FirstOrDefault(output => Ids.Equals(output.BrowseId, key)) ??
+                    recipe.Outputs.FirstOrDefault(output => output.Amount > 0);
                 double yield = primary?.Amount ?? 0;
                 if (yield <= Epsilon) continue;
-                double desired = yield * selected.Batches;
+                double desired = yield * batches;
                 double carriedProduct = Take(physical, key, desired);
                 requested[index] = (int)Math.Min(MaximumBatches,
                     Math.Max(0, Math.Ceiling((desired - carriedProduct - Epsilon) / yield)));
             }
         }
 
-        return new Calculator(catalog, entries, physical, craftMode: true).RunCraft(requested, targetIndex);
+        if (nearby != null)
+            foreach (var pair in nearby)
+                if (!string.IsNullOrWhiteSpace(pair.Key) && pair.Value > 0)
+                    Add(physical, Normalize(catalog, pair.Key), pair.Value);
+
+        return new Calculator(catalog, entries, physical, craftMode: true, favoriteMaterials: favoriteMaterials).RunCraft(requested, targetIndex);
     }
 
     /// <summary>Balances only one saved recipe and any of its in-group dependencies.</summary>
@@ -296,13 +302,16 @@ internal static class BookmarkChainBalance
         private readonly List<BookmarkChainBalanceLink> _links = new();
         private readonly HashSet<Node> _roots = new();
         private readonly bool _craftMode;
+        private readonly HashSet<string>? _favoriteMaterials;
         private bool _targetOnly;
 
         internal Calculator(Catalog catalog, IEnumerable<BookmarkChainBalanceEntry> entries,
-            IReadOnlyDictionary<string, double>? available = null, bool craftMode = false)
+            IReadOnlyDictionary<string, double>? available = null, bool craftMode = false,
+            IReadOnlyCollection<string>? favoriteMaterials = null)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _craftMode = craftMode;
+            _favoriteMaterials = favoriteMaterials == null ? null : new HashSet<string>(favoriteMaterials, Ids);
             if (entries == null) throw new ArgumentNullException(nameof(entries));
             if (available != null)
                 foreach (var pair in available)
@@ -317,7 +326,8 @@ internal static class BookmarkChainBalance
                 if (entry.Recipe == null)
                 {
                     if (entry.ShowRecipe || entry.Id.StartsWith("recipe/", StringComparison.OrdinalIgnoreCase))
-                        _diagnostics.Add(new(BookmarkChainDiagnosticCode.MissingRecipe, "Bookmark recipe could not be resolved.", entry.Id));
+                        _diagnostics.Add(new(BookmarkChainDiagnosticCode.MissingRecipe,
+                            ("Bookmark recipe could not be resolved.", "找不到书签中保存的配方。"), entry.Id));
                     else if (!_craftMode)
                         Add(_bookmarked, Normalize(entry.Id), entry.Quantity);
                     continue;
@@ -329,7 +339,8 @@ internal static class BookmarkChainBalance
                         node.Outputs.Add(new Output(node, output, output.BrowseId));
                 if (node.Outputs.Count == 0)
                 {
-                    _diagnostics.Add(new(BookmarkChainDiagnosticCode.InvalidRecipe, "Bookmark recipe has no positive output.", entry.Id, node.Recipe.Id));
+                    _diagnostics.Add(new(BookmarkChainDiagnosticCode.InvalidRecipe,
+                        ("Bookmark recipe has no positive output.", "书签配方没有产量大于零的产物。"), entry.Id, node.Recipe.Id));
                     continue;
                 }
                 node.Primary = node.Outputs.FirstOrDefault(output => Ids.Equals(output.Key, entry.Id) ||
@@ -353,7 +364,8 @@ internal static class BookmarkChainBalance
             Node? target = _targetOnly ? _nodes.FirstOrDefault(node => node.Index == targetIndex.GetValueOrDefault()) : null;
             if (_targetOnly && target == null)
             {
-                _diagnostics.Add(new(BookmarkChainDiagnosticCode.MissingRecipe, "Target recipe is not bookmarked in this group."));
+                _diagnostics.Add(new(BookmarkChainDiagnosticCode.MissingRecipe,
+                    ("Target recipe is not bookmarked in this group.", "本组书签中没有目标配方。")));
                 return Settle();
             }
 
@@ -385,7 +397,8 @@ internal static class BookmarkChainBalance
             Node? target = _targetOnly ? _nodes.FirstOrDefault(node => node.Index == targetIndex) : null;
             if (_targetOnly && target == null)
             {
-                _diagnostics.Add(new(BookmarkChainDiagnosticCode.MissingRecipe, "Target recipe is not bookmarked in this group."));
+                _diagnostics.Add(new(BookmarkChainDiagnosticCode.MissingRecipe,
+                    ("Target recipe is not bookmarked in this group.", "本组书签中没有目标配方。")));
                 return Settle();
             }
 
@@ -396,25 +409,8 @@ internal static class BookmarkChainBalance
             }
             else
             {
-                var dependencies = new HashSet<Node>(_nodes.SelectMany(node => PreferredDependencies(node)));
-                foreach (var node in _nodes)
-                {
-                    if (!dependencies.Contains(node)) Seed(node, node.Entry.Quantity, true, reservePrimary: true);
-                    // One is the original upstream bookmark multiplier. For an intermediate, only the
-                    // amount above that default is an extra request on top of the balanced chain.
-                    else if (node.Entry.Quantity > 1) Seed(node, node.Entry.Quantity - 1, true, reservePrimary: true);
-                }
-
-                var reached = new HashSet<Node>();
-                foreach (var node in _nodes.Where(node => node.Batches > 0)) MarkReached(node, reached);
-                while (reached.Count < _nodes.Count)
-                {
-                    // A closed component has no ordinary output recipe. Prefer a recipe with an
-                    // exported product as its anchor, without reserving the circulating material.
-                    var seed = _nodes.Where(node => !reached.Contains(node)).OrderByDescending(node => node.Outputs.Any(output => !output.IsLinked)).First();
-                    Seed(seed, seed.Entry.Quantity, true, reservePrimary: !seed.Primary.IsLinked);
-                    MarkReached(seed, reached);
-                }
+                foreach (var root in GroupRoots())
+                    Seed(root.Node, root.Batches, true, root.ReservePrimary);
             }
 
             // Install root output capacity before following any inputs, so another root can use a
@@ -424,18 +420,64 @@ internal static class BookmarkChainBalance
             return Settle();
         }
 
+        internal void GetGroupRequests(Dictionary<int, int> requested)
+        {
+            ResolveIngredients();
+            foreach (var root in GroupRoots())
+                if (root.Batches > 0) requested.Add(root.Node.Index, root.Batches);
+        }
+
+        private IEnumerable<(Node Node, int Batches, bool ReservePrimary)> GroupRoots()
+        {
+            var dependencies = new HashSet<Node>(_nodes.SelectMany(node => PreferredDependencies(node)));
+            var reached = new HashSet<Node>();
+            foreach (var node in _nodes)
+            {
+                // Only the portion above the default upstream multiplier is an extra request.
+                bool isDependency = dependencies.Contains(node);
+                int batches = isDependency ? node.Entry.Quantity - 1 : node.Entry.Quantity;
+                if (isDependency && batches <= 0) continue;
+                yield return (node, batches, true);
+                if (batches > 0) MarkReached(node, reached);
+            }
+
+            while (reached.Count < _nodes.Count)
+            {
+                // A closed component has no ordinary root; keep the display's existing anchor
+                // policy, preferring an exported product over reserving circulating material.
+                var seed = _nodes.Where(node => !reached.Contains(node))
+                    .OrderByDescending(node => node.Outputs.Any(output => !output.IsLinked)).First();
+                yield return (seed, seed.Entry.Quantity, !seed.Primary.IsLinked);
+                MarkReached(seed, reached);
+            }
+        }
+
         private void ResolveIngredients()
         {
             var candidates = new Dictionary<RecipeIngredient, CatalogItem[]>();
             foreach (var node in _nodes)
             {
-                for (int index = 0; index < node.Recipe.Inputs.Count; index++)
+                var remaining = new Dictionary<string, double>(_available, Ids);
+                var bookmarked = new Dictionary<string, double>(_bookmarked, Ids);
+                var inputs = node.Recipe.Inputs;
+                string? Pin(int index) => node.Entry.PreferredIngredients?.TryGetValue(index, out var pin) == true ? pin : null;
+                CatalogItem[] Matches(RecipeIngredient ingredient)
+                {
+                    if (!candidates.TryGetValue(ingredient, out var matches))
+                        candidates.Add(ingredient, matches = _catalog.GetMatchingItems(ingredient).ToArray());
+                    return matches;
+                }
+                // Allocate the least flexible slots first, then restore the recipe's slot
+                // order. Independent alternatives must not all select the same last item.
+                foreach (int index in Enumerable.Range(0, inputs.Count)
+                    .OrderBy(index => !inputs[index].MatchesAny || Pin(index) != null ? 0 : Matches(inputs[index]).Length + 1))
                 {
                     RecipeIngredient ingredient = node.Recipe.Inputs[index];
                     double amount = ingredient.Amount;
                     if (double.IsNaN(amount) || double.IsInfinity(amount) || amount < 0)
                     {
-                        _diagnostics.Add(new(BookmarkChainDiagnosticCode.InvalidRecipe, "Recipe ingredient amount is invalid.", ingredient.BrowseId, node.Recipe.Id));
+                        _diagnostics.Add(new(BookmarkChainDiagnosticCode.InvalidRecipe,
+                            ("Recipe ingredient amount is invalid.", "配方的原料用量无效。"), ingredient.BrowseId, node.Recipe.Id));
                         continue;
                     }
                     if (!ingredient.IsLiquid && ingredient.QualityId.Length > 0 && ingredient.MatchesAny)
@@ -452,22 +494,20 @@ internal static class BookmarkChainBalance
                             choice = match;
                         else
                         {
-                            if (!candidates.TryGetValue(ingredient, out var matches))
-                                candidates.Add(ingredient, matches = _catalog.GetMatchingItems(ingredient).ToArray());
-                            choice = matches.Select(item => (Item: item,
-                                    Stock: At(_bookmarked, item.BrowseId) + At(_available, item.BrowseId),
-                                    Carried: At(_available, item.BrowseId),
+                            choice = Matches(ingredient).Select(item => (Item: item,
+                                    Stock: At(bookmarked, item.BrowseId) + At(remaining, item.BrowseId),
+                                    Carried: At(remaining, item.BrowseId),
                                     Yield: BestYield(item.BrowseId, node),
-                                    PreferredYield: PreferredYield(item.BrowseId, node),
+                                    Favorite: IsPreferredMaterial(item.BrowseId, node),
                                     Cost: UnitCost(ingredient, item, amount)))
                                 .Where(candidate => candidate.Yield > 0 || candidate.Stock > 0)
                                 // A favorite producer is the preferred sample for a generic input
                                 // when its carried amount covers the slot. A complete carried
                                 // alternative still beats a partial favorite; if every candidate is
                                 // short, prefer carried material before producer yield as a fallback.
-                                .OrderByDescending(candidate => candidate.Carried + Epsilon >= candidate.Cost && candidate.PreferredYield > Epsilon)
+                                .OrderByDescending(candidate => candidate.Carried + Epsilon >= candidate.Cost && candidate.Favorite)
                                 .ThenByDescending(candidate => candidate.Stock + Epsilon >= candidate.Cost)
-                                .ThenByDescending(candidate => candidate.Carried > Epsilon && candidate.PreferredYield > Epsilon)
+                                .ThenByDescending(candidate => candidate.Carried > Epsilon && candidate.Favorite)
                                 .ThenByDescending(candidate => candidate.Carried > Epsilon)
                                 .ThenByDescending(candidate => candidate.Yield / candidate.Cost)
                                 .ThenByDescending(candidate => candidate.Stock / candidate.Cost)
@@ -478,7 +518,7 @@ internal static class BookmarkChainBalance
                             itemId = choice.BrowseId;
                             amount = UnitCost(ingredient, choice, amount);
                             requirement = false;
-                            if (At(_available, itemId) > Epsilon && PreferredYield(itemId, node) > Epsilon)
+                            if (At(_available, itemId) > Epsilon && IsPreferredMaterial(itemId, node))
                                 _useCarriedFirst.Add(itemId);
                         }
                     }
@@ -494,16 +534,18 @@ internal static class BookmarkChainBalance
                             foreach (var output in matches.Where(output => output.Owner == input.Producers[0])) output.IsLinked = true;
                     }
                     node.Inputs.Add(input);
+                    if (!ingredient.IsCatalyst && !requirement)
+                        Take(remaining, key, amount - Take(bookmarked, key, amount));
                 }
+                node.Inputs.Sort((left, right) => left.Index.CompareTo(right.Index));
             }
         }
 
         private double BestYield(string key, Node consumer) => _producers.TryGetValue(key, out var producers)
             ? producers.Where(output => output.Owner != consumer).Select(output => output.Yield).DefaultIfEmpty(0).Max() : 0;
 
-        private double PreferredYield(string key, Node consumer) => _producers.TryGetValue(key, out var producers)
-            ? producers.Where(output => output.Owner != consumer && output.Owner.Entry.PreferredRecipe)
-                .Select(output => output.Yield).DefaultIfEmpty(0).Max() : 0;
+        private bool IsPreferredMaterial(string key, Node consumer) => _favoriteMaterials?.Contains(key) == true ||
+            (_producers.TryGetValue(key, out var producers) && producers.Any(output => output.Owner != consumer && output.Owner.Entry.PreferredRecipe));
 
         private static double UnitCost(RecipeIngredient ingredient, CatalogItem item, double amount)
         {
@@ -555,7 +597,8 @@ internal static class BookmarkChainBalance
             if (desired > MaximumBatches - node.Batches && !node.LimitReported)
             {
                 node.LimitReported = true;
-                _diagnostics.Add(new(BookmarkChainDiagnosticCode.InvalidRecipe, "Recipe batch count was limited.", node.Primary.Key, node.Recipe.Id));
+                _diagnostics.Add(new(BookmarkChainDiagnosticCode.InvalidRecipe,
+                    ("Recipe batch count was limited.", "配方批数已截到上限。"), node.Primary.Key, node.Recipe.Id));
             }
             int added = (int)Math.Min(MaximumBatches - node.Batches, Math.Max(0, desired));
             node.Batches += added;
@@ -568,12 +611,12 @@ internal static class BookmarkChainBalance
             if (batches <= 0) return;
             if (!_active.Add(node))
             {
-                ReportCycle(node.Primary.Key, node.Recipe.Id, "Bookmark chain contains a recipe cycle.");
+                ReportCycle(node.Primary.Key, node.Recipe.Id, depthLimit: false);
                 return;
             }
             if (_active.Count > MaximumExpansionDepth)
             {
-                ReportCycle(node.Primary.Key, node.Recipe.Id, "Bookmark chain expansion reached its depth limit.");
+                ReportCycle(node.Primary.Key, node.Recipe.Id, depthLimit: true);
                 _active.Remove(node);
                 return;
             }
@@ -594,25 +637,31 @@ internal static class BookmarkChainBalance
         {
             if (_active.Count >= MaximumExpansionDepth)
             {
-                ReportCycle(input.Key, input.Owner.Recipe.Id, "Bookmark chain expansion reached its depth limit.");
+                ReportCycle(input.Key, input.Owner.Recipe.Id, depthLimit: true);
                 return;
             }
             foreach (var producer in input.Producers)
             {
-                if (_active.Contains(producer))
-                {
-                    ReportCycle(input.Key, producer.Recipe.Id, "Bookmark chain contains a recipe cycle.");
-                    continue;
-                }
                 double initial = At(_bookmarked, input.Key) +
                     ((_targetOnly || _craftMode || _useCarriedFirst.Contains(input.Key)) ? At(_available, input.Key) : 0);
                 double shortage = At(_consumed, input.Key) + At(_retained, input.Key) - initial -
                     At(_production, input.Key) + At(_reserved, input.Key);
+                if (_active.Contains(producer))
+                {
+                    // This producer is waiting for the current ingredient itself: do not use
+                    // its speculative output to satisfy a shortage that no real stock can cover.
+                    double speculative = producer.Outputs.Where(output => Ids.Equals(output.Key, input.Key))
+                        .Sum(output => Math.Max(0, output.Yield * producer.Batches - output.Reserved));
+                    if (shortage + speculative > Epsilon)
+                        ReportCycle(input.Key, producer.Recipe.Id, depthLimit: false);
+                    continue;
+                }
                 if (shortage <= Epsilon) break;
                 double yield = producer.Outputs.Where(output => Ids.Equals(output.Key, input.Key)).Sum(output => output.Yield);
                 if (yield <= Epsilon)
                 {
-                    _diagnostics.Add(new(BookmarkChainDiagnosticCode.InvalidRecipe, "Producer has no usable output yield.", input.Key, producer.Recipe.Id));
+                    _diagnostics.Add(new(BookmarkChainDiagnosticCode.InvalidRecipe,
+                        ("Producer has no usable output yield.", "上游配方没有可用产量。"), input.Key, producer.Recipe.Id));
                     continue;
                 }
                 int added = AddBatches(producer, Math.Ceiling((shortage - Epsilon) / yield));
@@ -620,11 +669,13 @@ internal static class BookmarkChainBalance
             }
         }
 
-        private void ReportCycle(string itemId, string recipeId, string message)
+        private void ReportCycle(string itemId, string recipeId, bool depthLimit)
         {
             if (_diagnostics.Any(issue => issue.Code == BookmarkChainDiagnosticCode.Cycle &&
                 Ids.Equals(issue.ItemId, itemId) && Ids.Equals(issue.RecipeId, recipeId))) return;
-            _diagnostics.Add(new(BookmarkChainDiagnosticCode.Cycle, message, itemId, recipeId));
+            _diagnostics.Add(new(BookmarkChainDiagnosticCode.Cycle, depthLimit
+                ? ("Bookmark chain expansion reached its depth limit.", "合成链已达到展开层数上限。")
+                : ("Bookmark chain contains a recipe cycle.", "合成链中存在循环依赖。"), itemId, recipeId));
         }
 
         private BookmarkChainBalanceResult Settle()
@@ -648,7 +699,7 @@ internal static class BookmarkChainBalance
             {
                 double gross = input.PerBatch * input.Owner.Batches;
                 double bookmarked = Take(initial, input.Key, gross);
-                double onHand = _useCarriedFirst.Contains(input.Key) ? Take(carried, input.Key, gross - bookmarked) : 0;
+                double onHand = (_craftMode || _useCarriedFirst.Contains(input.Key)) ? Take(carried, input.Key, gross - bookmarked) : 0;
                 double internalSupply = TakeProduction(input, gross - bookmarked - onHand, consume: true);
                 double external = gross - internalSupply;
                 onHand += Take(carried, input.Key, external - bookmarked - onHand);
@@ -667,7 +718,7 @@ internal static class BookmarkChainBalance
                 foreach (var input in group)
                 {
                     double gross = input.PerBatch;
-                    double stockFirst = _useCarriedFirst.Contains(input.Key) ? Math.Min(fromInitial, gross) : 0;
+                    double stockFirst = (_craftMode || _useCarriedFirst.Contains(input.Key)) ? Math.Min(fromInitial, gross) : 0;
                     double internalSupply = TakeProduction(input, gross - stockFirst, consume: false, skip: prior);
                     prior += internalSupply;
                     double external = gross - internalSupply;
@@ -688,7 +739,8 @@ internal static class BookmarkChainBalance
             var surplus = OutputAmounts(active.Where(node => !node.IsResult));
             var inputs = required.Values.Where(total => total.Quantity > Epsilon).OrderBy(total => total.Input.ItemId, Ids).ToArray();
             foreach (var total in inputs.Where(total => total.Input.IsRequirement))
-                _diagnostics.Add(new(BookmarkChainDiagnosticCode.RequirementUnresolved, "No concrete item was selected for this requirement.", total.Input.ItemId, total.Input.Owner.Recipe.Id));
+                _diagnostics.Add(new(BookmarkChainDiagnosticCode.RequirementUnresolved,
+                    ("No concrete item was selected for this requirement.", "此原料需求尚未选定具体物品。"), total.Input.ItemId, total.Input.Owner.Recipe.Id));
             var steps = OrderSteps(active).Select(node => new BookmarkChainBalanceStep(node.Index, node.Recipe, node.Batches,
                 Array.AsReadOnly(node.Inputs.Select(input => input.Amount!).ToArray()), Array.AsReadOnly(node.Outputs.Select(output =>
                     new BookmarkChainBalanceAmount(output.Key, output.Yield * node.Batches, output.Remaining, 0, output.RecipeOutput.IsLiquid)).ToArray()), node.IsResult)).ToArray();
@@ -809,6 +861,7 @@ internal static class BookmarkChainBalance
     {
         internal Node Owner { get; } = owner;
         internal RecipeIngredient Ingredient { get; } = ingredient;
+        internal int Index { get; } = index;
         internal string ItemId { get; } = itemId;
         internal string Key { get; } = key;
         internal double PerBatch { get; } = perBatch;
@@ -817,7 +870,7 @@ internal static class BookmarkChainBalance
         internal BookmarkChainBalanceAmount? Amount { get; set; }
 
         internal BookmarkChainBalanceAmount CreateAmount(double quantity, double net, double available) =>
-            new(ItemId, quantity, Math.Max(0, net), Math.Max(0, available), Ingredient.IsLiquid, IsRequirement, Ingredient, index);
+            new(ItemId, quantity, Math.Max(0, net), Math.Max(0, available), Ingredient.IsLiquid, IsRequirement, Ingredient, Index);
     }
 
     private sealed class Total(Input input)

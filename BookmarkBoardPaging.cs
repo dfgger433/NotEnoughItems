@@ -7,6 +7,14 @@ namespace NotEnoughItems;
 // Count item rows, not whole sections, so every input of such a recipe is reachable.
 internal static class BookmarkBoardPaging
 {
+    internal static bool CanPackBookmarkRow(bool compact, string group) => compact || group.Length == 0;
+
+    // Reserve the last visible slot if appending would start a row on the next screen.
+    // Never jump ahead of a recipe that starts above the last row and cannot be split.
+    internal static bool? EarlierGridDropBefore(int startPage, int targetPage, bool tailCanPack, int tailSlots, int columns,
+        bool tailContinuesFromAbove = false) => targetPage < startPage
+            ? !tailContinuesFromAbove && (!tailCanPack || tailSlots >= columns) : null;
+
     internal static IEnumerable<(int Section, int Start, int Count)> Rows(IReadOnlyList<int> counts, int columns)
     {
         if (columns <= 0) throw new ArgumentOutOfRangeException(nameof(columns));

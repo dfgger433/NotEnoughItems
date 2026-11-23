@@ -12,16 +12,20 @@ internal sealed partial class NeiWindow
     // Entry indices identify nodes, not recipe or item IDs: different pins and co-products
     // can legitimately give the same recipe more than one role in a saved chain.
     private sealed class TreeRow(string title, string note, string? item = null, int step = -1,
-        bool heading = false, string? terms = null, int depth = 0)
+        bool heading = false, string? terms = null, int depth = 0, RecipeIngredient? ingredient = null,
+        BookmarkBook.Entry? entry = null, int ingredientIndex = -1)
     {
         internal readonly string Title = title, Note = note;
         internal readonly string Search = title + "\n" + note + "\n" + item + "\n" + terms;
         internal readonly string? Item = item;
+        internal readonly RecipeIngredient? Ingredient = ingredient;
+        internal readonly BookmarkBook.Entry? Entry = entry;
+        internal readonly int IngredientIndex = ingredientIndex;
         internal readonly int Step = step, Depth = depth;
         internal readonly bool Heading = heading;
     }
 
-    private bool _treeOpen, _treePanning;
+    private bool _treeOpen, _treePanning, _treeRowsChinese;
     private string _treePage = "", _treeGroup = "", _treeQuery = "";
     private TreeView _treeView;
     private BookmarkChainBalanceResult? _treePlan;
@@ -74,9 +78,10 @@ internal sealed partial class NeiWindow
             if (!_treeOrdinals.ContainsKey(_treeStep)) { _treeStep = -1; _treeTrail.Clear(); if (_treeView == TreeView.Step) _treeView = TreeView.Steps; }
             BuildTreeRows(plan);
         }
+        else if (_treeRowsChinese != _plugin.Chinese)
+            BuildTreeRows(plan);
 
-        NeiSkin.Background(panel, "recipe");
-        NeiSkin.BookmarkTint(panel, new Color32(27, 24, 34, 225));
+        NeiSkin.RecipePanel(panel);
         float x = panel.x + 8, y = panel.y + 5, w = panel.width - 16;
         string scope = _treeGroup.Length == 0 ? L("Default group", "默认组") : L("Bookmark group", "书签组");
         NeiSkin.Label(new Rect(x, y, w - 28, 22), L("Crafting tree", "合成链依赖树") + "  ·  " + scope);
@@ -112,8 +117,14 @@ internal sealed partial class NeiWindow
         if (viewport.height <= 0) return;
         if (viewport.height > 105)
         {
+            bool expanded = Event.current.type == EventType.Repaint && BookmarkHelpHeld(Event.current);
             viewport.height -= 19;
-            NeiSkin.Label(new Rect(x, viewport.yMax + 1, w, 18), L("Wheel: scroll  ·  Middle-drag: pan", "滚轮：滚动  ·  中键拖动：平移"), muted: true);
+            var help = new Rect(x, viewport.yMax + 1, w, 18);
+            NeiSkin.Label(help, BookmarkHelpPrompt, muted: true);
+            if (expanded && panel.Contains(Event.current.mousePosition))
+                _bookmarkHelp = (L("Crafting tree shortcuts", "合成链依赖树快捷键"), L(
+                    "Wheel: scroll\nMiddle-drag: pan\nCtrl+F: focus search\nBackspace: go back",
+                    "滚轮：滚动\n中键拖动：平移\nCtrl＋F：聚焦搜索\nBackspace：返回上一层"));
         }
         if (_treeFiltered.Count == 0)
         {
@@ -167,13 +178,15 @@ internal sealed partial class NeiWindow
 
     private void BuildTreeRows(BookmarkChainBalanceResult plan)
     {
+        _treeRowsChinese = _plugin.Chinese;
         _treeRows.Clear();
         if (_treeView == TreeView.Bill)
         {
             if (plan.Diagnostics.Count != 0)
             {
                 TreeHeading(L("Plan notes", "配平提示"));
-                foreach (var issue in plan.Diagnostics) _treeRows.Add(new TreeRow(issue.Message, issue.RecipeId + "  " + issue.ItemId));
+                foreach (var issue in plan.Diagnostics)
+                    _treeRows.Add(new TreeRow(issue.DisplayMessage(_treeRowsChinese), issue.RecipeId + "  " + issue.ItemId));
             }
             AddBill(L("Final products", "最终产物"), plan.Results, false);
             AddBill(L("External materials", "外部原料"), plan.Inputs.Where(a => !a.IsCatalyst), true);
@@ -219,13 +232,16 @@ internal sealed partial class NeiWindow
             var step = plan.Steps[ordinal];
             AddTreeLinks(plan, step);
             TreeHeading(L("Inputs", "投入") + "  ·  " + TreeBatches(step));
+            var entries = BookmarkGroupEntries(_treeGroup);
+            BookmarkBook.Entry? bookmark = step.EntryIndex >= 0 && step.EntryIndex < entries.Length ? entries[step.EntryIndex] : null;
             foreach (var input in step.Inputs)
             {
                 double supplied = Math.Max(0, input.AvailableQuantity - (input.Quantity - input.NetQuantity));
                 double missing = Math.Max(0, input.Quantity - input.AvailableQuantity);
                 string note = L("From chain ", "链内 ") + TreeQty(input, input.Quantity - input.NetQuantity) + L("  ·  Stock ", "  ·  库存 ") + TreeQty(input, supplied) + L("  ·  Missing ", "  ·  缺 ") + TreeQty(input, missing);
                 if (input.IsCatalyst) note = L("Retained · ", "保留工具 · ") + note;
-                _treeRows.Add(new TreeRow(TreeAmountTitle(input), note, input.ItemId));
+                _treeRows.Add(new TreeRow(TreeAmountTitle(input), note, input.ItemId, ingredient: input.Ingredient,
+                    entry: input.Ingredient?.MatchesAny == true ? bookmark : null, ingredientIndex: input.IngredientIndex));
             }
             TreeHeading(L("Outputs", "产出"));
             foreach (var output in step.Outputs)
@@ -240,7 +256,7 @@ internal sealed partial class NeiWindow
             {
                 if (first) { TreeHeading(heading); first = false; }
                 string note = stock ? L("Covered by stock: ", "库存可供：") + TreeQty(amount, amount.AvailableQuantity) + L("  ·  Missing ", "  ·  缺 ") + TreeQty(amount, amount.Quantity - amount.AvailableQuantity) : heading;
-                _treeRows.Add(new TreeRow(TreeAmountTitle(amount), note, amount.ItemId));
+                _treeRows.Add(new TreeRow(TreeAmountTitle(amount), note, amount.ItemId, ingredient: amount.Ingredient));
             }
         }
     }
@@ -298,7 +314,8 @@ internal sealed partial class NeiWindow
 
     private void DrawTreeRows(Rect viewport)
     {
-        const int pitch = 37;
+        float iconSize = 30 * IconScale;
+        float pitch = Math.Max(37, iconSize + 7);
         var content = new Rect(0, 0, Mathf.Max(328, viewport.width - 18), _treeFiltered.Count * (float)pitch);
         var e = Event.current;
         // Do not claim Unity's global hotControl: closing the modal mid-drag must not
@@ -319,8 +336,11 @@ internal sealed partial class NeiWindow
         _treeScroll.y = Mathf.Clamp(_treeScroll.y, 0, Mathf.Max(0, content.height - viewport.height + (wide ? 18 : 0)));
         _treeScroll = GUI.BeginScrollView(viewport, _treeScroll, content, wide, true);
         int jump = -1;
+        (string Id, bool Usage, BookmarkBook.Entry? Entry, int Ingredient)? lookup = null;
         try
         {
+            var offset = viewport.position - _treeScroll;
+            var visible = new Rect(viewport.x, viewport.y, viewport.width - 18, viewport.height - (wide ? 18 : 0));
             int first = Mathf.Max(0, Mathf.FloorToInt(_treeScroll.y / pitch));
             int end = Math.Min(_treeFiltered.Count, Mathf.CeilToInt((_treeScroll.y + viewport.height) / pitch));
             for (int i = first; i < end; i++)
@@ -333,8 +353,9 @@ internal sealed partial class NeiWindow
                     NeiSkin.Label(new Rect(18, rect.y + 9, rect.width - 20, 25), row.Title);
                     continue;
                 }
-                bool hover = rect.Contains(Event.current.mousePosition);
-                if (hover) { NeiSkin.Slot(rect, true); Tip(row.Title, row.Note); }
+                var rowHit = RecipeListLayout.VisibleHit(rect, visible, offset);
+                bool hover = rowHit.Contains(e.mousePosition + offset);
+                if (hover) NeiSkin.Slot(rect, true);
                 float indent = Math.Min(row.Depth, 6) * 7;
                 if (indent > 0)
                 {
@@ -345,10 +366,37 @@ internal sealed partial class NeiWindow
                 if (row.Item != null)
                 {
                     _catalog.TryGetItem(row.Item, out var item);
-                    var icon = new Rect(indent + 3, rect.y + 3, 30, 30);
-                    DrawSprite(icon, item?.Icon, item?.IconTint ?? Color.white, item?.DisplayName ?? row.Title);
-                    start = indent + 38;
+                    var icon = new Rect(indent + 3, rect.y + (rect.height - iconSize) / 2, iconSize, iconSize);
+                    string name = row.Ingredient is { MatchesAny: true } requirement && SameId(row.Item, requirement.BrowseId)
+                        ? RequirementTitle(requirement) : item?.DisplayName ?? row.Item;
+                    DrawItemSprite(icon, row.Item, item, name, row.Ingredient);
+                    start = indent + iconSize + 8;
+                    var iconHit = RecipeListLayout.VisibleHit(icon, visible, offset);
+                    bool onItem = iconHit.Contains(e.mousePosition + offset);
+                    if (e.type == EventType.Repaint && rowHit.width > 0 && rowHit.height > 0)
+                    {
+                        var property = PropertyQuery(row.Ingredient);
+                        if (item != null || property != null)
+                            _itemTargets.Add((row.Step < 0 ? rowHit : iconHit, item?.BrowseId, property));
+                        // Dependency rows keep their navigation on text and expose the item on the icon.
+                        if (hover && (row.Step < 0 || onItem))
+                        {
+                            var candidates = row.Ingredient?.MatchesAny == true ? _catalog.GetMatchingItems(row.Ingredient) : null;
+                            ItemHover(row.Step < 0 ? rowHit : iconHit, name, item, row.Note,
+                                candidates, candidates != null ? RequirementTitle(row.Ingredient!) : null,
+                                row.Entry is { } entry ? candidate => SelectBookmarkVariant(entry, row.IngredientIndex, candidate) : null,
+                                ingredient: row.Ingredient);
+                        }
+                        else if (hover) Tip(row.Title, row.Note);
+                    }
+                    if (e.type == EventType.MouseDown && (item != null || e.button == 0 && row.Entry != null) &&
+                        (row.Step < 0 ? hover : onItem) && (e.button is 0 or 1) && !(PlayerCamera.main && PlayerCamera.main.dragItem))
+                    {
+                        lookup = (row.Item, e.button == 1, row.Entry, row.IngredientIndex);
+                        e.Use();
+                    }
                 }
+                else if (hover) Tip(row.Title, row.Note);
                 float width = rect.width - start - (row.Step >= 0 ? 15 : 2);
                 NeiSkin.Label(new Rect(start, rect.y, width, 19), row.Title);
                 NeiSkin.Label(new Rect(start, rect.y + 17, width, 18), row.Note, muted: true);
@@ -360,6 +408,11 @@ internal sealed partial class NeiWindow
             }
         }
         finally { GUI.EndScrollView(); }
-        if (jump >= 0) VisitTreeStep(jump);
+        if (lookup is { } itemLookup)
+        {
+            if (itemLookup.Usage || itemLookup.Entry is not { } entry || !OpenBookmarkRequirement(entry, itemLookup.Ingredient))
+                Lookup(itemLookup.Id, itemLookup.Usage);
+        }
+        else if (jump >= 0) VisitTreeStep(jump);
     }
 }

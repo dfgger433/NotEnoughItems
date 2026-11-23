@@ -87,6 +87,8 @@ namespace NotEnoughItems
 
     internal sealed class BookmarkChainDiagnostic
     {
+        private readonly string? _chineseMessage;
+
         internal BookmarkChainDiagnostic(BookmarkChainDiagnosticCode code, string message, string itemId = "", string recipeId = "")
         {
             Code = code;
@@ -94,6 +96,14 @@ namespace NotEnoughItems
             ItemId = itemId;
             RecipeId = recipeId;
         }
+
+        internal BookmarkChainDiagnostic(BookmarkChainDiagnosticCode code, (string English, string Chinese) messages,
+            string itemId = "", string recipeId = "") : this(code, messages.English, itemId, recipeId)
+        {
+            _chineseMessage = messages.Chinese;
+        }
+
+        internal string DisplayMessage(bool chinese) => chinese ? _chineseMessage ?? Message : Message;
 
         public BookmarkChainDiagnosticCode Code { get; }
         public string Message { get; }

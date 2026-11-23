@@ -72,6 +72,9 @@ namespace NotEnoughItems
         public CatalogItemKind Kind { get; }
         /// <summary>Whether the entry is not backed by a real game item.</summary>
         public bool IsVirtual { get; }
+        /// <summary>Whether the entry should appear in the browsable item catalog.</summary>
+        public bool IsCatalogVisible => !(IsVirtual && string.Equals(Source, "native", StringComparison.OrdinalIgnoreCase) &&
+            BrowseId.StartsWith("tag:", StringComparison.OrdinalIgnoreCase));
         /// <summary>Icon to display, if one was available.</summary>
         public Sprite? Icon { get; }
         /// <summary>Tint applied to the icon, useful for liquids.</summary>
@@ -243,7 +246,7 @@ namespace NotEnoughItems
                 (includeBelowRequirement || (IsLiquid ? q.amount > 0f : q.amount >= Amount)));
         }
 
-        private static bool HasTag(CatalogItem item, string tag)
+        internal static bool HasTag(CatalogItem item, string tag)
         {
             if (item.NativeItemInfo == null)
                 return item.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase);
@@ -535,7 +538,7 @@ namespace NotEnoughItems
         private int _lastLiquidCount = -1;
         private int _lastRecipeCount = -1;
         private int _lastRegistrySignature;
-        private int _lastLocaleSignature;
+        private (int Game, bool Chinese) _lastLocaleSignature;
         private long _nextFreshnessCheck;
         private bool _built;
         private int _revision;
@@ -573,8 +576,9 @@ namespace NotEnoughItems
                 AddItem(item);
 
             var categoriesById = new Dictionary<string, RecipeCategory>(StringComparer.OrdinalIgnoreCase);
+            var locale = ReadLocaleSignature();
             BuildNativeRecipes(categoriesById);
-            BuildNativeProcesses(categoriesById);
+            BuildNativeProcesses(categoriesById, locale.Chinese);
             foreach (RecipeCategory category in _providerCategories.Values)
                 categoriesById[category.Id] = category;
             foreach (var source in _providerRecipes.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
@@ -596,7 +600,7 @@ namespace NotEnoughItems
             _lastLiquidCount = global::Liquids.Registry?.Count ?? 0;
             _lastRecipeCount = global::Recipes.recipes?.Count ?? 0;
             _lastRegistrySignature = ReadRegistrySignature();
-            _lastLocaleSignature = ReadLocaleSignature();
+            _lastLocaleSignature = locale;
             _nextFreshnessCheck = System.Diagnostics.Stopwatch.GetTimestamp() + System.Diagnostics.Stopwatch.Frequency;
             _built = true;
             _revision++;
@@ -733,6 +737,40 @@ namespace NotEnoughItems
                 throw new ArgumentNullException(nameof(ingredient));
             EnsureFresh();
             return Array.AsReadOnly(_items.Where(item => ingredient.Matches(item, includeBelowRequirement)).ToArray());
+        }
+
+        /// <summary>Finds physical entries that advertise an ingredient's exact quality or tag.</summary>
+        /// <param name="ingredient">A generic recipe property requirement.</param>
+        /// <returns>Matching physical item types, including those below the recipe's quality threshold.</returns>
+        public IReadOnlyList<CatalogItem> GetItemsWithProperty(RecipeIngredient ingredient)
+        {
+            if (ingredient == null) throw new ArgumentNullException(nameof(ingredient));
+            if (!ingredient.MatchesAny || ingredient.QualityId.Length == 0 && ingredient.RequiredTag.Length == 0)
+                return Array.Empty<CatalogItem>();
+            EnsureFresh();
+            return Array.AsReadOnly(_items.Where(item => !item.IsVirtual && item.IsLiquid == ingredient.IsLiquid &&
+                (ingredient.QualityId.Length == 0 || item.Qualities.Any(quality => SameId(quality.id, ingredient.QualityId))) &&
+                (ingredient.RequiredTag.Length == 0 || RecipeIngredient.HasTag(item, ingredient.RequiredTag))).ToArray());
+        }
+
+        /// <summary>Finds physical item types carrying a required native or provider tag.</summary>
+        public IReadOnlyList<CatalogItem> GetItemsWithMatchingTag(RecipeIngredient ingredient)
+        {
+            if (ingredient == null) throw new ArgumentNullException(nameof(ingredient));
+            if (ingredient.RequiredTag.Length == 0) return Array.Empty<CatalogItem>();
+            EnsureFresh();
+            return Array.AsReadOnly(_items.Where(item => !item.IsVirtual && item.IsLiquid == ingredient.IsLiquid &&
+                RecipeIngredient.HasTag(item, ingredient.RequiredTag)).ToArray());
+        }
+
+        /// <summary>Finds all item and liquid entries that advertise an exact quality.</summary>
+        public IReadOnlyList<CatalogItem> GetItemsWithQuality(string qualityId)
+        {
+            if (string.IsNullOrWhiteSpace(qualityId)) return Array.Empty<CatalogItem>();
+            EnsureFresh();
+            string id = qualityId.Trim();
+            return Array.AsReadOnly(_items.Where(item => !item.IsVirtual &&
+                item.Qualities.Any(quality => SameId(quality.id, id))).ToArray());
         }
 
         /// <summary>Finds the live native recipe index used by the original crafting panel.</summary>
@@ -877,19 +915,22 @@ namespace NotEnoughItems
                 : "raw:" + key;
         }
 
-        private void BuildNativeProcesses(Dictionary<string, RecipeCategory> categories)
+        private void BuildNativeProcesses(Dictionary<string, RecipeCategory> categories, bool chinese)
         {
             const string category = "native.cooking";
             if (!_itemsByBrowseId.TryGetValue("item:steak", out var steak)) return;
+            string meat = chinese ? "带肉类标签的物品" : "Meat-tagged item";
             if (!_itemsByBrowseId.ContainsKey("tag:meat"))
-                AddItem(new CatalogItem("tag:meat", "Meat-tagged item", "Any item whose native ItemInfo.HasTag(\"meat\") is accepted by a cooker.",
+                AddItem(new CatalogItem("tag:meat", meat,
+                    chinese ? "烹饪加热器可处理带肉类标签的物品。" : "Any item tagged as meat is accepted by a cooker.",
                     "Process", CatalogItemKind.Virtual, source: NativeSource, tags: new[] { "meat" }, isVirtual: true));
-            var input = new RecipeIngredient(string.Empty, ignoredItemId: "steak", displayName: "Meat-tagged item", requiredTag: "meat");
+            var input = new RecipeIngredient(string.Empty, ignoredItemId: "steak", displayName: meat, requiredTag: "meat");
             // Heater.OnCollisionEnter2D, cooker=true: replace a meat-tagged item other than steak; retain 30% of input condition.
-            categories[category] = new RecipeCategory(category, "Cooking", "heater.cooker", source: NativeSource, icon: steak.Icon);
+            categories[category] = new RecipeCategory(category, chinese ? "烹饪" : "Cooking", "heater.cooker", source: NativeSource, icon: steak.Icon);
             _recipes.Add(new Recipe("native.process.cook-meat", category, new[] { input }, new[] { new RecipeOutput("steak") },
                 machineId: "heater.cooker", name: steak.DisplayName,
-                description: "Place raw meat against a cooking heater. The steak retains 30% of the input's condition.", source: NativeSource));
+                description: chinese ? "将生肉贴近烹饪加热器。制成的牛排保留原料 30% 的耐久。"
+                    : "Place raw meat against a cooking heater. The steak retains 30% of the input's condition.", source: NativeSource));
         }
 
         private void IndexRecipe(Recipe recipe, string categoryMachineId)
@@ -1034,15 +1075,14 @@ namespace NotEnoughItems
                         hash = hash * 31 + (info.fullName ?? string.Empty).GetHashCode(StringComparison.Ordinal);
                         hash = hash * 31 + (info.description ?? string.Empty).GetHashCode(StringComparison.Ordinal);
                         hash = hash * 31 + (info.tags ?? string.Empty).GetHashCode(StringComparison.Ordinal);
-                        if (info.qualities != null)
-                            foreach (global::CraftingQuality quality in info.qualities)
-                                hash = hash * 31 + (quality?.id ?? string.Empty).GetHashCode(StringComparison.OrdinalIgnoreCase);
+                        hash = QualitySignature(hash, info.qualities);
                     }
                 if (global::Liquids.Registry != null)
                     foreach (var pair in global::Liquids.Registry.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                     {
                         hash = hash * 31 + pair.Key.GetHashCode(StringComparison.OrdinalIgnoreCase);
                         hash = hash * 31 + (pair.Value?.localeName ?? string.Empty).GetHashCode(StringComparison.Ordinal);
+                        hash = QualitySignature(hash, pair.Value?.qualities);
                     }
                 if (global::Recipes.recipes != null)
                     foreach (global::Recipe recipe in global::Recipes.recipes)
@@ -1051,10 +1091,23 @@ namespace NotEnoughItems
             }
         }
 
-        private static int ReadLocaleSignature()
+        private static int QualitySignature(int hash, IEnumerable<global::CraftingQuality>? qualities)
         {
-            try { return StringComparer.OrdinalIgnoreCase.GetHashCode(global::Locale.currentLangName ?? string.Empty); }
-            catch { return 0; }
+            if (qualities != null)
+                foreach (var quality in qualities)
+                    if (quality != null)
+                        hash = unchecked((hash * 31 + (quality.id ?? string.Empty).GetHashCode(StringComparison.OrdinalIgnoreCase)) * 31 + quality.amount.GetHashCode());
+            return hash;
+        }
+
+        private static (int Game, bool Chinese) ReadLocaleSignature()
+        {
+            try
+            {
+                int gameLanguage = StringComparer.OrdinalIgnoreCase.GetHashCode(global::Locale.currentLangName ?? string.Empty);
+                return (gameLanguage, Plugin.Instance?.Chinese == true);
+            }
+            catch { return default; }
         }
 
         private static int NativeItemCount()

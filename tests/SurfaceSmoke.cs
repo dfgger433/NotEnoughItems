@@ -16,10 +16,10 @@ internal static class SurfaceSmoke
         }
 
         void Expect(string expected, string scenario, bool inventoryOpen, bool containerOpen = false,
-            bool blockingScreen = false, bool terminalInstalled = true)
+            bool blockingScreen = false, bool terminalInstalled = true, bool craftingOpen = false)
         {
             Func<bool>? terminal = terminalInstalled ? TerminalOpen : null;
-            var actual = resolve.Invoke(null, [blockingScreen, containerOpen, terminal, inventoryOpen]);
+            var actual = resolve.Invoke(null, [blockingScreen, containerOpen, terminal, inventoryOpen, craftingOpen]);
             if (actual?.ToString() != expected)
                 throw new InvalidOperationException($"{scenario}: expected {expected}, got {actual}.");
         }
@@ -37,6 +37,11 @@ internal static class SurfaceSmoke
         Expect("Closed", "Native secondary screen while both inventories still report open", inventoryOpen: true, blockingScreen: true);
         if (terminalProbes != probesBeforeBlock)
             throw new InvalidOperationException("A native blocker must win before querying the optional terminal.");
+        Expect("Crafting", "Native crafting exposes only its bookmark surface", inventoryOpen: true, craftingOpen: true);
+        Expect("Closed", "Pause or another blocker takes precedence over crafting", inventoryOpen: true, blockingScreen: true, craftingOpen: true);
+        Expect("Closed", "An open container must not share the crafting overlay", inventoryOpen: true, containerOpen: true, craftingOpen: true);
+        if (terminalProbes != probesBeforeBlock)
+            throw new InvalidOperationException("Crafting must resolve without querying terminal visibility.");
         Expect("Terminal", "Terminal resumes when the native blocker closes", inventoryOpen: true);
         terminalReportedOpen = false;
         Expect("Closed", "Native container becomes visible again when the terminal closes", inventoryOpen: true, containerOpen: true);

@@ -22,7 +22,7 @@ internal sealed class NeiRaycastFilter : MonoBehaviour, ICanvasRaycastFilter
 internal sealed class GameSurface
 {
     internal const string TerminalGuid = "com.unknown.inventoryterminal";
-    internal enum Kind { Closed, Inventory, Terminal, NativePanel }
+    internal enum Kind { Closed, Inventory, Terminal, Crafting }
     private delegate bool ReadBounds(out Rect rect);
     private readonly Func<bool>? _terminalOpen;
     private readonly ReadBounds? _terminalBounds;
@@ -31,15 +31,13 @@ internal sealed class GameSurface
     private readonly Func<RectTransform?>? _terminalRoot;
     private readonly Vector3[] _corners = new Vector3[4];
     private readonly List<InvButton> _radialButtons = new();
-    private RectTransform? _radialRoot, _containerRoot;
+    private RectTransform? _radialRoot;
     private Transform? _wearablesRoot;
     private int _radialChildren, _wearableChildren;
     private Rect _radialOffsets;
-    private Rect? _containerOffsets;
     private int _inventoryWidth, _inventoryHeight;
     private float _inventoryScale;
     private int _terminalWidth, _terminalHeight;
-    private PlayerCamera? _terminalCamera;
     private int _detectedFrame = -1;
     private Kind _detected;
     private UnityEngine.Object? _detectedHost;
@@ -76,8 +74,9 @@ internal sealed class GameSurface
     {
         if (refresh || _detectedFrame != Time.frameCount)
         {
-            _detected = DetectSurface(out var nextBounds, out _detectedHost);
+            _detected = DetectSurface(out var nextBounds, out var nextHost);
             _detectedBounds = nextBounds;
+            _detectedHost = nextHost;
             _detectedFrame = Time.frameCount;
         }
         bounds = _detectedBounds;
@@ -85,63 +84,82 @@ internal sealed class GameSurface
         return _detected;
     }
 
+    // Check current game state without remeasuring layout. Native UI can open after our Update.
+    internal bool IsCurrent(Kind kind, UnityEngine.Object? host) =>
+        kind != Kind.Closed && DetectKind(PlayerCamera.main, out var currentHost) == kind && currentHost == host;
+
     private Kind DetectSurface(out Rect bounds, out UnityEngine.Object? host)
     {
         bounds = default;
-        host = null;
         var camera = PlayerCamera.main;
-        var world = WorldGeneration.world;
-        if (!camera || !camera.isActiveAndEnabled || !camera.body || !camera.body.alive || !camera.body.conscious ||
-            !world || world.cutsceneActive || PauseHandler.paused || SettingsMenu.instance || Active(camera.woundView) ||
-            (ConsoleScript.instance && ConsoleScript.instance.active) || (MinigameBase.main && MinigameBase.main.currentMinigame))
-            return Kind.Closed;
-
-        bool radialVisible = camera.radialOpen && camera.radialMenu && Active(camera.radialMenu.gameObject);
-        var panel = NativePanel(camera);
-        if (panel != null)
+        var kind = DetectKind(camera, out host);
+        if (kind == Kind.Inventory)
         {
-            bounds = PanelBounds(panel);
-            host = panel;
-            return Kind.NativePanel;
+            bounds = InventoryBounds(camera);
         }
-        if (_terminalOpen?.Invoke() == true)
+        else if (kind == Kind.Crafting)
+        {
+            bounds = PanelBounds(camera.craftingPanel);
+        }
+        else if (kind == Kind.Terminal)
         {
             if (_terminalBounds?.Invoke(out var terminal) == true && TryClipScreenBounds(terminal, out var visible))
                 bounds = NeiLayout.FromScreen(visible, Screen.height);
             else
                 bounds = PanelBounds(_terminalRoot?.Invoke()?.parent?.gameObject);
-            if (_detected == Kind.Terminal && _terminalCamera == camera && _terminalWidth == Screen.width &&
+            if (_detected == Kind.Terminal && _detectedHost == host && _terminalWidth == Screen.width &&
                 _terminalHeight == Screen.height && !TerminalBoundsChanged(_detectedBounds, bounds))
                 bounds = _detectedBounds;
-            _terminalCamera = camera;
             _terminalWidth = Screen.width;
             _terminalHeight = Screen.height;
-            host = camera;
-            return Kind.Terminal;
         }
-        if (!radialVisible)
-        {
-            if (!Active(camera.containerMenu)) return Kind.Closed;
-            bounds = PanelBounds(camera.containerMenu);
-            host = camera.containerMenu;
-            return Kind.NativePanel;
-        }
-
-        bounds = InventoryBounds(camera);
-        host = camera.radialMenu;
-        return Kind.Inventory;
+        return kind;
     }
 
-    private static GameObject? NativePanel(PlayerCamera camera)
+    private Kind DetectKind(PlayerCamera camera, out UnityEngine.Object? host)
+    {
+        host = null;
+        var world = WorldGeneration.world;
+        if (!camera || !camera.isActiveAndEnabled || !camera.body || !camera.body.alive || !camera.body.conscious ||
+            !world || world.cutsceneActive)
+            return Kind.Closed;
+
+        var kind = ResolveKind(HasBlockingScreen(camera), HasOpenContainer(camera), _terminalOpen,
+            camera.radialOpen && camera.radialMenu && Active(camera.radialMenu.gameObject), Open(camera.craftingPanel));
+        host = kind switch
+        {
+            Kind.Crafting => camera.craftingPanel,
+            Kind.Terminal => camera,
+            Kind.Inventory => camera.radialMenu,
+            _ => null
+        };
+        return kind;
+    }
+
+    internal static Kind ResolveKind(bool blockingScreen, bool containerOpen, Func<bool>? terminalOpen, bool inventoryOpen, bool craftingOpen)
+    {
+        if (blockingScreen) return Kind.Closed;
+        if (craftingOpen) return containerOpen ? Kind.Closed : Kind.Crafting;
+        // The terminal hides and disables the native container without clearing its
+        // open flag. Only treat that flag as a blocker for the native backpack.
+        if (terminalOpen?.Invoke() == true) return Kind.Terminal;
+        return inventoryOpen && !containerOpen ? Kind.Inventory : Kind.Closed;
+    }
+
+    private static bool HasBlockingScreen(PlayerCamera camera)
     {
         var transfer = LiquidTransfer.instance;
-        if (transfer && transfer.isActiveAndEnabled && camera.mainCanvas && transfer.transform.IsChildOf(camera.mainCanvas.transform))
-            return transfer.gameObject;
-        if (Active(camera.itemCustomizer)) return camera.itemCustomizer;
-        if (Active(camera.tradeMenu)) return camera.tradeMenu;
-        if (Active(camera.craftingPanel)) return camera.craftingPanel;
-        return null;
+        return PauseHandler.paused || SettingsMenu.instance || ScrollableText.textExists ||
+            (ConsoleScript.instance && ConsoleScript.instance.active) || (MinigameBase.main && MinigameBase.main.currentMinigame) ||
+            Open(camera.woundView) || Open(camera.tradeMenu) || Open(camera.itemCustomizer) ||
+            (transfer && transfer.isActiveAndEnabled);
     }
+
+    // The game keeps the radial open for containers, and the terminal can hide the native hierarchy.
+    private static bool HasOpenContainer(PlayerCamera camera) => camera.currentContainer || Open(camera.containerMenu);
+
+    internal static bool NativeDragCleanupAllowed(PlayerCamera camera) =>
+        !HasOpenContainer(camera) && !HasBlockingScreen(camera) && !Open(camera.craftingPanel);
 
     private Rect PanelBounds(GameObject? panel)
     {
@@ -191,19 +209,16 @@ internal sealed class GameSurface
     private Rect InventoryBounds(PlayerCamera camera)
     {
         var radial = camera.radialMenu;
-        var container = Active(camera.containerMenu) ? camera.containerMenu.transform as RectTransform : null;
         var wearables = camera.wearPopulate ? camera.wearPopulate.transform : null;
         int wearableChildren = wearables ? wearables!.childCount : 0;
         float scale = camera.mainCanvas ? Mathf.Max(.2f, PlayerCamera.uiScale) : 1f;
 
-        // The native camera moves the entire radial in screen space every Update. Only
-        // measure local layout, never the radial's translated/animated world rectangle.
-        if (_detected != Kind.Inventory || _radialRoot != radial || _containerRoot != container || _wearablesRoot != wearables ||
+        // Measure the local slot layout because the native camera moves the radial every Update.
+        if (_detected != Kind.Inventory || _radialRoot != radial || _wearablesRoot != wearables ||
             _radialChildren != radial.childCount || _wearableChildren != wearableChildren ||
             _inventoryWidth != Screen.width || _inventoryHeight != Screen.height || _inventoryScale != scale)
         {
             _radialRoot = radial;
-            _containerRoot = container;
             _wearablesRoot = wearables;
             _radialChildren = radial.childCount;
             _wearableChildren = wearableChildren;
@@ -211,39 +226,27 @@ internal sealed class GameSurface
             _inventoryHeight = Screen.height;
             _inventoryScale = scale;
 
-            // The radial's root also owns invisible drag zones and transient actions.
-            // Measure the permanent inventory slots and the visible container frame instead.
+            // Only measure visible inventory slots. The root also owns invisible drag zones and transient actions.
             _radialOffsets = new Rect(-297, -292, 594, 601);
             radial.GetComponentsInChildren(false, _radialButtons);
             foreach (var button in _radialButtons)
             {
-                if (button.transform is not RectTransform rect || (container && rect.IsChildOf(container))) continue;
-                if (TryMeasureLocal(rect, radial, null, out var slot)) _radialOffsets = Union(_radialOffsets, slot);
+                if (button.transform is RectTransform rect && TryMeasureLocal(rect, radial, out var slot))
+                    _radialOffsets = Union(_radialOffsets, slot);
             }
             _radialButtons.Clear();
-            _containerOffsets = null;
-            if (container && TryMeasureLocal(container!, radial, container, out var frame))
-            {
-                var title = container!.Find("Top") as RectTransform;
-                if (title && title!.gameObject.activeInHierarchy && TryMeasureLocal(title, radial, container, out var header))
-                    frame = Union(frame, header);
-                _containerOffsets = frame;
-            }
         }
-        return AnchorInventory(_radialOffsets, _containerOffsets, _inventoryWidth, _inventoryHeight, _inventoryScale);
+        return AnchorInventory(_radialOffsets, _inventoryWidth, _inventoryHeight, _inventoryScale);
     }
 
-    private bool TryMeasureLocal(RectTransform rect, RectTransform radial, RectTransform? animatedContainer, out Rect bounds)
+    private bool TryMeasureLocal(RectTransform rect, RectTransform radial, out Rect bounds)
     {
         bounds = default;
         var relative = Matrix4x4.identity;
         for (Transform current = rect; current != radial; current = current.parent)
         {
             if (!current) return false;
-            // The container animates from 0.01 to 1 when opened. Reserve its full size
-            // immediately, or the panels will slide during the animation.
-            var scale = current == animatedContainer ? Vector3.one : current.localScale;
-            relative = Matrix4x4.TRS(current.localPosition, current.localRotation, scale) * relative;
+            relative = Matrix4x4.TRS(current.localPosition, current.localRotation, current.localScale) * relative;
         }
 
         rect.GetLocalCorners(_corners);
@@ -261,11 +264,8 @@ internal sealed class GameSurface
         return true;
     }
 
-    internal static Rect AnchorInventory(Rect radialOffsets, Rect? containerOffsets, float width, float height, float unit)
-    {
-        var offsets = containerOffsets.HasValue ? Union(radialOffsets, containerOffsets.Value) : radialOffsets;
-        return new Rect(width * .5f + offsets.x * unit, height * .5f + offsets.y * unit, offsets.width * unit, offsets.height * unit);
-    }
+    internal static Rect AnchorInventory(Rect offsets, float width, float height, float unit) =>
+        new Rect(width * .5f + offsets.x * unit, height * .5f + offsets.y * unit, offsets.width * unit, offsets.height * unit);
 
     internal static bool TerminalBoundsChanged(Rect current, Rect next) =>
         Mathf.Abs(next.xMin - current.xMin) >= 1f || Mathf.Abs(next.yMin - current.yMin) >= 1f ||
@@ -317,14 +317,8 @@ internal sealed class GameSurface
     internal Item? HoveredItem(Kind kind, bool forDrag = false)
     {
         var camera = PlayerCamera.main;
-        if (!EventSystem.current || !camera || !camera.body) return null;
-        Transform? root = kind switch
-        {
-            Kind.Terminal => _terminalRoot?.Invoke()?.parent,
-            Kind.NativePanel when _detected == Kind.NativePanel && _detectedHost is GameObject panel && Active(panel) => panel.transform,
-            Kind.Inventory => camera.radialMenu,
-            _ => null
-        };
+        if (kind is Kind.Closed or Kind.Crafting || !EventSystem.current || DetectKind(camera, out _) != kind) return null;
+        Transform? root = kind == Kind.Terminal ? _terminalRoot?.Invoke()?.parent : camera.radialMenu;
         if (!root) return null;
         var hits = new List<RaycastResult>();
         EventSystem.current.RaycastAll(new PointerEventData(EventSystem.current) { position = Input.mousePosition }, hits);
@@ -352,8 +346,9 @@ internal sealed class GameSurface
 
     internal bool OpenCrafting(Kind kind, global::Recipe recipe)
     {
-        if (!CanOpenCrafting(recipe) || (kind == Kind.Terminal && _closeTerminal?.Invoke() != true)) return false;
         var camera = PlayerCamera.main;
+        if (kind == Kind.Closed || DetectKind(camera, out _) != kind || !CanOpenCrafting(recipe) ||
+            (kind == Kind.Terminal && _closeTerminal?.Invoke() != true)) return false;
         if (!Active(camera.craftingPanel)) camera.OpenCraftScreen();
         if (!Active(camera.craftingPanel)) return false;
         camera.ClearRecipeFilter();
@@ -362,7 +357,7 @@ internal sealed class GameSurface
     }
 
     private static bool Active(GameObject? go) => go != null && go.activeInHierarchy;
-    internal static bool MedicalPanelOpen => PlayerCamera.main && Active(PlayerCamera.main.woundView);
+    private static bool Open(GameObject? go) => go != null && go.activeSelf;
 
     internal static void InstallPatches(Harmony harmony, ManualLogSource log)
     {
@@ -428,7 +423,7 @@ internal sealed class GameSurface
 
     private static void CancelOnInventoryClose(PlayerCamera __instance, bool __state)
     {
-        if (DragInputPolicy.CancelOnClose(__state, __instance.radialOpen) &&
+        if (DragInputPolicy.CancelOnClose(__state, __instance.radialOpen) && NativeDragCleanupAllowed(__instance) &&
             Plugin.Instance is { } plugin && plugin.TracksNativeDrag(__instance))
             plugin.CancelNativeDrag(__instance);
     }

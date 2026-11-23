@@ -10,15 +10,26 @@ internal sealed partial class NeiWindow
 {
     private enum BookmarkGesture { Slot, SortSlot, Range, Group, Grow, Shrink }
     private sealed class BookmarkCell(BookmarkBook.Entry entry, string id, int ingredient, double amount, string? multiplier,
-        Color? tint = null, string? details = null)
+        Color? tint = null, Func<string>? details = null, BookmarkLiquidPreview? liquidPreview = null)
     {
         internal BookmarkBook.Entry Entry { get; } = entry;
-        internal string Id { get; } = id;
+        internal string Id { get; private set; } = id;
         internal int Ingredient { get; } = ingredient;
-        internal double Amount { get; } = amount;
+        internal double Amount { get; private set; } = amount;
         internal string? Multiplier { get; } = multiplier;
         internal Color? Tint { get; } = tint;
-        internal string? Details { get; } = details;
+        internal string? Details => details?.Invoke();
+
+        internal void UpdatePreview(int phase)
+        {
+            if (liquidPreview == null) return;
+            (Id, Amount) = liquidPreview.At(phase);
+        }
+    }
+
+    private sealed class BookmarkLiquidPreview((string Id, double Amount)[] candidates)
+    {
+        internal (string Id, double Amount) At(int phase) => candidates[RecipeGridLayout.CandidateIndex(phase, candidates.Length)];
     }
 
     private sealed class BookmarkRow(string group)
@@ -28,7 +39,8 @@ internal sealed partial class NeiWindow
     }
 
     private sealed class BookmarkDrag(BookmarkGesture gesture, BookmarkCell cell, Vector2 start, bool fromStart,
-        int button = 0, bool alt = false, bool control = false)
+        int button = 0, bool alt = false, bool control = false, bool shift = false,
+        BookmarkRow? originRow = null, int startPage = 0)
     {
         internal BookmarkGesture Gesture { get; } = gesture;
         internal BookmarkCell Cell { get; } = cell;
@@ -37,12 +49,25 @@ internal sealed partial class NeiWindow
         internal int Button { get; } = button;
         internal bool Alt { get; } = alt;
         internal bool Control { get; } = control;
+        internal bool Shift { get; } = shift;
+        internal BookmarkRow? OriginRow { get; } = originRow;
+        internal int StartPage { get; } = startPage;
+        internal bool Moved { get; private set; }
+
+        internal void MarkMoved() => Moved = true;
+
+        internal bool IsMoving(Vector2 position, bool isDrag)
+        {
+            bool beyondThreshold = Vector2.Distance(Start, position) >= BookmarkClicks.DragDistance;
+            if (isDrag && beyondThreshold) Moved = true;
+            return Moved || beyondThreshold;
+        }
     }
 
     private BookmarkDrag? _bookmarkDrag;
     private readonly List<(Rect Rect, BookmarkCell Cell)> _bookmarkCells = new();
     private readonly List<(Rect Rect, string Group)> _bookmarkHeaders = new();
-    private Rect _bookmarkNavigation, _favoriteRect;
+    private Rect _bookmarkNavigation;
     private int _bookmarkLayoutColumns;
     private List<BookmarkRow>? _bookmarkLayout;
 
@@ -50,38 +75,37 @@ internal sealed partial class NeiWindow
     {
         NeiSkin.Background(panel, "bookmarks");
         float x = panel.x + 3, w = panel.width - 6;
-        var paging = new Rect(x, panel.y + 2, w, 23);
+        const float size = NeiLayout.BookmarkControlSize, gap = 2f;
+        var paging = new Rect(x, panel.y + 2, w, size);
         float y = paging.yMax + 3;
-        if (_groups && w >= 85)
+        if (_groups && w >= 85f)
         {
-            _groupRect = new Rect(x, y, w - 65, 22);
+            float editorButton = Mathf.Min(size - 4f, (w - 22f) / 3f - gap);
+            float editorActions = 3f * (editorButton + gap);
+            _groupRect = new Rect(x, y, w - editorActions, size);
             _editGroup = NeiSkin.TextField(_groupRect, _editGroup, GroupControl, 32);
-            if (NeiSkin.IconButton(new Rect(x + w - 63, y, 20, 22), "add", L("Open named bookmark page", "打开命名书签页"), !string.IsNullOrWhiteSpace(_editGroup)))
+            float first = _groupRect.xMax + gap;
+            if (NeiSkin.IconButton(new Rect(first, y, editorButton, size), "add", L("Open named bookmark page", "打开命名书签页"), !string.IsNullOrWhiteSpace(_editGroup)))
             {
                 string page = _editGroup.Trim();
                 if (_book.EnsurePage(page)) SaveBookmarks();
                 SelectBookmarkGroup(page); _editGroup = string.Empty; _groups = false; _skipFocusFrame = true;
             }
-            if (NeiSkin.Button(new Rect(x + w - 41, y, 19, 22), "↑")) CopyBookmark(_book.CopyPage(_group));
-            if (NeiSkin.Button(new Rect(x + w - 20, y, 20, 22), "↓")) PasteBookmarks();
-            y += 26;
-            if (!_options)
-            {
-                DrawQuantity(new Rect(x, y, w, 23));
-                y += 26;
-            }
+            if (NeiSkin.Button(new Rect(first + editorButton + gap, y, editorButton, size), "↑")) CopyBookmark(_book.CopyPage(_group));
+            if (NeiSkin.Button(new Rect(x + w - editorButton, y, editorButton, size), "↓")) PasteBookmarks();
+            y += size + 4f;
         }
-        var footer = new Rect(x, panel.yMax - 27, w, 23);
-        var tools = NeiLayout.LeftTools(_height);
-        if (footer.Overlaps(tools)) footer.y = tools.yMin - footer.height - 3;
+        var footer = new Rect(x, panel.yMax - size - 4f, w, size);
+        bool showFooter = w >= 72f;
+        float footerButton = BookmarkNavigationButtonWidth(footer);
         // Process drag destinations before the generic MouseUp in the grid. Page arrows
         // remain normal click controls when no bookmark drag is in progress.
         var ev = Event.current;
-        if (w >= 72 && ev.type == EventType.MouseUp && _bookmarkDrag is { Button: 0 } drag &&
+        if (showFooter && ev.type == EventType.MouseUp && ev.button == 0 && _bookmarkDrag is { Button: 0 } drag &&
             drag.Gesture is BookmarkGesture.SortSlot or BookmarkGesture.Group && footer.Contains(ev.mousePosition) &&
-            Vector2.Distance(drag.Start, ev.mousePosition) >= 4)
+            drag.IsMoving(ev.mousePosition, isDrag: false))
         {
-            int direction = ev.mousePosition.x <= footer.x + 23 ? -1 : ev.mousePosition.x >= footer.xMax - 23 ? 1 : 0;
+            int direction = ev.mousePosition.x < footer.x + footerButton ? -1 : ev.mousePosition.x >= footer.xMax - footerButton ? 1 : 0;
             var pages = BookmarkPages();
             if (direction != 0 && pages.Length > 1)
             {
@@ -94,7 +118,7 @@ internal sealed partial class NeiWindow
             }
         }
         DrawBookmarkEntries(new Rect(x, y, w, footer.yMin - y - 3), paging);
-        if (w >= 72) DrawBookmarkPages(footer);
+        if (showFooter) DrawBookmarkPages(footer, footerButton);
     }
 
     private List<BookmarkRow> BuildBookmarkRows(int columns)
@@ -131,12 +155,15 @@ internal sealed partial class NeiWindow
                 {
                     var entry = entries[i];
                     if (hidden.Contains(entry)) continue;
-                    if (!compact) row = null;
+                    bool pack = BookmarkBoardPaging.CanPackBookmarkRow(compact, group);
+                    if (!pack) row = null;
                     bool foldedRecipe = entry.IsRecipeCollapsed && _book.IsChainEnabled(_group, group);
                     var cells = CellsForBookmark(entry, compact || foldedRecipe);
                     if (foldedRecipe)
                         cells = cells.Select(cell => new BookmarkCell(cell.Entry, cell.Id, cell.Ingredient, cell.Amount,
-                            cell.Multiplier, cell.Tint, cell.Details + "\n" + L("Alt+left: expand saved recipe chain", "Alt＋左键：展开此配方链")));
+                            cell.Multiplier, cell.Tint, () => cell.Details + "\n" + (group.Length == 0
+                                ? L("Alt+left: expand saved recipe chain", "Alt＋左键：展开此配方链")
+                                : L("Shift+Alt+left: expand saved recipe chain", "Shift＋Alt＋左键：展开此配方链"))));
                     foreach (var cell in cells)
                     {
                         if (row == null || row.Cells.Count >= columns)
@@ -174,8 +201,8 @@ internal sealed partial class NeiWindow
     {
         if (rect.width < 26 || rect.height < 23) return;
         var e = Event.current;
-        const float gutter = 14;
-        float cell = Mathf.Min(29, rect.width - gutter);
+        const float gutter = 16;
+        float cell = Mathf.Min(NeiLayout.BookmarkCellSize * IconScale, rect.width - gutter, rect.height);
         int columns = Math.Max(1, (int)((rect.width - gutter) / cell));
         int rows = Math.Max(1, (int)(rect.height / cell));
         if (_bookmarkLayout == null || _bookmarkLayoutColumns != columns)
@@ -192,26 +219,30 @@ internal sealed partial class NeiWindow
             NeiSkin.Label(new Rect(rect.x + 4, rect.y, rect.width - 8, 22), L($"{_plugin.BookmarkKey} adds a bookmark", $"按 {_plugin.BookmarkKey} 添加书签"), muted: true);
 
         int first = _bookmarkPage * rows;
+        int pageEnd = Math.Min(first + rows, layout.Count);
         BookmarkCell? hovered = null;
         BookmarkCell? rowEdge = null;
+        BookmarkRow? targetRow = null;
         string? header = null;
         Rect dropRect = default;
+        Rect lastSlot = default;
         bool before = false;
         bool gutterHit = false;
         bool repaint = e.type == EventType.Repaint;
-        bool moving = _bookmarkDrag is { } drag && Vector2.Distance(drag.Start, e.mousePosition) >= 4;
-        int dragRow = moving && _bookmarkDrag!.Gesture is BookmarkGesture.Range or BookmarkGesture.Grow or BookmarkGesture.Shrink
-            ? layout.FindIndex(r => r.Cells.Any(c => ReferenceEquals(c, _bookmarkDrag.Cell))) : -1;
+        var drag = _bookmarkDrag;
+        bool moving = drag?.IsMoving(e.mousePosition, e.type == EventType.MouseDrag) == true;
+        int dragRow = moving && drag!.OriginRow is { } origin && drag.Gesture is BookmarkGesture.Range or BookmarkGesture.Grow or BookmarkGesture.Shrink
+            ? layout.IndexOf(origin) : -1;
         int mouseRow = first + (int)Mathf.Floor((e.mousePosition.y - rect.y) / cell);
-        for (int i = first; i < Math.Min(first + rows, layout.Count); i++)
+        for (int i = first; i < pageEnd; i++)
         {
             var line = layout[i];
             float y = rect.y + (i - first) * cell;
             var bracket = new Rect(rect.x, y, gutter, cell);
             bool firstRow = i == 0 || layout[i - 1].Group != line.Group;
             bool lastRow = i + 1 == layout.Count || layout[i + 1].Group != line.Group;
-            bool onBracket = bracket.Contains(e.mousePosition);
             bool onRow = rect.Contains(e.mousePosition) && mouseRow == i;
+            bool onBracket = onRow && bracket.Contains(e.mousePosition);
             if (dragRow >= 0 && i >= Math.Min(dragRow, mouseRow) && i <= Math.Max(dragRow, mouseRow))
                 NeiSkin.BookmarkTint(new Rect(rect.x, y, rect.width, cell), new Color32(185, 190, 218, 55));
             if (line.Group.Length > 0)
@@ -222,6 +253,7 @@ internal sealed partial class NeiWindow
             if (onRow)
             {
                 before = e.mousePosition.y < y + cell * .5f;
+                targetRow = line;
                 rowEdge = before ? line.Cells[0] : line.Cells[^1];
                 gutterHit = onBracket;
                 dropRect = new Rect(rect.x + gutter, before ? y : y + cell - 2, rect.width - gutter, 2);
@@ -229,7 +261,7 @@ internal sealed partial class NeiWindow
             if (onBracket)
             {
                 header = line.Group;
-                if (!moving) BookmarkBracketTip(line.Group, e.shift);
+                if (!moving) BookmarkBracketTip(line.Group, SelectionShiftHeld, bracket);
                 if (e.type == EventType.MouseDown && (e.button == 0 || e.button == 1 && line.Group.Length > 0))
                 {
                     BookmarkGesture gesture;
@@ -245,14 +277,18 @@ internal sealed partial class NeiWindow
                         while (end + 1 < layout.Count && layout[end + 1].Group == line.Group) end++;
                         fromStart = i - start <= end - i;
                     }
-                    _bookmarkDrag = new BookmarkDrag(gesture, rowEdge!, e.mousePosition, fromStart, e.button, e.alt, e.control);
+                    _bookmarkDrag = new BookmarkDrag(gesture, rowEdge!, e.mousePosition, fromStart, e.button, e.alt, e.control, e.shift, line);
                     e.Use();
                 }
             }
             for (int col = 0; col < line.Cells.Count; col++)
             {
                 var current = line.Cells[col];
+                // Keep the row/cell identity (used by click and drag), but update the
+                // automatic liquid example and its volume together on repaint.
+                if (repaint) current.UpdatePreview(_candidateCycleStep);
                 var slot = new Rect(rect.x + gutter + col * cell, y, cell - 1, cell - 1);
+                lastSlot = slot;
                 if (slot.Contains(e.mousePosition))
                 {
                     hovered = current;
@@ -260,7 +296,8 @@ internal sealed partial class NeiWindow
                     dropRect = new Rect(before ? slot.x : slot.xMax - 2, slot.y, 2, slot.height);
                     if (e.type == EventType.MouseDown && e.button == 0)
                     {
-                        _bookmarkDrag = new BookmarkDrag(e.shift ? BookmarkGesture.SortSlot : BookmarkGesture.Slot, current, e.mousePosition, before);
+                        _bookmarkDrag = new BookmarkDrag(e.shift ? BookmarkGesture.SortSlot : BookmarkGesture.Slot,
+                            current, e.mousePosition, before, alt: e.alt, startPage: _bookmarkPage);
                         e.Use();
                     }
                     else if (e.type == EventType.MouseDown && e.button == 1)
@@ -275,20 +312,53 @@ internal sealed partial class NeiWindow
                     }
                 }
                 if (repaint) _bookmarkCells.Add((slot, current));
-                var details = current.Details;
-                if (hovered == current && e.shift && current.Amount > 0)
+                var details = repaint && hovered == current ? current.Details : null;
+                if (repaint && hovered == current && e.shift && current.Amount > 0)
                     details = string.Join("\n", new[] { details, BookmarkAmountBreakdown(current) }.Where(s => !string.IsNullOrEmpty(s)));
-                bool tracked = current.Entry.ShowQuantity || _book.IsChainEnabled(_group, current.Entry.Group);
-                string? amount = tracked ? BookmarkAmount(current.Id, current.Amount) : null;
-                ItemSlot(slot, current.Id, amount: amount, details: details, interactive: false, backing: current.Tint, corner: current.Multiplier);
+                var ingredient = current.Ingredient >= 0 && BookmarkedRecipe(current.Entry.Id) is { } bookmarkedRecipe &&
+                    current.Ingredient < bookmarkedRecipe.Inputs.Count ? bookmarkedRecipe.Inputs[current.Ingredient] : null;
+                bool liquidId = current.Id.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase);
+                bool tracked = liquidId || current.Entry.ShowQuantity || _book.IsChainEnabled(_group, current.Entry.Group);
+                bool unresolvedProperty = PropertyQuery(ingredient) != null && !liquidId;
+                SlotQuantity? amount = tracked && !unresolvedProperty ? new SlotQuantity(current.Amount, liquidId || ingredient?.IsLiquid == true) : null;
+                var candidates = repaint && hovered == current && ingredient?.MatchesAny == true ? _catalog.GetMatchingItems(ingredient) : null;
+                ItemSlot(slot, current.Id, amount: amount, details: details, interactive: false, backing: current.Tint,
+                    corner: current.Multiplier, requirementIngredient: ingredient, candidates: candidates,
+                    candidateRequirement: candidates != null ? RequirementTitle(ingredient!) : null,
+                    selectCandidate: candidates != null ? candidate => SelectBookmarkVariant(current.Entry, current.Ingredient, candidate) : null,
+                    candidateSource: CandidateSource.Bookmark);
             }
         }
-        if (moving && rowEdge != null) NeiSkin.BookmarkTint(dropRect, new Color32(218, 217, 226, 230));
+        BookmarkCell? gridTail = null;
+        bool beforeTail = false, tailCollapsed = false;
+        if (moving && drag is { Gesture: BookmarkGesture.SortSlot } && !drag.Cell.Entry.IsRecipe &&
+            rect.Contains(e.mousePosition) && pageEnd > first)
+        {
+            var tailRow = layout[pageEnd - 1];
+            var tailCell = tailRow.Cells[^1];
+            tailCollapsed = _book.IsCollapsed(_group, tailRow.Group);
+            bool canPack = !tailCollapsed && BookmarkBoardPaging.CanPackBookmarkRow(_book.IsCompact(_group, tailRow.Group), tailRow.Group);
+            bool continues = pageEnd > 1 && layout[pageEnd - 2].Cells[^1].Entry == tailCell.Entry;
+            if (BookmarkBoardPaging.EarlierGridDropBefore(drag.StartPage, _bookmarkPage, canPack, tailRow.Cells.Count, columns, continues) is { } insertBefore)
+            {
+                gridTail = tailCell;
+                beforeTail = insertBefore;
+                dropRect = new Rect(insertBefore ? lastSlot.x : lastSlot.xMax - 2, lastSlot.y, 2, lastSlot.height);
+            }
+        }
+        if (moving && (gridTail != null || rowEdge != null)) NeiSkin.BookmarkTint(dropRect, new Color32(218, 217, 226, 230));
 
         if (e.type == EventType.ScrollWheel && rect.Contains(e.mousePosition) && e.delta.y != 0)
         {
             int direction = e.delta.y < 0 ? 1 : -1;
-            if (e.control && !moving && (hovered != null || header != null))
+            if (pages > 1 && drag is { Gesture: BookmarkGesture.SortSlot } && !drag.Cell.Entry.IsRecipe)
+            {
+                // Rolling back already turns this press into a reorder, even if the pointer hasn't moved.
+                drag.MarkMoved();
+                _bookmarkPage = Wrap(_bookmarkPage - direction, pages);
+                e.Use();
+            }
+            else if (e.control && !moving && (hovered != null || header != null))
             {
                 int delta = direction * (e.alt ? BookmarkQuantity : 1);
                 bool changed = hovered == null || _book.IsCollapsed(_group, hovered.Entry.Group)
@@ -305,7 +375,11 @@ internal sealed partial class NeiWindow
         if (e.type == EventType.MouseUp && _bookmarkDrag is { } active && e.button == active.Button)
         {
             _bookmarkDrag = null;
-            if (moving && (hovered ?? rowEdge) is { } target)
+            if (gridTail is { } tail)
+            {
+                if (_book.Move(active.Cell.Entry, tail.Entry, reorderOnly: true, before: beforeTail, separate: tailCollapsed)) SaveBookmarks();
+            }
+            else if (moving && (hovered ?? rowEdge) is { } target)
             {
                 var source = active.Cell.Entry;
                 var targetEntry = target.Entry;
@@ -328,31 +402,42 @@ internal sealed partial class NeiWindow
             else if (!moving && header == active.Cell.Entry.Group && !string.IsNullOrEmpty(header) &&
                 active.Gesture is BookmarkGesture.Group or BookmarkGesture.Grow or BookmarkGesture.Shrink)
             {
-                bool changed = active.Button == 1
-                    ? (active.Control ? _book.Ungroup(_group, header) : _book.ToggleChain(_group, header))
-                    : !e.shift && (active.Alt ? _book.ToggleCollapsed(_group, header) : _book.ToggleCompact(_group, header));
+                bool changed = BookmarkClicks.Bracket(active.Button, active.Alt, active.Control, active.Gesture == BookmarkGesture.Group) switch
+                {
+                    BookmarkBracketClick.Ungroup => _book.Ungroup(_group, header),
+                    BookmarkBracketClick.ToggleChain => _book.ToggleChain(_group, header),
+                    BookmarkBracketClick.ToggleCollapse => _book.ToggleCollapsed(_group, header),
+                    BookmarkBracketClick.ToggleLayout => _book.ToggleCompact(_group, header),
+                    _ => false
+                };
                 if (changed) SaveBookmarks();
             }
             else if (!moving && hovered == active.Cell && active.Button == 0)
             {
-                if (e.alt && _book.IsCollapsed(_group, active.Cell.Entry.Group))
+                var entry = active.Cell.Entry;
+                bool shift = active.Gesture == BookmarkGesture.SortSlot || e.shift;
+                var click = BookmarkClicks.Slot(active.Button, active.Alt, shift, entry.Group.Length > 0,
+                    _book.IsCollapsed(_group, entry.Group),
+                    active.Cell.Ingredient < 0 && entry.IsRecipe && _book.IsChainEnabled(_group, entry.Group));
+                bool changed = click switch
                 {
-                    if (_book.ToggleCollapsed(_group, active.Cell.Entry.Group)) SaveBookmarks();
-                }
-                else if (e.alt && active.Cell.Ingredient < 0 && active.Cell.Entry.IsRecipe &&
-                    _book.IsChainEnabled(_group, active.Cell.Entry.Group))
-                {
-                    if (_book.ToggleRecipeCollapsed(active.Cell.Entry)) SaveBookmarks();
-                }
-                else ClickBookmark(active.Cell, 0, active.Gesture == BookmarkGesture.SortSlot || e.shift, e.alt);
+                    BookmarkSlotClick.Split => _book.Split(entry),
+                    BookmarkSlotClick.ExpandLane => _book.ToggleCollapsed(_group, entry.Group),
+                    BookmarkSlotClick.ToggleRecipeCollapse => _book.ToggleRecipeCollapsed(entry),
+                    _ => false
+                };
+                if (changed) SaveBookmarks();
+                else if (click == BookmarkSlotClick.Default) ClickBookmark(active.Cell, 0, shift, alt: false);
             }
             e.Use();
         }
     }
 
+    private static float BookmarkNavigationButtonWidth(Rect row) => Mathf.Min(row.height, row.width / 4f);
+
     private void DrawBookmarkNavigation(Rect rect, int pages, bool hasEntries)
     {
-        float button = Mathf.Min(rect.height, rect.width / 4);
+        float button = BookmarkNavigationButtonWidth(rect);
         var middle = new Rect(rect.x + button + 1, rect.y, rect.width - 2 * button - 2, rect.height);
         var e = Event.current;
         if (e.type == EventType.Repaint) _bookmarkNavigation = middle;
@@ -381,10 +466,13 @@ internal sealed partial class NeiWindow
         }
         if (_book.IsChainEnabled(_group)) NeiSkin.BookmarkTint(new Rect(middle.x + 3, middle.yMax - 3, middle.width - 6, 1.5f), new Color32(87, 175, 103, 255));
         if (!onPageNumber) return;
-        if (hasEntries && e.control && PageChainEnabled()) BookmarkPageChainTip(e.shift);
-        else if (hasEntries && _book.IsChainEnabled(_group))
-            BookmarkChainTip(L("Ungrouped bookmarks", "未分组书签"), new[] { "" }, e.shift);
-        else Tip(L("Bookmark page", "当前书签页"), L("Left: grid/queue · Alt+left: collapse · Right: ungrouped chain\nCtrl+right: toggle all chains · Ctrl+hover: page totals\nCtrl+wheel: quantity · Ctrl+C: copy page · Ctrl+V: paste", "左键：网格／队列 · Alt＋左键：折叠 · 右键：未分组合成链\nCtrl＋右键：切换整页合成链 · Ctrl＋悬停：整页汇总\nCtrl＋滚轮：数量 · Ctrl＋C：复制页 · Ctrl＋V：粘贴"));
+        string title = L("Bookmark page", "当前书签页");
+        bool chain = _book.IsChainEnabled(_group);
+        if (ShowBookmarkHelp(title, page: true, hasEntries, chain)) return;
+        if (hasEntries && e.control && PageChainEnabled()) BookmarkPageChainTip(SelectionShiftHeld, middle);
+        else if (hasEntries && chain)
+            BookmarkChainTip(L("Ungrouped bookmarks", "未分组书签"), new[] { "" }, SelectionShiftHeld, middle);
+        else Tip(title, BookmarkHelpPrompt, boxed: true);
     }
 
     private bool AdjustBookmarkGroup(string group, int delta)
@@ -406,11 +494,10 @@ internal sealed partial class NeiWindow
         return _book.AdjustGroup(_group, group, delta, legacyBatches, targets);
     }
 
-    private void DrawBookmarkPages(Rect row)
+    private void DrawBookmarkPages(Rect row, float button)
     {
         var pages = BookmarkPages();
         int index = Array.IndexOf(pages, _group);
-        const float button = 23;
         if (NeiSkin.IconButton(new Rect(row.x, row.y, button, row.height), "previous", L("Previous bookmark page", "上一张书签页"), pages.Length > 1)) ChangeBookmarkPage(-1);
         var name = _group == "0" ? L("Default", "默认页") : _group;
         if (NeiSkin.Button(new Rect(row.x + button + 2, row.y, row.width - 2 * button - 4, row.height), $"{name}  {index + 1}/{pages.Length}", selected: _groups))
@@ -436,13 +523,14 @@ internal sealed partial class NeiWindow
         _bookmarkLayout = null;
         _bookmarkBalance.Clear();
         _cachedChainTip = null;
-        _chainTipOffset = _chainTipMaxOffset = 0;
+        if (_pinnedItems?.Origin is CandidateSource.Bookmark or CandidateSource.Chain) ClearSupportedItemsTip();
+        ClearChainTip();
         ClearBookmarkHits();
     }
 
     private void ClearBookmarkHits()
     {
-        _bookmarkCells.Clear(); _bookmarkHeaders.Clear(); _bookmarkNavigation = _favoriteRect = default;
+        _bookmarkCells.Clear(); _bookmarkHeaders.Clear(); _bookmarkNavigation = default;
     }
 
     private void CopyBookmark(string text)
@@ -457,8 +545,8 @@ internal sealed partial class NeiWindow
         else Status(L("No new compatible bookmarks on the clipboard", "剪贴板中没有新的兼容书签"));
     }
 
-    private static string BookmarkAmount(string id, double amount) => amount.ToString("0.##", CultureInfo.InvariantCulture) +
-        (id.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase) ? "mL" : "");
+    private static string BookmarkAmount(string id, double amount, bool liquid = false) => amount.ToString("0.##", CultureInfo.InvariantCulture) +
+        (liquid || id.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase) ? "mL" : "");
 
     private string? BookmarkAmountBreakdown(BookmarkCell cell)
     {
@@ -470,12 +558,9 @@ internal sealed partial class NeiWindow
         return $"{BookmarkAmount(cell.Id, cell.Amount)} = {groups:0} × {BookmarkAmount(cell.Id, unit)} + {BookmarkAmount(cell.Id, cell.Amount - groups * unit)}";
     }
 
-    private void DrawLeftTools(Rect rect)
+    private void DrawLeftTools(NeiLayout.ToolButtons buttons)
     {
-        float side = rect.height;
-        bool hideBookmarks = HideBookmarksForDrag;
-        _leftTools = hideBookmarks ? new Rect(rect.x, rect.y, side, side) : rect;
-        var wrench = new Rect(rect.x, rect.y, side, side);
+        var wrench = buttons.Settings;
         var e = Event.current;
         if (e.control && e.type == EventType.MouseDown && e.button == 0 && wrench.Contains(e.mousePosition))
         {
@@ -484,9 +569,11 @@ internal sealed partial class NeiWindow
             e.Use();
         }
         string mode = NeiActions.ModeName(NeiActions.Mode);
-        if (NeiSkin.IconButton(wrench, "options", L($"{mode} mode · Ctrl+click to change", $"{mode}模式 · Ctrl＋点击切换"), selected: NeiActions.Mode != NeiActions.LocalMode.Recipe))
+        if (NeiSkin.IconButton(wrench, "options", L($"{mode} mode · Ctrl+click to change", $"{mode}模式 · Ctrl＋点击切换"),
+            selected: NeiActions.Mode == NeiActions.LocalMode.Cheat, backed: true, maxIconSize: 22f, enlargeIcon: true))
         { _options = true; _skipFocusFrame = true; }
-        if (!hideBookmarks && NeiSkin.IconButton(new Rect(rect.x + side + 3, rect.y, side, side), "bookmark", L("Show or hide bookmarks", "显示或隐藏书签"), selected: _bookmarksVisible))
+        if (!HideBookmarksForDrag && NeiSkin.IconButton(buttons.Bookmarks, "bookmark", L("Show or hide bookmarks", "显示或隐藏书签"),
+            selected: _bookmarksVisible, backed: true, maxIconSize: 22f, enlargeIcon: true))
             ToggleBookmarks();
     }
 }

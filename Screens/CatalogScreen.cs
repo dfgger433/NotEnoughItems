@@ -1,26 +1,23 @@
 using System.Globalization;
-using System.Linq;
 using UnityEngine;
 
 namespace NotEnoughItems;
 
 internal sealed partial class NeiWindow
 {
-    private void DrawCatalog(Rect panel)
-    {
-        var layout = new NeiLayout.CatalogPanel(panel);
-        NeiSkin.Background(panel, "catalog");
-        DrawCatalogGroups(layout.Group, layout.Name, layout.Add, layout.Remove);
-        DrawSearch(layout.Search);
+    private const string CatalogQuantityControl = "NEI.CatalogQuantity";
+    private string? _catalogQuantityDraft;
 
+    private void DrawCatalog(Rect panel, NeiLayout.CatalogPanel layout)
+    {
+        NeiSkin.Background(panel, "catalog");
         Rect grid = layout.Grid;
-        bool history = _showHistory.Value && _recent.Count > 0 && grid.height > 100;
-        if (history) grid.height -= 30;
-        const float cell = 28;
-        int columns = Mathf.Max(1, (int)(grid.width / cell));
-        int rows = Mathf.Max(1, (int)(grid.height / cell));
+        float cell = Mathf.Min(28 * IconScale, Mathf.Min(grid.width, grid.height));
+        if (cell < 12) return;
+        int columns = (int)(grid.width / cell);
+        int rows = (int)(grid.height / cell);
         int size = columns * rows;
-        int pages = Mathf.Max(1, (_filtered.Count + size - 1) / size);
+        int pages = size > 0 ? Mathf.Max(1, (_filtered.Count + size - 1) / size) : 1;
         _page = Mathf.Clamp(_page, 0, pages - 1);
         var e = Event.current;
         if (pages > 1 && e.type == EventType.ScrollWheel && grid.Contains(e.mousePosition))
@@ -42,30 +39,90 @@ internal sealed partial class NeiWindow
         }
         if (_filtered.Count == 0)
             NeiSkin.Label(new Rect(grid.x, grid.y + 4, grid.width, 24), L("No matching items", "没有匹配物品"), TextAnchor.MiddleCenter, true);
-        if (history)
-        {
-            for (int i = 0; i < Mathf.Min(_recent.Count, columns); i++)
-                ItemSlot(new Rect(grid.x + i * cell, grid.yMax, cell - 1, cell - 1), _recent[i]);
-        }
     }
 
-    // Quantity stays available from the bookmark page controls while its former catalog row holds the group name.
-    private void DrawQuantity(Rect row)
+    private void DrawCatalogControls(Rect panel, NeiLayout.CatalogPanel layout)
     {
-        float cap = Mathf.Min(23, (row.width - 28) / 3);
-        int amount = BookmarkQuantity;
-        string tip = L("Bookmark quantity / multiplier step · Cheat gives at most 64", "书签数量／乘数步进 · 作弊给予最多 64 件");
-        if (NeiSkin.IconButton(new Rect(row.x, row.y, cap, row.height), "remove", L("Decrease quantity", "减少数量"), amount > 1))
-            _quantityText = (amount - 1).ToString(CultureInfo.InvariantCulture);
-        _quantityRect = new Rect(row.x + cap + 3, row.y, row.width - 2 * cap - 6, row.height);
-        string input = NeiSkin.TextField(_quantityRect, _quantityText, QuantityControl, 4);
-        if (input.All(c => c >= '0' && c <= '9')) _quantityText = input;
-        if (NeiSkin.IconButton(new Rect(row.xMax - cap, row.y, cap, row.height), "add", L("Increase quantity", "增加数量"), amount < BookmarkBook.MaximumQuantity))
-            _quantityText = (amount + 1).ToString(CultureInfo.InvariantCulture);
-        if (_quantityRect.Contains(Event.current.mousePosition) && GUI.GetNameOfFocusedControl() != QuantityControl)
-            Tip(tip, null);
-        if (GUI.GetNameOfFocusedControl() != QuantityControl)
-            _quantityText = BookmarkQuantity.ToString(CultureInfo.InvariantCulture);
+        NeiSkin.Background(panel, "catalog");
+        Rect history = layout.History;
+        if (history.height > 0)
+        {
+            DrawHistoryDivider(layout.HistoryDivider);
+            float historyCell = Mathf.Min(history.height, 28 * IconScale);
+            int capacity = (int)(history.width / historyCell), drawn = 0;
+            for (int i = 0; i < _recent.Count && drawn < capacity; i++)
+            {
+                // History is normalized to browse IDs at lookup time. Re-resolve here
+                // so stale entries from an unloaded provider cannot draw a misleading
+                // first-letter placeholder over the footer; compact the remaining rows.
+                if (!_catalog.TryGetItem(_recent[i], out var recent) || !recent.IsCatalogVisible) continue;
+                ItemSlot(new Rect(history.x + drawn * historyCell, history.y, historyCell - 1, historyCell - 1),
+                    recent.BrowseId, catalogSlot: true);
+                drawn++;
+            }
+        }
+        DrawSearch(layout.Search);
+        DrawCatalogQuantity(layout.Quantity, layout.Increase, layout.Decrease);
+    }
+
+    private static void DrawHistoryDivider(Rect divider)
+    {
+        if (Event.current.type != EventType.Repaint || divider.width <= 0 || divider.height <= 0) return;
+        Color previous = GUI.color;
+        try
+        {
+            GUI.color = new Color32(195, 198, 216, 190);
+            const float dash = 5f, gap = 4f;
+            for (float x = divider.x; x < divider.xMax; x += dash + gap)
+                GUI.DrawTexture(new Rect(x, divider.y, Mathf.Min(dash, divider.xMax - x), divider.height),
+                    Texture2D.whiteTexture, ScaleMode.StretchToFill, true);
+        }
+        finally { GUI.color = previous; }
+    }
+
+    private void DrawCatalogQuantity(Rect field, Rect increase, Rect decrease)
+    {
+        var e = Event.current;
+        int amount = _spawnAmount.Value;
+        bool focused = GUI.GetNameOfFocusedControl() == CatalogQuantityControl;
+        bool selectOnFocus = !focused && e.type == EventType.MouseDown && e.button == 0 && field.Contains(e.mousePosition);
+        if (focused && e.type == EventType.KeyDown)
+        {
+            if (e.keyCode is KeyCode.Return or KeyCode.KeypadEnter)
+            {
+                GUI.FocusControl(null);
+                focused = false;
+                e.Use();
+            }
+            else if (!e.control && !e.command && e.character >= ' ' && e.character != '\u007f' && e.character is not (>= '0' and <= '9'))
+                e.Use(); // Let Unity handle numeric input, selection, editing and clipboard shortcuts.
+        }
+
+        if (!focused) _catalogQuantityDraft = null;
+        string text = _catalogQuantityDraft ?? amount.ToString(CultureInfo.InvariantCulture);
+        // Don't truncate a pasted number before validation (e.g. 109 must not become 10).
+        string input = NeiSkin.TextField(field, text, CatalogQuantityControl, maxLength: -1);
+        if (selectOnFocus && GUI.GetNameOfFocusedControl() == CatalogQuantityControl &&
+            GUIUtility.QueryStateObject(typeof(TextEditor), GUIUtility.keyboardControl) is TextEditor editor)
+            editor.SelectAll();
+        if (input != text && NeiActions.TryReadGiveAmount(input, out int? parsed))
+        {
+            if (parsed is int next && next != amount) _spawnAmount.Value = amount = next;
+            // Only blank/zero drafts need separate state so the user can keep editing them.
+            _catalogQuantityDraft = parsed.HasValue ? null : input.Trim().Length == 0 ? string.Empty : "0";
+        }
+
+        int delta = 0;
+        if (NeiSkin.IconButton(increase, "add", L("Increase quantity", "增加数量"), amount < NeiActions.MaxGiveAmount)) delta++;
+        if (NeiSkin.IconButton(decrease, "remove", L("Decrease quantity", "减少数量"), amount > 1)) delta--;
+        if (delta != 0)
+        {
+            _spawnAmount.Value = NeiActions.ClampGiveAmount(amount + delta);
+            _catalogQuantityDraft = null;
+        }
+        if (field.Contains(e.mousePosition) && GUI.GetNameOfFocusedControl() != CatalogQuantityControl)
+            Tip(L($"Quantity (1–{NeiActions.MaxGiveAmount})", $"数量（1–{NeiActions.MaxGiveAmount}）"), L("Cheat mode: left click gives this many; right click gives one. Also used by bookmark quantity shortcuts.",
+                "作弊模式：左键刷取所选件数，右键刷取 1 件。带数量的书签快捷键也使用此值。"));
     }
 
     private void DrawSearch(Rect rect)
@@ -75,7 +132,6 @@ internal sealed partial class NeiWindow
         {
             _query = value;
             _page = 0;
-            SaveCatalogQuery(value);
             ApplyFilter();
         }
         if (rect.Contains(Event.current.mousePosition) && GUI.GetNameOfFocusedControl() != CatalogSearchControl)

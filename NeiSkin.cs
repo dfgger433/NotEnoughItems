@@ -14,6 +14,8 @@ internal static class NeiSkin
     private static readonly Color32 Shadow = Rgb(0x191827);
     private static readonly Color32 TooltipInk = Rgb(0xF4F2FB);
     private static readonly Color32 TooltipAccent = Rgb(0xBDB4E1);
+    private static readonly Color32 TooltipFill = new(21, 16, 30, 248);
+    private static readonly Color32 TooltipBorder = Rgb(0x635681);
     private static readonly Color32 FieldBorder = Rgb(0xA0A0A0);
     private static readonly Color32 FieldUnfocusedInk = Rgb(0x909090);
     private static readonly Color32 FieldFocusedInk = Rgb(0xE0E0E0);
@@ -25,6 +27,9 @@ internal static class NeiSkin
     private static readonly Dictionary<string, Texture2D?> Sources = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, Texture2D?> Frames = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, Texture2D?> Backgrounds = new(StringComparer.OrdinalIgnoreCase);
+    private static GUIStyle? _recipePanelStyle;
+    private static GUIStyle? _tooltipBackgroundStyle;
+    private static bool? _activePack;
 
     /// <summary>Paints only an interactive slot's transparent hover/selection border.</summary>
     internal static void Slot(Rect rect, bool hovered = false, bool selected = false)
@@ -34,6 +39,41 @@ internal static class NeiSkin
 
         // A catalyst slot sprite has an opaque interior; the overlay grid only needs an outline.
         Outline(rect, selected ? SlotSelectionInk : SlotHoverInk);
+    }
+
+    internal static void SlotWarning(Rect rect)
+    {
+        if (CanPaint(rect)) Fill(new Rect(rect.x + 1, rect.y + 1, 3, 3), Rgb(0xF5A64A));
+    }
+
+    internal static void SlotAmount(Rect rect, SlotQuantity amount)
+    {
+        if (!CanPaint(rect) || rect.width <= 2f || rect.height <= 2f) return;
+        const float normalScale = .76f;
+        var alignment = amount.Liquid ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight;
+        var styles = Styles;
+        var ink = styles.Label(alignment, false);
+        var content = styles.LabelContent;
+        float availableWidth = rect.width - 2f;
+        content.text = amount.Fit(FitsAtNormalSize);
+        Vector2 size = ink.CalcSize(content) + Vector2.one * 2f;
+        float scale = Mathf.Min(normalScale, availableWidth / size.x, (rect.height - 2f) / size.y);
+        var target = amount.LabelBounds(rect, size);
+        var corner = new Vector2(amount.Liquid ? target.xMin : target.xMax, target.yMax);
+        Matrix4x4 previous = GUI.matrix;
+        try
+        {
+            GUIUtility.ScaleAroundPivot(Vector2.one * scale, corner);
+            Paint(styles.LabelShadow(alignment), Offset(target), content);
+            Paint(ink, target, content);
+        }
+        finally { GUI.matrix = previous; }
+
+        bool FitsAtNormalSize(string text)
+        {
+            content.text = text;
+            return (ink.CalcSize(content).x + 2f) * normalScale <= availableWidth;
+        }
     }
 
     internal static void BookmarkTint(Rect rect, Color tint)
@@ -61,7 +101,8 @@ internal static class NeiSkin
     }
 
     /// <summary>Draws a clickable atlas icon button; the supplied tooltip is attached to Unity's GUI content.</summary>
-    internal static bool IconButton(Rect rect, string icon, string tooltip, bool enabled = true, bool selected = false)
+    internal static bool IconButton(Rect rect, string icon, string tooltip, bool enabled = true, bool selected = false, bool backed = false,
+        float maxIconSize = float.PositiveInfinity, bool enlargeIcon = false)
     {
         SkinStyles styles = Styles;
         string caption = ModernityFrames.Caption(icon);
@@ -73,25 +114,67 @@ internal static class NeiSkin
         string graphic = icon switch
         {
             "bookmark" when selected => "bookmark_selected",
-            "options" or "wrench" when NeiActions.Mode == NeiActions.LocalMode.Utility => "options_utility",
+            "favorite" when selected => "favorite_selected",
             "options" or "wrench" when NeiActions.Mode == NeiActions.LocalMode.Cheat => "options_cheat",
             _ => icon
         };
-        // Keep the native IMGUI click/tooltip but never draw a widget behind an atlas icon.
-        bool clicked = ClickContent(rect, content, enabled, GUIStyle.none, GUIStyle.none);
+        // Only toolbar icons opt into an existing widget background; inline sprites stay transparent.
+        var background = backed ? (selected ? styles.ButtonSelected : styles.Button) : GUIStyle.none;
+        bool clicked = ClickContent(rect, content, enabled, background, backed ? styles.ButtonDisabled : GUIStyle.none);
         if (CanPaint(rect) && CropFrame(graphic) is { } texture)
         {
             bool hovered = rect.Contains(Event.current.mousePosition);
             Color tint = !(GUI.enabled && enabled) ? IconDisabledTint : hovered ? IconHoverTint : Color.white;
-            float scale = Mathf.Min(1f, (rect.width - 2f) / texture.width, (rect.height - 2f) / texture.height);
-            if (scale > 0f)
-            {
-                float width = texture.width * scale, height = texture.height * scale;
-                DrawTexture(new Rect(rect.center.x - width * .5f, rect.center.y - height * .5f, width, height), texture,
-                    ScaleMode.ScaleToFit, tint);
-            }
+            DrawButtonSprite(rect, texture, maxIconSize, enlargeIcon, tint);
         }
         return clicked;
+    }
+
+    private static void DrawButtonSprite(Rect rect, Texture2D texture, float maxSize, bool enlarge, Color tint)
+    {
+        float scale = Mathf.Min(Mathf.Min(maxSize, rect.width - 2f) / texture.width,
+            Mathf.Min(maxSize, rect.height - 2f) / texture.height);
+        if (!enlarge) scale = Mathf.Min(1f, scale);
+        if (scale <= 0f) return;
+        float width = texture.width * scale, height = texture.height * scale;
+        DrawTexture(new Rect(rect.center.x - width * .5f, rect.center.y - height * .5f, width, height), texture,
+            ScaleMode.ScaleToFit, tint);
+    }
+
+    // Native button input covers both the label and the track. Only the sprite changes on hover;
+    // a selected switch never borrows the other value's graphic or changes its hit box.
+    internal static bool Checkbox(Rect rect, string text, bool on)
+    {
+        var styles = Styles;
+        bool clicked = Click(rect, text, true, styles.CheckboxLabel, styles.CheckboxLabel);
+        if (CanPaint(rect))
+        {
+            const float width = 22f, height = 12f;
+            bool hovered = GUI.enabled && rect.Contains(Event.current.mousePosition);
+            var indicator = new Rect(rect.x + 4f, rect.center.y - height * .5f, width, height);
+            if (CropFrame(ModernityFrames.CheckboxFace(on, hovered)) is { } texture)
+                DrawTexture(indicator, texture, ScaleMode.StretchToFill, GUI.enabled ? Color.white : IconDisabledTint);
+            else Label(indicator, on ? "✓" : "–", TextAnchor.MiddleCenter);
+        }
+        return clicked;
+    }
+
+    internal static bool DropDownButton(Rect rect, string text, bool expanded) =>
+        Click(rect, text, true, expanded ? Styles.DropDownOpen : Styles.DropDownClosed, Styles.ButtonDisabled);
+
+    internal static bool DropDownOption(Rect rect, string text, bool selected) =>
+        Click(rect, text, true, selected ? Styles.DropDownSelected : Styles.DropDownOption, Styles.ButtonDisabled);
+
+    // Match NEI's dimmed output with the heart centered over the hovered choice.
+    // A saved output shows a small mark instead, leaving its icon and quantity legible.
+    internal static void FavoriteMark(Rect slot, bool selected, bool preview)
+    {
+        if (!CanPaint(slot)) return;
+        if (preview) Fill(slot, new Color32(51, 51, 51, 102));
+        float size = Mathf.Min(preview ? 14f : 8f, Mathf.Min(slot.width, slot.height) - 2f);
+        var mark = preview ? new Rect(slot.center.x - size * .5f, slot.center.y - size * .5f, size, size) :
+            new Rect(slot.x + 1f, slot.y + 1f, size, size);
+        Icon(mark, selected ? "favorite_selected" : "favorite");
     }
 
     /// <summary>Draws one original icon sprite from the independent icons atlas.</summary>
@@ -120,9 +203,83 @@ internal static class NeiSkin
         DrawTexture(rect, background, ScaleMode.StretchToFill, Color.white);
     }
 
-    /// <summary>Draws a recipe/option tab. The caller owns which tab is selected.</summary>
+    /// <summary>Draws the original NEI recipe panel frame without stretching its border.</summary>
+    internal static void RecipePanel(Rect rect)
+    {
+        if (!CanPaint(rect)) return;
+        GUIStyle style = RecipePanelStyle;
+        if (style.normal.background == null) Fill(rect, Rgb(0xC8CAD4));
+        style.Draw(rect, GUIContent.none, false, false, false, false);
+    }
+
+    private static GUIStyle RecipePanelStyle => _recipePanelStyle ??= CreateRecipePanelStyle();
+
+    private static GUIStyle? TooltipBackgroundStyle => _tooltipBackgroundStyle ??= CreateTooltipBackgroundStyle();
+
+    private static GUIStyle? CreateTooltipBackgroundStyle()
+    {
+        Texture2D? frame = CropFrame("tooltip_background");
+        if (frame == null) return null;
+        var style = new GUIStyle
+        {
+            // Preserve the focused text-field row's one-pixel sides, three-pixel top inset,
+            // and one-pixel bottom edge while the center stretches to the tooltip bounds.
+            border = new RectOffset(1, 1, 3, 1)
+        };
+        style.normal.background = frame;
+        return style;
+    }
+
+    private static GUIStyle CreateRecipePanelStyle()
+    {
+        var style = new GUIStyle();
+        Texture2D? frame = CropFrame("recipe_background");
+        style.border = new RectOffset(NeiAssets.RecipeBackgroundSlice, NeiAssets.RecipeBackgroundSlice,
+            NeiAssets.RecipeBackgroundSlice, NeiAssets.RecipeBackgroundSlice);
+        style.normal.background = frame;
+        style.normal.textColor = Color.white;
+        return style;
+    }
+
+    internal static void RecipeBar(Rect rect)
+    {
+        if (CanPaint(rect)) Fill(rect, Rgb(0x666979));
+    }
+
+    internal static void RecipeSlot(Rect rect)
+    {
+        if (!CanPaint(rect)) return;
+        Fill(rect, Rgb(0xAAAEBD));
+        Outline(rect, Rgb(0xE7E8EF));
+    }
+
+    internal static void RecipeArrow(Rect rect)
+    {
+        if (!CanPaint(rect)) return;
+        Color ink = Rgb(0x737A90);
+        float y = rect.center.y;
+        Fill(new Rect(rect.x + 3, y - 2, rect.width - 13, 4), ink);
+        for (int i = 0; i < 9; i++)
+            Fill(new Rect(rect.xMax - 11 + i, y - 9 + i, 1, 18 - 2 * i), ink);
+    }
+
+    /// <summary>Draws an option tab. The caller owns which tab is selected.</summary>
     internal static bool Tab(Rect rect, string text, bool selected, bool enabled = true) =>
         Button(rect, text, enabled, selected);
+
+    // Selected method tabs are open along the bottom to meet the recipe frame;
+    // candidate tabs and the surrounding switches have closed edges.
+    internal static bool RecipeTab(Rect rect, string text, bool selected = false, bool enabled = true, string tooltip = "") =>
+        ClickContent(rect, new GUIContent(text, tooltip), enabled,
+            selected ? Styles.RecipeTabSelected : Styles.RecipeTabCandidate, Styles.RecipeTabDisabled);
+
+    internal static void RecipeMethodTitle(Rect rect, string text)
+    {
+        if (!CanPaint(rect)) return;
+        var styles = Styles;
+        styles.LabelContent.text = text;
+        Paint(styles.RecipeMethodTitle, rect, styles.LabelContent);
+    }
 
     /// <summary>Draws a native single-line editor. An optional control name allows IMGUI focus management.</summary>
     internal static string TextField(Rect rect, string text, string? controlName = null, int maxLength = 128)
@@ -175,27 +332,73 @@ internal static class NeiSkin
         Paint(styles.Wrapped, rect, styles.LabelContent);
     }
 
+    internal static float TextHeight(string text, float width)
+    {
+        var styles = Styles;
+        styles.LabelContent.text = text;
+        return Mathf.Ceil(styles.Wrapped.CalcHeight(styles.LabelContent, Mathf.Max(1f, width)));
+    }
+
     private static Rect Offset(Rect rect)
     {
         rect.position += Vector2.one;
         return rect;
     }
 
+    internal static (string Rich, string Shadow, string Plain) FormatItemText(string text, bool description = false) =>
+        TooltipText.Format(text, description ? "BDB4E1" : "F4F2FB");
+
+    internal static float ItemTextHeight(string rich, float width, bool description = false) =>
+        Mathf.Ceil((description ? Styles.ItemDetail : Styles.ItemTitle).CalcHeight(new GUIContent(rich), Mathf.Max(1f, width)));
+
+    internal static void ItemText(Rect rect, string rich, string shadow, bool description = false)
+    {
+        var styles = Styles;
+        styles.LabelContent.text = shadow;
+        Paint(description ? styles.ItemDetailShadow : styles.ItemTitleShadow, Offset(rect), styles.LabelContent);
+        styles.LabelContent.text = rich;
+        Paint(description ? styles.ItemDetail : styles.ItemTitle, rect, styles.LabelContent);
+    }
+
+    internal static (string Rich, string Shadow, string Plain) FormatItemBody(NativeTooltip.Content content)
+    {
+        var body = FormatItemText(content.Description, description: true);
+        if (content.Note is { } note)
+        {
+            var gap = body.Plain.Length > 0 ? "\n\n" : string.Empty;
+            var annotation = FormatItemText(note, description: true);
+            body.Rich += gap + annotation.Rich;
+            body.Shadow += gap + annotation.Shadow;
+            body.Plain += gap + annotation.Plain;
+        }
+        return body;
+    }
+
+    internal static (Rect Box, Rect IdRow, Rect ModRow) ItemTooltip(Vector2 anchor, Vector2 guiSize, NativeTooltip.Content content, bool copyIdEnabled, bool copyModEnabled)
+    {
+        var title = FormatItemText(content.Name);
+        var body = FormatItemBody(content);
+        return Tooltip(anchor, guiSize, title.Rich, body.Rich, boxed: true, title.Shadow, body.Shadow, content, copyIdEnabled, copyModEnabled);
+    }
+
     /// <summary>Draws a non-interactive tooltip; call last, outside any clipping groups.</summary>
-    internal static void Tooltip(Vector2 mousePosition, string text, string? subtitle = null)
+    internal static void Tooltip(Vector2 mousePosition, Vector2 guiSize, string text, string? subtitle = null, bool boxed = false) =>
+        Tooltip(mousePosition, guiSize, text, subtitle, boxed, null, null, null);
+
+    private static (Rect Box, Rect IdRow, Rect ModRow) Tooltip(Vector2 mousePosition, Vector2 guiSize, string text, string? subtitle, bool boxed,
+        string? titleShadow, string? bodyShadow, NativeTooltip.Content? item, bool copyIdEnabled = false, bool copyModEnabled = false)
     {
         if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(text))
-            return;
+            return default;
 
         const float margin = 4f;
         const float pad = 7f;
         const float gap = 3f;
-        Vector2 viewMin = GUIUtility.ScreenToGUIPoint(Vector2.zero);
-        Vector2 viewMax = GUIUtility.ScreenToGUIPoint(new Vector2(Screen.width, Screen.height));
-        float availableWidth = viewMax.x - viewMin.x - 2 * margin;
-        float availableHeight = viewMax.y - viewMin.y - 2 * margin;
-        if (availableWidth <= 2 * pad || availableHeight <= 2 * pad)
-            return;
+        // The caller owns the GUI scale and logical screen size. Do not use
+        // ScreenToGUIPoint: desktop/window offsets do not describe this viewport.
+        var viewport = new Rect(margin, margin, guiSize.x - 2 * margin, guiSize.y - 2 * margin);
+        if (viewport.width <= 2 * pad || viewport.height <= 2 * pad)
+            return default;
 
         SkinStyles styles = Styles;
         GUIContent title = styles.TooltipTitleContent;
@@ -203,45 +406,113 @@ internal static class NeiSkin
         GUIContent detail = styles.TooltipDetailContent;
         detail.text = subtitle ?? string.Empty;
         bool hasDetail = detail.text.Length > 0;
+        string? idText = item?.IdText, modText = item?.ModText;
+        var titleStyle = titleShadow == null ? styles.TooltipTitle : styles.ItemTitle;
+        var detailStyle = bodyShadow == null ? styles.TooltipDetail : styles.ItemDetail;
 
-        float wanted = styles.TooltipTitle.CalcSize(title).x;
-        if (hasDetail)
-            wanted = Mathf.Max(wanted, styles.TooltipDetail.CalcSize(detail).x);
+        float wanted = titleStyle.CalcSize(title).x;
+        if (hasDetail) wanted = Mathf.Max(wanted, detailStyle.CalcSize(detail).x);
+        wanted = Mathf.Max(wanted, Mathf.Max(FooterWidth(idText), FooterWidth(modText)));
 
-        float width = Mathf.Min(Mathf.Clamp(Mathf.Ceil(wanted) + 2 * pad, 58f, 380f), availableWidth);
+        float width = Mathf.Min(Mathf.Clamp(Mathf.Ceil(wanted) + 2 * pad, 58f, 380f), viewport.width);
         float textWidth = width - 2 * pad;
-        float titleHeight = Mathf.Ceil(styles.TooltipTitle.CalcHeight(title, textWidth));
-        float detailHeight = hasDetail ? gap + Mathf.Ceil(styles.TooltipDetail.CalcHeight(detail, textWidth)) : 0f;
-        float height = Mathf.Min(titleHeight + detailHeight + 2 * pad, availableHeight);
+        float titleHeight = Mathf.Ceil(titleStyle.CalcHeight(title, textWidth));
+        float detailHeight = hasDetail ? gap + Mathf.Ceil(detailStyle.CalcHeight(detail, textWidth)) : 0f;
+        var (idHeight, modHeight) = ItemFooterHeights(item, textWidth);
+        float footerHeight = idHeight + modHeight;
+        const float footerGap = 6f;
+        float footerSpace = footerHeight > 0f ? footerHeight + footerGap : 0f;
+        var box = TooltipPlacement.AtPointer(mousePosition, new Vector2(width, titleHeight + detailHeight + 2 * pad + footerSpace), viewport);
+        if (boxed) TooltipBox(box);
 
-        float x = mousePosition.x + 12f;
-        if (x + width > viewMax.x - margin)
-            x = mousePosition.x - width - 8f;
-        x = Mathf.Clamp(x, viewMin.x + margin, viewMax.x - width - margin);
-
-        float y = mousePosition.y + 15f;
-        if (y + height > viewMax.y - margin)
-            y = mousePosition.y - height - 8f;
-        y = Mathf.Clamp(y, viewMin.y + margin, viewMax.y - height - margin);
-
-        float textBottom = y + height - pad;
-        float titleY = y + pad;
-        var titleRect = new Rect(x + pad, titleY, textWidth, Mathf.Min(titleHeight, textBottom - titleY));
-        Paint(styles.WrappedShadow, Offset(titleRect), title);
-        Paint(styles.TooltipTitle, titleRect, title);
+        float titleY = box.y + pad;
+        float textBottom = box.yMax - pad - footerSpace;
+        var titleRect = new Rect(box.x + pad, titleY, textWidth, Mathf.Min(titleHeight, textBottom - titleY));
+        if (titleRect.height > 0f)
+        {
+            if (titleShadow == null)
+            {
+                Paint(styles.WrappedShadow, Offset(titleRect), title);
+                Paint(titleStyle, titleRect, title);
+            }
+            else ItemText(titleRect, title.text, titleShadow);
+        }
         float detailY = titleY + titleHeight + gap;
         if (hasDetail && detailY < textBottom)
         {
-            var detailRect = new Rect(x + pad, detailY, textWidth, textBottom - detailY);
-            Paint(styles.TooltipDetailShadow, Offset(detailRect), detail);
-            Paint(styles.TooltipDetail, detailRect, detail);
+            var detailRect = new Rect(box.x + pad, detailY, textWidth, textBottom - detailY);
+            if (bodyShadow == null)
+            {
+                Paint(styles.TooltipDetailShadow, Offset(detailRect), detail);
+                Paint(detailStyle, detailRect, detail);
+            }
+            else ItemText(detailRect, detail.text, bodyShadow, description: true);
         }
+        var footer = new Rect(box.x + pad, Mathf.Max(titleY, box.yMax - pad - footerHeight),
+            textWidth, Mathf.Min(footerHeight, box.height - 2 * pad));
+        var (idRow, modRow) = DrawItemFooter(footer, item, idHeight, copyIdEnabled, copyModEnabled);
+        return (box, idRow, modRow);
+
+        float FooterWidth(string? value)
+        {
+            if (value == null) return 0f;
+            styles.TooltipFooterContent.text = value;
+            return styles.TooltipFooter.CalcSize(styles.TooltipFooterContent).x;
+        }
+    }
+
+    internal static (float Id, float Mod) ItemFooterHeights(NativeTooltip.Content? item, float width) =>
+        (LineHeight(item?.IdText, width), LineHeight(item?.ModText, width));
+
+    private static float LineHeight(string? text, float width)
+    {
+        if (text == null) return 0f;
+        var styles = Styles;
+        styles.TooltipFooterContent.text = text;
+        return Mathf.Ceil(styles.TooltipFooter.CalcHeight(styles.TooltipFooterContent, Mathf.Max(1f, width)));
+    }
+
+    internal static (Rect Id, Rect Mod) DrawItemFooter(Rect rect, NativeTooltip.Content? item, float idHeight,
+        bool copyIdEnabled, bool copyModEnabled)
+    {
+        var idRow = new Rect(rect.x, rect.y, rect.width, Mathf.Min(idHeight, rect.height));
+        var modRow = Rect.MinMaxRect(rect.x, idRow.yMax, rect.xMax, rect.yMax);
+        DrawLine(idRow, item?.IdText, copyIdEnabled, mod: false);
+        DrawLine(modRow, item?.ModText, copyModEnabled, mod: true);
+        return (item?.IdText != null && idRow.width > 0 && idRow.height > 0 ? idRow : default,
+            item?.ModText != null && modRow.width > 0 && modRow.height > 0 ? modRow : default);
+
+        static void DrawLine(Rect line, string? text, bool copy, bool mod)
+        {
+            if (text == null || !CanPaint(line)) return;
+            var styles = Styles;
+            styles.TooltipFooterContent.text = text;
+            if (copy && line.Contains(Event.current.mousePosition)) Fill(line, Rgb(0x51466A));
+            Paint(styles.TooltipDetailShadow, Offset(line), styles.TooltipFooterContent);
+            Paint(mod ? styles.TooltipMod : copy ? styles.TooltipDetail : styles.TooltipFooter, line, styles.TooltipFooterContent);
+        }
+    }
+
+    internal static void TooltipBox(Rect box)
+    {
+        if (!CanPaint(box)) return;
+        GUIStyle? style = TooltipBackgroundStyle;
+        if (style != null)
+        {
+            style.Draw(box, GUIContent.none, false, false, false, false);
+            return;
+        }
+        Fill(box, TooltipFill);
+        Outline(box, TooltipBorder);
     }
 
     /// <summary>Releases loaded Unity textures on the main thread, for example during plug-in teardown.</summary>
     internal static void Release()
     {
         _styles = null;
+        _recipePanelStyle = null;
+        _tooltipBackgroundStyle = null;
+        _activePack = null;
         foreach (var cache in new[] { Frames, Sources, Backgrounds })
         {
             foreach (Texture2D? texture in cache.Values)
@@ -303,21 +574,36 @@ internal static class NeiSkin
         }
     }
 
+    private static Texture2D? GetSource(string resourcePath, bool readable)
+    {
+        if (Sources.TryGetValue(resourcePath, out var source)) return source;
+        source = LoadTexture(resourcePath, readable);
+        Sources.Add(resourcePath, source);
+        return source;
+    }
+
     private static Texture2D? CropFrame(string name)
     {
         if (Frames.TryGetValue(name, out var cached)) return cached;
         if (ModernityFrames.Find(name) is not { } rect) return null;
-        if (!Sources.TryGetValue(rect.ResourcePath, out var source))
-        {
-            source = LoadTexture(rect.ResourcePath, readable: true);
-            Sources.Add(rect.ResourcePath, source);
-        }
+        var source = GetSource(rect.ResourcePath, readable: true);
         Texture2D? cropped = null;
         if (source != null && source.width >= rect.X + rect.Width && source.height >= rect.Y + rect.Height)
         {
             int bottom = source.height - rect.Y - rect.Height;
-            cropped = NewTexture(rect.Width, rect.Height, "NEI: " + name);
-            cropped.SetPixels(source.GetPixels(rect.X, bottom, rect.Width, rect.Height));
+            int x = rect.X, width = rect.Width, height = rect.Height;
+            if (name is "favorite" or "favorite_selected")
+            {
+                // The upstream 18×20 frames have uneven transparent padding. Center the
+                // visible pixels, not that padded rectangle, including on custom packs.
+                var ink = ModernityFrames.InkBounds(width, height, source.GetPixels(x, bottom, width, height));
+                x += ink.X;
+                bottom += ink.Y;
+                width = ink.Width;
+                height = ink.Height;
+            }
+            cropped = NewTexture(width, height, "NEI: " + name);
+            cropped.SetPixels(source.GetPixels(x, bottom, width, height));
             cropped.Apply(false, true);
         }
         Frames.Add(name, cropped);
@@ -340,18 +626,23 @@ internal static class NeiSkin
         _ => string.Empty
     };
 
-    private static Texture2D? LoadTexture(string fileName, bool readable = false) =>
-        TryLoadSidecar(fileName, readable) ?? TryLoadEmbedded(fileName, readable);
-
-    private static Texture2D? TryLoadSidecar(string fileName, bool readable = false)
+    private static Texture2D? LoadTexture(string resourcePath, bool readable = false)
     {
-        string? assemblyPath = Assembly.GetExecutingAssembly().Location;
-        if (string.IsNullOrEmpty(assemblyPath)) return null;
-        string directory = Path.GetDirectoryName(assemblyPath) ?? string.Empty;
-        var canonical = TryLoadFile(Path.Combine(directory, NeiAssets.RelativePath(fileName)), readable);
-        if (canonical != null) return canonical;
-        string? legacy = NeiAssets.LegacyPath(fileName);
-        return legacy == null ? null : TryLoadFile(Path.Combine(directory, legacy), readable);
+        string assemblyPath = Assembly.GetExecutingAssembly().Location;
+        string? directory = assemblyPath.Length == 0 ? null : Path.GetDirectoryName(assemblyPath);
+        bool hasDirectory = !string.IsNullOrEmpty(directory);
+        bool activePack = _activePack ??= hasDirectory && Directory.Exists(Path.Combine(directory!, NeiAssets.ActivePackDirectory));
+        var size = NeiAssets.ExpectedSize(resourcePath);
+        foreach (var (path, embedded) in NeiAssets.TextureSources(resourcePath, activePack))
+        {
+            var texture = embedded ? TryLoadEmbedded(path, readable) :
+                hasDirectory ? TryLoadFile(Path.Combine(directory!, path), readable) : null;
+            if (texture == null) continue;
+            if (size is not { } expected || (texture.width == expected.Width && texture.height == expected.Height))
+                return texture;
+            UnityEngine.Object.Destroy(texture);
+        }
+        return null;
     }
 
     private static Texture2D? TryLoadFile(string path, bool readable)
@@ -368,16 +659,15 @@ internal static class NeiSkin
         }
     }
 
-    private static Texture2D? TryLoadEmbedded(string fileName, bool readable = false)
+    private static Texture2D? TryLoadEmbedded(string resource, bool readable)
     {
-        string resource = NeiAssets.ResourceName(fileName);
         try
         {
             using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource);
             if (stream == null) return null;
             using var bytes = new MemoryStream();
             stream.CopyTo(bytes);
-            return DecodeTexture(bytes.ToArray(), "NEI " + fileName + " (embedded)", readable);
+            return DecodeTexture(bytes.ToArray(), "NEI " + resource + " (embedded)", readable);
         }
         catch (Exception)
         {
@@ -396,10 +686,16 @@ internal static class NeiSkin
     private static Texture2D? DecodeTexture(byte[] bytes, string textureName, bool readable)
     {
         var texture = NewTexture(2, 2, textureName);
-        if (UnityEngine.ImageConversion.LoadImage(texture, bytes, !readable))
-            return texture;
-        UnityEngine.Object.Destroy(texture);
-        return null;
+        bool loaded = false;
+        try
+        {
+            loaded = UnityEngine.ImageConversion.LoadImage(texture, bytes, !readable);
+            return loaded ? texture : null;
+        }
+        finally
+        {
+            if (!loaded) UnityEngine.Object.Destroy(texture);
+        }
     }
 
     private static Color32 Rgb(uint rgb) => new Color32((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb, 255);
@@ -413,15 +709,20 @@ internal static class NeiSkin
         internal readonly GUIStyle Button;
         internal readonly GUIStyle ButtonSelected;
         internal readonly GUIStyle ButtonDisabled;
+        internal readonly GUIStyle CheckboxLabel;
+        internal readonly GUIStyle DropDownClosed, DropDownOpen, DropDownOption, DropDownSelected;
+        internal readonly GUIStyle RecipeTabSelected, RecipeTabCandidate, RecipeTabDisabled, RecipeMethodTitle;
         internal readonly GUIStyle TextField;
         internal readonly GUIStyle? SearchIdle;
         internal readonly GUIStyle? SearchFocused;
         internal readonly GUIStyle TooltipTitle;
         internal readonly GUIStyle TooltipDetail;
         internal readonly GUIStyle TooltipDetailShadow;
+        internal readonly GUIStyle ItemTitle, ItemTitleShadow, ItemDetail, ItemDetailShadow, TooltipFooter, TooltipMod;
         internal readonly GUIContent LabelContent = new();
         internal readonly GUIContent TooltipTitleContent = new();
         internal readonly GUIContent TooltipDetailContent = new();
+        internal readonly GUIContent TooltipFooterContent = new();
 
         internal SkinStyles()
         {
@@ -435,6 +736,23 @@ internal static class NeiSkin
             Button = ButtonStyle(normal, active, darkInk);
             ButtonSelected = ButtonStyle(active, active, darkInk);
             ButtonDisabled = ButtonStyle(disabled, disabled, OverlayMuted);
+            CheckboxLabel = ContentStyle(TextAnchor.MiddleLeft, 4);
+            CheckboxLabel.padding.left = 32;
+            ApplyStates(CheckboxLabel, null, null, darkInk, darkInk);
+
+            var choice = CropFrame("dropdown_option");
+            var choiceHighlight = CropFrame("dropdown_option_hover");
+            DropDownClosed = DropDownStyle(CropFrame("dropdown_closed"), CropFrame("dropdown_closed_hover"), darkInk, arrow: true, fallback: Button);
+            DropDownOpen = DropDownStyle(CropFrame("dropdown_open"), CropFrame("dropdown_open_hover"), darkInk, arrow: true, fallback: ButtonSelected);
+            DropDownOption = DropDownStyle(choice, choiceHighlight, darkInk, arrow: false, fallback: Button);
+            DropDownSelected = DropDownStyle(choiceHighlight, choiceHighlight, darkInk, arrow: false, fallback: ButtonSelected);
+
+            var selectedTab = GetSource(NeiAssets.RecipeTabSelected, readable: false);
+            var candidateTab = GetSource(NeiAssets.RecipeTabCandidate, readable: false);
+            RecipeTabSelected = RecipeTabStyle(selectedTab, TextAnchor.MiddleCenter, darkInk, ButtonSelected, open: true);
+            RecipeTabCandidate = RecipeTabStyle(candidateTab, TextAnchor.MiddleCenter, darkInk, Button);
+            RecipeTabDisabled = RecipeTabStyle(candidateTab, TextAnchor.MiddleCenter, Rgb(0x4B4F62), ButtonDisabled);
+            RecipeMethodTitle = RecipeTabStyle(candidateTab, TextAnchor.MiddleCenter, darkInk, TextStyle(TextAnchor.MiddleCenter, OverlayInk, 13));
 
             TextField = ContentStyle(TextAnchor.MiddleLeft, 6);
             ApplyStates(TextField, null, null, FieldUnfocusedInk, FieldFocusedInk);
@@ -443,6 +761,12 @@ internal static class NeiSkin
             TooltipTitle = TextStyle(TextAnchor.UpperLeft, TooltipInk, 13, wrap: true);
             TooltipDetail = TextStyle(TextAnchor.UpperLeft, TooltipAccent, 12, wrap: true);
             TooltipDetailShadow = TextStyle(TextAnchor.UpperLeft, Shadow, 12, wrap: true);
+            ItemTitle = new GUIStyle(TooltipTitle) { richText = true };
+            ItemTitleShadow = new GUIStyle(WrappedShadow) { richText = true };
+            ItemDetail = new GUIStyle(TooltipDetail) { richText = true };
+            ItemDetailShadow = new GUIStyle(TooltipDetailShadow) { richText = true };
+            TooltipFooter = TextStyle(TextAnchor.UpperLeft, OverlayMuted, 12, wrap: true);
+            TooltipMod = TextStyle(TextAnchor.UpperLeft, new Color32(76, 145, 255, 255), 12, wrap: true);
         }
 
         internal GUIStyle Label(TextAnchor alignment, bool muted)
@@ -469,6 +793,27 @@ internal static class NeiSkin
             // Every row is cropped into an isolated point-filtered texture before Unity slices it.
             style.border = new RectOffset(edge, edge, edge, edge);
             ApplyStates(style, normal, active, ink, ink);
+            return style;
+        }
+
+        private static GUIStyle RecipeTabStyle(Texture2D? background, TextAnchor alignment, Color ink, GUIStyle fallback, bool open = false)
+        {
+            if (background == null) return fallback;
+            var style = ContentStyle(alignment, alignment == TextAnchor.MiddleLeft ? 7 : 2);
+            // Stretch the flat interior, retaining the original outer and inset borders.
+            style.border = new RectOffset(4, 4, open ? 4 : 3, open ? 0 : 2);
+            ApplyStates(style, background, background, ink, ink);
+            return style;
+        }
+
+        private static GUIStyle DropDownStyle(Texture2D? normal, Texture2D? highlight, Color ink, bool arrow, GUIStyle fallback)
+        {
+            if (normal == null) return fallback;
+            int right = arrow ? 21 : 7; // Keep the arrow inside the fixed right edge when the row stretches.
+            var style = ContentStyle(TextAnchor.MiddleLeft, 8);
+            style.padding.right = right;
+            style.border = new RectOffset(2, right, 2, 5);
+            ApplyStates(style, normal, highlight ?? normal, ink, ink);
             return style;
         }
 
