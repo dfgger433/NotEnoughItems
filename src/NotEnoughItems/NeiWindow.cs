@@ -57,6 +57,8 @@ internal sealed partial class NeiWindow
     private float _statusUntil;
     private RecipePanelLayout _recipePanel;
     private Rect ActiveInspectorBounds => _options ? _optionsBounds : !_treeOpen && _open ? _recipePanel.Bounds : _inspector;
+    private Rect RecipeNavigationBounds => _open && !_options && !_treeOpen && !_layoutEditing && !_plugin.IsCrafting
+        ? _recipePanel.NavigationBounds : default;
     private int _expandedRequirement = -1;
     private PanelLayoutDrag? _layoutDrag;
     private Vector2 _layoutPreviewOffset, _leftOffset, _rightOffset;
@@ -596,7 +598,7 @@ internal sealed partial class NeiWindow
                     // Hidden popups must not intercept clicks while the shortcut help is displayed.
                     _chainTipBox = _supportedItemsBox = default;
                     _chainTipItems.Clear();
-                    NeiSkin.Tooltip(e.mousePosition, guiSize, help.Title, help.Rows, boxed: true);
+                    NeiSkin.Tooltip(e.mousePosition, guiSize, help.Title, help.Rows, boxed: true, protectedControls: RecipeNavigationBounds);
                 }
                 else
                 {
@@ -604,9 +606,10 @@ internal sealed partial class NeiWindow
                     if (!DrawSupportedItemsTip(e.mousePosition) && !chainTipDrawn)
                     {
                         if (_itemTip is { } itemTip) QueueItemTip(e.mousePosition, _itemTipSource, itemTip);
-                        else if (_pinnedIdTip == null && _tipTitle != null) NeiSkin.Tooltip(e.mousePosition, guiSize, _tipTitle, _tipBody, boxed: _boxedTip);
+                        else if (_pinnedIdTip == null && _tipTitle != null)
+                            NeiSkin.Tooltip(e.mousePosition, guiSize, _tipTitle, _tipBody, boxed: _boxedTip, protectedControls: RecipeNavigationBounds);
                         else if (_pinnedIdTip == null && Hit(screenMouse) && !string.IsNullOrEmpty(GUI.tooltip))
-                            NeiSkin.Tooltip(e.mousePosition, guiSize, GUI.tooltip, boxed: true);
+                            NeiSkin.Tooltip(e.mousePosition, guiSize, GUI.tooltip, boxed: true, protectedControls: RecipeNavigationBounds);
                     }
                 }
                 DrawQueuedItemTip();

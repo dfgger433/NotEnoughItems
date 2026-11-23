@@ -35,6 +35,10 @@ internal readonly struct RecipePanelLayout
         Catalyst = new Rect(left, Content.y + 3f, 20, 20);
     }
 
+    // Keep the return button and both navigation rows visible when a lookup opens
+    // under a tooltip from an item in either sidebar.
+    internal Rect NavigationBounds => Rect.MinMaxRect(Header.xMin, Header.yMin, Header.xMax, Pages.yMax);
+
     internal const float ScrollbarAllowance = 17f;
 
     // Both edge lanes have the same width: the machine and the possible scrollbar

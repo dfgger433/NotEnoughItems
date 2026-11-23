@@ -27,6 +27,7 @@ static int RunTests()
         ("history and quantity use the requested catalog footer bounds", HistoryCatalogTests.Run),
         ("only visible buttons intercept clicks inside the left tool area", LeftToolsLayout),
         ("item tooltips stay inside the scaled viewport and flip at its right and bottom edges", TooltipBounds),
+        ("item and candidate tooltips leave recipe navigation visible", RecipeNavigationTooltipBounds),
         ("liquid slot quantities use the bottom-left corner and fit with decimal suffixes", LiquidSlotAmounts),
         ("long supported-item lists page through every candidate without gaps", SupportedItemsPagination),
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
@@ -241,6 +242,31 @@ static void TooltipBounds()
         Check(!TooltipPlacement.KeepItemTip(new Vector2(12, 450), anchor, source, box),
             "Moving away from the source and popup must dismiss the pinned item.");
     }
+}
+
+static void RecipeNavigationTooltipBounds()
+{
+    var viewport = new Rect(4, 4, 1306, 730);
+    var panel = new RecipePanelLayout(new Rect(390, 8, 548, 722));
+    Rect navigation = panel.NavigationBounds;
+    Check(new[] { panel.Back, panel.PreviousMethod, panel.MethodTitle, panel.NextMethod, panel.Pages }
+        .All(control => ContainsRect(navigation, control)) && !navigation.Overlaps(panel.Content),
+        "Only the top controls need to stay clear, not the entire recipe diagram.");
+
+    var left = TooltipPlacement.AtPointer(new Vector2(485, 137), new Vector2(260, 165), viewport);
+    var right = TooltipPlacement.AtPointer(new Vector2(975, 137), new Vector2(380, 300), viewport);
+    var pinned = TooltipPlacement.AtSlot(new Rect(480, 159, 26, 26), new Vector2(360, 260), viewport);
+    foreach (var tooltip in new[] { left, right, pinned })
+    {
+        Check(tooltip.Overlaps(navigation), "The unadjusted tooltip must reproduce the obstruction.");
+        Rect placed = TooltipPlacement.Avoid(tooltip, viewport, navigation);
+        Check(!placed.Overlaps(navigation) && ContainsRect(viewport, placed) && placed.size == tooltip.size,
+            "Move the popup clear without clipping its text or changing its size.");
+    }
+
+    var clear = TooltipPlacement.AtPointer(new Vector2(90, 370), new Vector2(200, 90), viewport);
+    RectEqual(clear, TooltipPlacement.Avoid(clear, viewport, navigation), "An unobstructed tooltip does not move.");
+    RectEqual(right, TooltipPlacement.Avoid(right, viewport, default), "Only an open recipe inspector affects tooltip placement.");
 }
 
 static void TabDoesNotFocusSearch()

@@ -176,6 +176,7 @@ internal sealed partial class NeiWindow
         var size = new Vector2(width, header + (page.End - page.Start) * cell + tail);
         bool pinned = _pinnedItems != null;
         Rect box = pinned ? TooltipPlacement.AtSlot(items.Source, size, viewport) : TooltipPlacement.AtPointer(pointer, size, viewport);
+        box = TooltipPlacement.Avoid(box, viewport, RecipeNavigationBounds);
         var tray = new Rect(box.x + pad, box.y + header, box.width - 2 * pad, (page.End - page.Start) * cell + 4);
         var grid = new Rect(tray.x + 2, tray.y + 2, columns * cell, tray.height - 4);
 

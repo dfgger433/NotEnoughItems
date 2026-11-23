@@ -93,7 +93,7 @@ internal sealed partial class NeiWindow
         if (next is not { } tip) return;
         var (anchor, source, content) = tip;
         bool copyEnabled = CanCopyTooltip;
-        var (box, idRow, modRow) = NeiSkin.ItemTooltip(anchor, new Vector2(_width, _height), content,
+        var (box, idRow, modRow) = NeiSkin.ItemTooltip(anchor, new Vector2(_width, _height), content, RecipeNavigationBounds,
             copyIdEnabled: copyEnabled && _showTooltipId.Value, copyModEnabled: copyEnabled);
         _pinnedIdTip = box.width > 0f ? (content, anchor, source, box, idRow, modRow) : null;
     }
