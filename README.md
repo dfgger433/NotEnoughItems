@@ -50,7 +50,7 @@ Together 联机中，房主须启用服务器作弊；客户端同时需要服�
 - [Modernity 原贴图](<Assets/NotEnoughItems/textures/gui/modernity>)保持上游 PNG 原样，用 [ModernityFrames.cs](<src/NotEnoughItems/ModernityFrames.cs>) 中的坐标读取子区域。主材质包没有 NEI 贴图，使用它在 README 中链接的官方 UI 包同分支。此素材随本地包保留[来源和署名](<Assets/NotEnoughItems/textures/gui/modernity/SOURCES.md>)、[原始许可](<Assets/NotEnoughItems/textures/gui/modernity/LICENSE.txt>)；请按许可处理，不视为可用于商业分发。
 - [搜索框与悬浮提示框贴图](<Assets/NotEnoughItems/textures/gui/controls/text_field.png>)是单独的资源。替换时保留 128×128 画布：搜索框使用从顶部算起的第 13–24 行作为常态，第 1–12 行作为聚焦态；悬浮提示框（包括按钮提示）使用第 1–12 行（`0,0–128,12`）并按边缘九宫切片拉伸。数量框和书签页名不使用这张图。
 - [语言下拉栏贴图](<Assets/NotEnoughItems/textures/gui/controls/drop_down_list.png>)使用提供的 256×256 图集。替换时保留画布和原有帧位置。
-- [ID 与刷取模式开关贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用提供的 64×64 图集。「是否显示物品 ID」使用 22×12 的滑块帧：常态与悬浮态在 `x=0/22`，关与开在 `y=28/40`。「刷取模式」使用 `29,1–26,26` 区域内的 12×12 方形帧：常态与悬浮态在 `x=29/43`，关与开在 `y=1/15`。
+- [ID 与刷取模式开关贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用 64×64 图集；两项都不绘制整行按钮背板，仍可点击整行。「是否显示物品 ID」使用 22×12 的滑块帧：常态与悬浮态在 `x=0/22`，关与开在 `y=28/40`。「刷取模式」使用 12×12 的方框帧：常态与悬浮态在 `x=29/43`，现有模式与原版模式在 `y=1/15`，方框尺寸与位置固定，原版模式用蓝色和框内图标区分。
 - 配方背景内的合成方式标题与切换按钮使用[选中贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>)（48×46）和[未选中贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)（48×43）的视觉样式，替换时保留原尺寸。
 - [屏幕背景贴图](<Assets/NotEnoughItems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。[recipebg.png](<Assets/NotEnoughItems/textures/gui/modernity/recipebg.png>)用于配方、选项和合成树独立面板，按 184×174 源区域及 9 px 九宫格边框绘制；不会拉伸外框。[图集来源描述](<Assets/NotEnoughItems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
 

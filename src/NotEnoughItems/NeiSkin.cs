@@ -141,7 +141,7 @@ internal static class NeiSkin
             ScaleMode.ScaleToFit, tint);
     }
 
-    // The whole option row is clickable. Enlarge the indicator without stretching its atlas frame.
+    // Keep the whole row clickable, but draw only the label and its indicator.
     internal static bool Checkbox(Rect rect, string text, bool on, bool square = false)
     {
         var styles = Styles;
@@ -152,7 +152,8 @@ internal static class NeiSkin
             bool hovered = GUI.enabled && rect.Contains(Event.current.mousePosition);
             var indicator = new Rect(rect.x + 3f, rect.y + 1f, style.padding.left - 6f, rect.height - 2f);
             if (CropFrame(ModernityFrames.CheckboxFace(on, hovered, square)) is { } texture)
-                DrawButtonSprite(indicator, texture, float.PositiveInfinity, enlarge: true, GUI.enabled ? Color.white : IconDisabledTint);
+                DrawButtonSprite(indicator, texture, square ? 20f : float.PositiveInfinity, enlarge: true,
+                    GUI.enabled ? Color.white : IconDisabledTint);
             else Label(indicator, on ? "✓" : "–", TextAnchor.MiddleCenter);
         }
         return clicked;
@@ -735,7 +736,9 @@ internal static class NeiSkin
             Button = ButtonStyle(normal, active, darkInk);
             ButtonSelected = ButtonStyle(active, active, darkInk);
             ButtonDisabled = ButtonStyle(disabled, disabled, OverlayMuted);
-            CheckboxLabel = new GUIStyle(Button) { alignment = TextAnchor.MiddleLeft, padding = new RectOffset(48, 4, 2, 2) };
+            CheckboxLabel = ContentStyle(TextAnchor.MiddleLeft, 4);
+            CheckboxLabel.padding.left = 48;
+            ApplyStates(CheckboxLabel, null, null, darkInk, darkInk);
             SquareCheckboxLabel = new GUIStyle(CheckboxLabel) { padding = new RectOffset(30, 4, 2, 2) };
 
             var choice = CropFrame("dropdown_option");
