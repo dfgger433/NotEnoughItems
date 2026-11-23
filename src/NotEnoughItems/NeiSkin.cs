@@ -141,19 +141,18 @@ internal static class NeiSkin
             ScaleMode.ScaleToFit, tint);
     }
 
-    // Native button input covers both the label and the track. Only the sprite changes on hover;
-    // a selected switch never borrows the other value's graphic or changes its hit box.
-    internal static bool Checkbox(Rect rect, string text, bool on)
+    // The whole option row is clickable. Enlarge the indicator without stretching its atlas frame.
+    internal static bool Checkbox(Rect rect, string text, bool on, bool square = false)
     {
         var styles = Styles;
-        bool clicked = Click(rect, text, true, styles.CheckboxLabel, styles.CheckboxLabel);
+        var style = square ? styles.SquareCheckboxLabel : styles.CheckboxLabel;
+        bool clicked = Click(rect, text, true, style, style);
         if (CanPaint(rect))
         {
-            const float width = 22f, height = 12f;
             bool hovered = GUI.enabled && rect.Contains(Event.current.mousePosition);
-            var indicator = new Rect(rect.x + 4f, rect.center.y - height * .5f, width, height);
-            if (CropFrame(ModernityFrames.CheckboxFace(on, hovered)) is { } texture)
-                DrawTexture(indicator, texture, ScaleMode.StretchToFill, GUI.enabled ? Color.white : IconDisabledTint);
+            var indicator = new Rect(rect.x + 3f, rect.y + 1f, style.padding.left - 6f, rect.height - 2f);
+            if (CropFrame(ModernityFrames.CheckboxFace(on, hovered, square)) is { } texture)
+                DrawButtonSprite(indicator, texture, float.PositiveInfinity, enlarge: true, GUI.enabled ? Color.white : IconDisabledTint);
             else Label(indicator, on ? "✓" : "–", TextAnchor.MiddleCenter);
         }
         return clicked;
@@ -709,7 +708,7 @@ internal static class NeiSkin
         internal readonly GUIStyle Button;
         internal readonly GUIStyle ButtonSelected;
         internal readonly GUIStyle ButtonDisabled;
-        internal readonly GUIStyle CheckboxLabel;
+        internal readonly GUIStyle CheckboxLabel, SquareCheckboxLabel;
         internal readonly GUIStyle DropDownClosed, DropDownOpen, DropDownOption, DropDownSelected;
         internal readonly GUIStyle RecipeTabSelected, RecipeTabCandidate, RecipeTabDisabled, RecipeMethodTitle;
         internal readonly GUIStyle TextField;
@@ -736,9 +735,8 @@ internal static class NeiSkin
             Button = ButtonStyle(normal, active, darkInk);
             ButtonSelected = ButtonStyle(active, active, darkInk);
             ButtonDisabled = ButtonStyle(disabled, disabled, OverlayMuted);
-            CheckboxLabel = ContentStyle(TextAnchor.MiddleLeft, 4);
-            CheckboxLabel.padding.left = 32;
-            ApplyStates(CheckboxLabel, null, null, darkInk, darkInk);
+            CheckboxLabel = new GUIStyle(Button) { alignment = TextAnchor.MiddleLeft, padding = new RectOffset(48, 4, 2, 2) };
+            SquareCheckboxLabel = new GUIStyle(CheckboxLabel) { padding = new RectOffset(30, 4, 2, 2) };
 
             var choice = CropFrame("dropdown_option");
             var choiceHighlight = CropFrame("dropdown_option_hover");

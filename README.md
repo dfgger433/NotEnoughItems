@@ -27,8 +27,8 @@ pwsh -File ./scripts/Install.ps1
 | 打开或恢复 NEI | 打开背包或终端后按 `O` 切换。即使侧栏已隐藏，也可在游戏原生「设置 → 游戏 → NEI · 显示侧栏」恢复。 |
 | 查配方 / 用途 | 悬停后 `R` / `U`，或点击 NEI 格子的左键 / 右键。用途含直接原料、性质、工具、机器；悬停有内容物的液体容器时也查其液体用途。终端聚合格未公开悬停接口，请从 NEI 目录查询 |
 | 浏览查询结果 | 配方背景内上方的方式名与左右箭头切换合成方式，下方页码与左右箭头翻页；两排按钮左右对齐，方式名居中显示。在配方区或页码栏向上／下滚动可翻到上一／下一页；超长配方或展开的长候选列表在配方区内滚动查看，仍可到页码栏翻页。左边显示所选方式的机器（若有）；原料至少显示 3×3，超过九格时加行。爱心设为样板，`+` 在可用时打开并选中原生制作配方，不消耗材料。返回箭头、`Backspace` 或右键方式标题可返回；编辑文本时退格仍删除字符。无匹配配方时只显示物品与收藏按钮；配方和用途仍用 `R` / `U` 或物品格左／右键查询。 |
-| 搜索物品 | 在右侧历史记录下方搜索，或按 `Ctrl+F` 聚焦；NEI 不用 `Tab` 在面板控件间切换焦点，右键清空。搜索匹配项中，已加书签或收藏的物品排在前面，其次是随身物品和容器内的流体，其余匹配项仍可浏览。支持普通文字（简体中文界面下可用拼音或首字母）、`@来源` `$标签` `#描述` `&ID`、`-排除`、`"短语"`，以及 `\|` 分隔的备选词。`@来源` 忽略空格和大小写，例如 `@CasualtiesUnknown` 或 `@casualtiesunknown` 可查原版物品；带空格的模组名也可写成 `@"Forge Guild"`。拼音搜索通过可选的 Just-Unknown-Characters 1.0.1 提供；未安装时普通文字与中文搜索照常可用。 |
-| 查看或复制 ID | NEI 扳手 →「显示」→「悬浮框 ID」可开关 ID，默认开启；模组名仍会显示。悬停物品后按住任一侧 `Shift`，移到悬浮框的 ID 行并左键点击，即可复制原始 ID。 |
+| 搜索物品 | 在右侧历史记录下方搜索，或按 `Ctrl+F` 聚焦；在背包和终端中按 `Tab` 均不会聚焦 NEI 搜索框；右键清空。搜索匹配项中，已加书签或收藏的物品排在前面，其次是随身物品和容器内的流体，其余匹配项仍可浏览。支持普通文字（简体中文界面下可用拼音或首字母）、`@来源` `$标签` `#描述` `&ID`、`-排除`、`"短语"`，以及 `\|` 分隔的备选词。`@来源` 忽略空格和大小写，例如 `@CasualtiesUnknown` 或 `@casualtiesunknown` 可查原版物品；带空格的模组名也可写成 `@"Forge Guild"`。拼音搜索通过可选的 Just-Unknown-Characters 1.0.1 提供；未安装时普通文字与中文搜索照常可用。 |
+| 查看或复制 ID | NEI 扳手 →「物品」→「是否显示物品 ID」可开关 ID，默认开启；模组名仍会显示。悬停物品后按住任一侧 `Shift`，移到悬浮框的 ID 行并左键点击，即可复制原始 ID。 |
 | 选择数量 | 搜索框右侧输入 `1–64` 或用 `+`／`−` 调整。已保存的书签数量不受影响。 |
 | 书签 | `A` 或中键添加／移除；`Ctrl+A` 按目录底栏选择的数量收藏；配方页 `Shift+A` 收藏当前配方，`Ctrl+Shift+A` 带数量收藏。左下书本或 `B` 切换书签栏。 |
 | 创建、调整书签组 | 在左侧空白边栏拖出一段书签，或把书签拖到另一项上建组。括号左拖／左 `Alt` 拖向外扩组，右拖／右 `Alt` 拖向内缩组。`Shift` 拖物品、原料或括号可分别调整条目、配方内原料或整组的顺序；拖到页尾空白可移到末尾，拖到下方翻页箭头可移入相邻命名页。`Alt+左键` 或 `Ctrl+右键` 括号解组；`Alt+左键` 点组内条目只移出该条，两者均不删除书签。`Shift+A` 删除整组。 |
@@ -50,7 +50,7 @@ Together 联机中，房主须启用服务器作弊；客户端同时需要服�
 - [Modernity 原贴图](<Assets/NotEnoughItems/textures/gui/modernity>)保持上游 PNG 原样，用 [ModernityFrames.cs](<src/NotEnoughItems/ModernityFrames.cs>) 中的坐标读取子区域。主材质包没有 NEI 贴图，使用它在 README 中链接的官方 UI 包同分支。此素材随本地包保留[来源和署名](<Assets/NotEnoughItems/textures/gui/modernity/SOURCES.md>)、[原始许可](<Assets/NotEnoughItems/textures/gui/modernity/LICENSE.txt>)；请按许可处理，不视为可用于商业分发。
 - [搜索框与悬浮提示框贴图](<Assets/NotEnoughItems/textures/gui/controls/text_field.png>)是单独的资源。替换时保留 128×128 画布：搜索框使用从顶部算起的第 13–24 行作为常态，第 1–12 行作为聚焦态；悬浮提示框（包括按钮提示）使用第 1–12 行（`0,0–128,12`）并按边缘九宫切片拉伸。数量框和书签页名不使用这张图。
 - [语言下拉栏贴图](<Assets/NotEnoughItems/textures/gui/controls/drop_down_list.png>)使用提供的 256×256 图集。替换时保留画布和原有帧位置。
-- [ID 与刷取模式开关贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用提供的 64×64 图集。四帧均为 22×12：左列为常态，右列（`x=22`）为悬浮态；关在 `y=28`，开在 `y=40`。
+- [ID 与刷取模式开关贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用提供的 64×64 图集。「是否显示物品 ID」使用 22×12 的滑块帧：常态与悬浮态在 `x=0/22`，关与开在 `y=28/40`。「刷取模式」使用 `29,1–26,26` 区域内的 12×12 方形帧：常态与悬浮态在 `x=29/43`，关与开在 `y=1/15`。
 - 配方背景内的合成方式标题与切换按钮使用[选中贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>)（48×46）和[未选中贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)（48×43）的视觉样式，替换时保留原尺寸。
 - [屏幕背景贴图](<Assets/NotEnoughItems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。[recipebg.png](<Assets/NotEnoughItems/textures/gui/modernity/recipebg.png>)用于配方、选项和合成树独立面板，按 184×174 源区域及 9 px 九宫格边框绘制；不会拉伸外框。[图集来源描述](<Assets/NotEnoughItems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
 

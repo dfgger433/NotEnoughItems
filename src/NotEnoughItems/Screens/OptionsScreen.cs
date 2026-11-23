@@ -79,9 +79,6 @@ internal sealed partial class NeiWindow
         if (NeiSkin.Button(row, ToggleLabel("Hide legacy UEI panel", "隐藏旧版 UEI 侧栏", _plugin.ReplaceUei)))
             _plugin.ReplaceUei = !_plugin.ReplaceUei;
         row.y += 30;
-        if (NeiSkin.Checkbox(row, L("Tooltip ID", "悬浮框 ID"), _showTooltipId.Value))
-            _showTooltipId.Value = !_showTooltipId.Value;
-        row.y += 30;
         float scale = _plugin.Scale;
         if (NeiSkin.IconButton(new Rect(row.x, row.y, 26, row.height), "remove", L("Smaller sidebar", "缩小侧栏"), scale > .7f))
             _plugin.Scale = Mathf.Round((scale - .05f) * 100f) / 100f;
@@ -98,7 +95,7 @@ internal sealed partial class NeiWindow
     private static Rect LanguageRow(Rect panel)
     {
         var row = FirstOptionsRow(panel);
-        row.y += 7 * 30; // Six toggles and the scale control precede the language selector.
+        row.y += 6 * 30; // Five toggles and the scale control precede the language selector.
         return row;
     }
 
@@ -185,11 +182,14 @@ internal sealed partial class NeiWindow
                 ? L("Single-player cheats allowed; multiplayer permissions are set by the server.", "已允许单机作弊；多人权限仍由服务器决定。")
                 : L("Local cheats disabled.", "已禁用单机作弊。"));
         }
-        row.y += 32;
+        row.y += 30;
+        if (NeiSkin.Checkbox(row, L("Show item ID", "是否显示物品 ID"), _showTooltipId.Value))
+            _showTooltipId.Value = !_showTooltipId.Value;
+        row.y += 30;
         bool vanilla = _plugin.ItemSpawnMode == SpawnMode.SpawnToPlayer;
         string spawnMode = vanilla ? L("Spawn mode: Spawn to player", "刷取模式：原版刷给玩家")
             : L("Spawn mode: NEI (default)", "刷取模式：现有模式");
-        if (NeiSkin.Checkbox(row, spawnMode, vanilla))
+        if (NeiSkin.Checkbox(row, spawnMode, vanilla, square: true))
         {
             vanilla = !vanilla;
             _plugin.ItemSpawnMode = vanilla ? SpawnMode.SpawnToPlayer : SpawnMode.Nei;

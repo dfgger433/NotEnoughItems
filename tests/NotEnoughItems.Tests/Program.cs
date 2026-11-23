@@ -84,10 +84,9 @@ static int RunTests()
         ("missed native release is cleared without stealing the release frame", MissedDragRelease),
         ("Together permissions distinguish hosts, authorized clients, and unknown sessions", MultiplayerPermissions),
         ("multiplayer give only targets the caller and accepts bounded item tokens", MultiplayerGiveCommand),
-        ("Tab does not transfer focus to the catalog search field", TabDoesNotFocusSearch),
+        ("Tab key and character events do not transfer focus to NEI search", TabDoesNotFocusSearch),
 #if RECIPE_TESTS
         ("NEI exposes only recipe and cheat modes", NeiModeContract),
-        ("Tab does not transfer text focus to the catalog search field", TabDoesNotFocusSearch),
         ("the installed JUC dictionary provides catalog pinyin", () =>
         {
             string provider = Path.Combine(AppContext.BaseDirectory, "JustUnknownCharacters.dll");
@@ -246,11 +245,11 @@ static void TooltipBounds()
 
 static void TabDoesNotFocusSearch()
 {
-    Check(TabFocusPolicy.Consume(keyDown: true, isTab: true),
-        "The active NEI window consumes Tab before Unity's default focus traversal.");
-    Check(!TabFocusPolicy.Consume(keyDown: false, isTab: true) &&
-        !TabFocusPolicy.Consume(keyDown: true, isTab: false),
-        "Other keys and event types retain native behavior.");
+    Check(TabFocusPolicy.Consume(true, KeyCode.Tab, '\0') && TabFocusPolicy.Consume(true, KeyCode.None, '\t'),
+        "The NEI overlay consumes both physical Tab and character-only Tab before Unity's default focus traversal.");
+    Check(!TabFocusPolicy.Consume(false, KeyCode.Tab, '\0') && !TabFocusPolicy.Consume(false, KeyCode.None, '\t') &&
+        !TabFocusPolicy.Consume(true, KeyCode.F, 'f') && !TabFocusPolicy.Consume(true, KeyCode.None, ' '),
+        "Tab release, other keys and ordinary text input retain native behavior.");
 }
 
 static void SupportedItemsPagination()
@@ -489,6 +488,10 @@ static void TextureLocations()
         Check(ModernityFrames.Find(ModernityFrames.CheckboxFace(on, hover)) is
             { ResourcePath: NeiAssets.CheckboxAtlas, Width: 22, Height: 12 } frame && frame.X == x && frame.Y == y,
             "Each checked and hover combination uses its own complete switch frame.");
+        Check(ModernityFrames.Find(ModernityFrames.CheckboxFace(on, hover, square: true)) is
+            { ResourcePath: NeiAssets.CheckboxAtlas, Width: 12, Height: 12 } square &&
+            square.X == (hover ? 43 : 29) && square.Y == (on ? 15 : 1),
+            "Spawn mode uses the four square faces in the 26×26 block at (29, 1).");
     }
     Check(NeiAssets.ExpectedSize(NeiAssets.RecipeBackgroundTexture) == (256, 256) &&
         ModernityFrames.Find("recipe_background") is { ResourcePath: NeiAssets.RecipeBackgroundTexture, X: 0, Y: 0,

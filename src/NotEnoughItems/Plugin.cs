@@ -505,7 +505,13 @@ public sealed class Plugin : BaseUnityPlugin
         var guiEvent = Event.current;
         if (_bindingFrame == Time.frameCount && guiEvent.type is EventType.KeyDown or EventType.MouseDown)
         { guiEvent.Use(); return; }
-        if (TabFocusPolicy.Consume(guiEvent.type == EventType.KeyDown, guiEvent.keyCode == KeyCode.Tab)) { guiEvent.Use(); return; }
+        // Both inventory and terminal hosts draw the same editors. Stop IMGUI traversal without
+        // capturing the gameplay key, which is polled separately (for example, to close inventory).
+        if (TabFocusPolicy.Consume(guiEvent.type == EventType.KeyDown, guiEvent.keyCode, guiEvent.character))
+        {
+            guiEvent.Use();
+            return;
+        }
         if (NativePointerActive && guiEvent.type is not (EventType.Layout or EventType.Repaint)) return;
         int originalDepth = GUI.depth;
         int previousControl = GUIUtility.hotControl;
@@ -525,9 +531,6 @@ public sealed class Plugin : BaseUnityPlugin
             else if (_ownedHotControl != control) _ownedHotControl = 0;
         }
     }
-
-    internal static bool ConsumesTabFocus(EventType type, KeyCode key, bool overlayActive) =>
-        overlayActive && type == EventType.KeyDown && key == KeyCode.Tab;
 
     private bool NativeSlotPress()
     {

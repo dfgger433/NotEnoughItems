@@ -1,6 +1,10 @@
+using UnityEngine;
+
 namespace NotEnoughItems;
 
 internal static class TabFocusPolicy
 {
-    internal static bool Consume(bool keyDown, bool isTab) => keyDown && isTab;
+    // IMGUI keyboard traversal can use a character event without a physical key code.
+    internal static bool Consume(bool keyDown, KeyCode key, char character) =>
+        keyDown && (key == KeyCode.Tab || character == '\t');
 }
