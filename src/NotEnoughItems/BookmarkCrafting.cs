@@ -36,7 +36,8 @@ internal static class BookmarkCrafting
         var together = session.Offline ? null : TogetherCrafting.Resolve(session);
         if (!session.Offline && together == null)
         {
-            completed(L("Auto-craft requires single-player or a supported, connected Together session.", "自动制作需要单机或已连接且受支持的 Together 联机会话。"));
+            completed(L("Auto-craft requires single-player or a supported Together session as an active player.",
+                "自动制作需要单机，或在受支持的 Together 联机会话中以玩家身份游玩（非观战）。"));
             yield break;
         }
         if (plan.Steps.Any(step => !step.Recipe.IsNative || step.Recipe.NativeRecipe is not { } native ||

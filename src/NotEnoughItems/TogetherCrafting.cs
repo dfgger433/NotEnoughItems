@@ -57,7 +57,11 @@ internal sealed class TogetherCrafting
     internal static bool IsPlayable(NativePlaySession session)
     {
         var net = session.Together?.GetType("Together.Net");
-        return (NativePlaySession.ReadBool(net, "IsHost"), NativePlaySession.ReadBool(net, "IsClient")) is (true, false) or (false, true);
+        var ui = session.Together?.GetType("Together.UIInGame");
+        // Together blocks opening the crafting panel while spectating. Check even
+        // if the panel remained open when spectator mode was activated.
+        return NativePlaySession.ReadBool(ui, "SpectatorModeActive") == false &&
+            (NativePlaySession.ReadBool(net, "IsHost"), NativePlaySession.ReadBool(net, "IsClient")) is (true, false) or (false, true);
     }
 
     private static FieldInfo? Field(Type? type, string name, BindingFlags flags, Type fieldType) =>
