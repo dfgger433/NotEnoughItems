@@ -25,18 +25,18 @@ internal readonly struct RecipePanelLayout
         float inset = NeiAssets.RecipeBackgroundSlice;
         float left = x + inset, right = Bounds.xMax - inset;
 
-        // Reserve a separate lane for Back and keep the magnifier flush with
-        // the left page arrow. Tabs overlap the visible top edge of the frame.
+        // Follow the reference positions, leaving room for the existing skinned controls.
+        // Adjacent tabs overlap the visible top edge of the panel frame.
         _tabSize = 24;
         _tabY = y;
-        _tabX = x + 28;
-        Back = new Rect(x + 4, y + 3, 14, 18);
-        const float tabArrowWidth = 10;
+        _tabX = x + 36;
+        Back = new Rect(x + 2, y + 2, 16, 20);
+        const float tabArrowWidth = 16;
         PreviousTabs = new Rect(_tabX - tabArrowWidth, y + 2, tabArrowWidth, 20);
         TabsPerPage = Math.Clamp((int)((Bounds.xMax - tabArrowWidth - _tabX) / _tabSize), 1, 7);
         NextTabs = new Rect(_tabX + TabsPerPage * _tabSize, y + 2, tabArrowWidth, 20);
 
-        const float rowHeight = 16, arrow = 17, gap = 2;
+        const float rowHeight = 19, arrow = 18, gap = 2;
         Frame = Rect.MinMaxRect(x, y + _tabSize - NeiAssets.RecipeBackgroundTransparentInset - 2, Bounds.xMax, Bounds.yMax);
         Method = new Rect(left, Frame.y + inset, right - left, rowHeight);
         Pages = new Rect(left, Method.yMax + gap, right - left, rowHeight);

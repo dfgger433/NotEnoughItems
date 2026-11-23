@@ -29,6 +29,10 @@ internal static class RecipeListLayoutTests
             panel.PageTitle.center.x == panel.MethodTitle.center.x &&
             panel.NavigationBounds.Contains(panel.PageTitle.center) && panel.NavigationBounds.Contains(panel.Tab(0).center),
             "Method and page arrows share columns while the page title remains a single non-search bar.");
+        Check(panel.MethodTitle.height >= 19 && panel.PreviousMethod.size == panel.PreviousPage.size &&
+            panel.NextMethod.size == panel.NextPage.size && panel.PreviousMethod.width >= 18 &&
+            panel.NavigationBounds.Contains(panel.PreviousMethod.center) && panel.NavigationBounds.Contains(panel.NextMethod.center),
+            "Reserve a full-height title and button-sized hit targets for both method arrows inside the protected header.");
         Check(panel.TabsPerPage == 7 && panel.TabPageCount(0) == 0 && panel.TabPageCount(7) == 1 && panel.TabPageCount(8) == 2 &&
             panel.Tab(0).xMax == panel.Tab(1).xMin && panel.Tab(6).xMax == panel.NextTabs.xMin,
             "The top row fits seven adjacent tabs and exposes overflow when needed.");

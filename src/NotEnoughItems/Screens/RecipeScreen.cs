@@ -30,10 +30,10 @@ internal sealed partial class NeiWindow
             e.Use();
             return;
         }
-        NeiSkin.RecipePanel(panel.Frame, inspector: true);
+        NeiSkin.RecipePanel(panel.Frame);
         NeiSkin.RecipeBar(panel.Method);
         NeiSkin.RecipeBar(panel.Pages);
-        if (NeiSkin.RecipeNavButton(panel.Back, ModernityFrames.Caption("back"), L("Back · Backspace", "返回 · 退格键")))
+        if (NeiSkin.RecipeTab(panel.Back, ModernityFrames.Caption("back"), tooltip: L("Back · Backspace", "返回 · 退格键")))
         {
             NavigateBack();
             return;
@@ -208,8 +208,8 @@ internal sealed partial class NeiWindow
 
     private int DrawArrowPair(Rect left, Rect right, bool enabled, string previousTip, string nextTip)
     {
-        bool previous = NeiSkin.RecipeNavButton(left, "<", previousTip, enabled);
-        bool next = NeiSkin.RecipeNavButton(right, ">", nextTip, enabled);
+        bool previous = NeiSkin.IconButton(left, "previous", previousTip, enabled);
+        bool next = NeiSkin.IconButton(right, "next", nextTip, enabled);
         var pointer = Event.current.mousePosition;
         if (left.Contains(pointer)) Tip(previousTip, null, boxed: true);
         else if (right.Contains(pointer)) Tip(nextTip, null, boxed: true);
@@ -236,7 +236,7 @@ internal sealed partial class NeiWindow
         {
             Rect rect = panel.Tab(i - start);
             RecipeMethod candidate = methods[i];
-            if (NeiSkin.RecipeTab(rect, i == selected, candidate.Name)) selected = i;
+            if (NeiSkin.RecipeTab(rect, string.Empty, selected: i == selected, tooltip: candidate.Name)) selected = i;
             if (Event.current.type != EventType.Repaint) continue;
             var inner = new Rect(rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8);
             CatalogItem? machine = null;

@@ -28,7 +28,6 @@ internal static class NeiSkin
     private static readonly Dictionary<string, Texture2D?> Frames = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, Texture2D?> Backgrounds = new(StringComparer.OrdinalIgnoreCase);
     private static GUIStyle? _recipePanelStyle;
-    private static GUIStyle? _inspectorPanelStyle;
     private static GUIStyle? _tooltipBackgroundStyle;
     private static bool? _activePack;
 
@@ -310,15 +309,12 @@ internal static class NeiSkin
         DrawTexture(rect, background, ScaleMode.StretchToFill, Color.white);
     }
 
-    /// <summary>Draws a recipe panel frame without stretching its border.</summary>
-    /// <param name="rect">Panel bounds in GUI coordinates.</param>
-    /// <param name="inspector">Use the classic gray inspector frame instead of the Modernity frame.</param>
-    internal static void RecipePanel(Rect rect, bool inspector = false)
+    /// <summary>Draws the shared Modernity panel frame without stretching its border.</summary>
+    internal static void RecipePanel(Rect rect)
     {
         if (!CanPaint(rect)) return;
-        GUIStyle style = inspector ? _inspectorPanelStyle ??= CreateRecipePanelStyle("inspector_background") :
-            _recipePanelStyle ??= CreateRecipePanelStyle("recipe_background");
-        if (style.normal.background == null) Fill(rect, Rgb(inspector ? 0xC6C6C6u : 0xC8CAD4u));
+        GUIStyle style = _recipePanelStyle ??= CreateRecipePanelStyle();
+        if (style.normal.background == null) Fill(rect, Rgb(0xC8CAD4));
         Paint(style, rect);
     }
 
@@ -338,10 +334,10 @@ internal static class NeiSkin
         return style;
     }
 
-    private static GUIStyle CreateRecipePanelStyle(string frameName)
+    private static GUIStyle CreateRecipePanelStyle()
     {
         var style = new GUIStyle();
-        Texture2D? frame = CropFrame(frameName);
+        Texture2D? frame = CropFrame("recipe_background");
         style.border = new RectOffset(NeiAssets.RecipeBackgroundSlice, NeiAssets.RecipeBackgroundSlice,
             NeiAssets.RecipeBackgroundSlice, NeiAssets.RecipeBackgroundSlice);
         style.normal.background = frame;
@@ -349,10 +345,9 @@ internal static class NeiSkin
         return style;
     }
 
-    /// <summary>Draws the translucent reference-style bar behind recipe method and page labels.</summary>
     internal static void RecipeBar(Rect rect)
     {
-        if (CanPaint(rect)) Fill(rect, new Color32(0, 0, 0, 0x30));
+        if (CanPaint(rect)) Fill(rect, Rgb(0x666979));
     }
 
     internal static void RecipeSlot(Rect rect)
@@ -376,43 +371,17 @@ internal static class NeiSkin
     internal static bool Tab(Rect rect, string text, bool selected, bool enabled = true) =>
         Button(rect, text, enabled, selected);
 
-    internal static bool RecipeTab(Rect rect, bool selected, string tooltip)
-    {
-        bool clicked = ClickContent(rect, new GUIContent(string.Empty, tooltip), true, GUIStyle.none, GUIStyle.none);
-        if (CanPaint(rect))
-        {
-            if (CropFrame(selected ? "method_tab_selected" : "method_tab") is { } frame)
-                DrawTexture(rect, frame, ScaleMode.StretchToFill, Color.white);
-            else
-            {
-                Fill(rect, Rgb(selected ? 0xC6C6C6u : 0x8B8B8Bu));
-                Outline(rect, Color.black);
-            }
-        }
-        return clicked;
-    }
+    // Selected method tabs are open along the bottom to meet the recipe frame.
+    internal static bool RecipeTab(Rect rect, string text, bool selected = false, string tooltip = "") =>
+        ClickContent(rect, new GUIContent(text, tooltip), true,
+            selected ? Styles.RecipeTabSelected : Styles.RecipeTabCandidate, Styles.ButtonDisabled);
 
-    internal static void RecipeMethodTitle(Rect rect, string text) => Label(rect, text, TextAnchor.MiddleCenter);
-
-    /// <summary>Draws a small classic NEI bevel and returns its click state.</summary>
-    internal static bool RecipeNavButton(Rect rect, string caption, string tooltip, bool enabled = true, bool selected = false, string? icon = null)
+    internal static void RecipeMethodTitle(Rect rect, string text)
     {
-        bool clicked = ClickContent(rect, new GUIContent(string.Empty, tooltip), enabled, GUIStyle.none, GUIStyle.none);
-        if (CanPaint(rect))
-        {
-            bool hover = enabled && GUI.enabled && rect.Contains(Event.current.mousePosition);
-            bool active = enabled && GUI.enabled;
-            Fill(rect, Color.black);
-            var face = new Rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
-            Fill(face, Rgb(!active ? 0x2A2A2Au : hover || selected ? 0x7C86BEu : 0x6D6D6Du));
-            Fill(new Rect(face.x, face.y, face.width, 1), Rgb(!active ? 0x414141u : hover || selected ? 0xB1BAE5u : 0xA7A7A7u));
-            Fill(new Rect(face.x, face.y + 1, 1, face.height - 1), Rgb(!active ? 0x383838u : 0x939393u));
-            Fill(new Rect(face.x + 1, face.yMax - 1, face.width - 1, 1), Rgb(0x333333u));
-            if (icon != null && CropFrame(icon) is { } texture)
-                DrawButtonSprite(rect, texture, 13f, enlarge: false, active ? Color.white : IconDisabledTint);
-            else Label(rect, caption, TextAnchor.MiddleCenter, muted: !active);
-        }
-        return clicked;
+        if (!CanPaint(rect)) return;
+        var styles = Styles;
+        styles.LabelContent.text = text;
+        Paint(styles.RecipeMethodTitle, rect, styles.LabelContent);
     }
 
     /// <summary>Draws a native single-line editor. An optional control name allows IMGUI focus management.</summary>
@@ -652,7 +621,6 @@ internal static class NeiSkin
     {
         _styles = null;
         _recipePanelStyle = null;
-        _inspectorPanelStyle = null;
         _tooltipBackgroundStyle = null;
         _activePack = null;
         foreach (var cache in new[] { Frames, Sources, Backgrounds })
@@ -855,6 +823,7 @@ internal static class NeiSkin
         internal readonly GUIStyle ButtonDisabled;
         internal readonly GUIStyle CheckboxLabel, OptionsHeading, OptionsNote;
         internal readonly GUIStyle DropDownClosed, DropDownOpen, DropDownOption, DropDownSelected;
+        internal readonly GUIStyle RecipeTabSelected, RecipeTabCandidate, RecipeMethodTitle;
         internal readonly GUIStyle TextField;
         internal readonly GUIStyle? SearchIdle;
         internal readonly GUIStyle? SearchFocused;
@@ -892,6 +861,12 @@ internal static class NeiSkin
             DropDownOpen = DropDownStyle(CropFrame("dropdown_open"), CropFrame("dropdown_open_hover"), darkInk, arrow: true, fallback: ButtonSelected);
             DropDownOption = DropDownStyle(choice, choiceHighlight, darkInk, arrow: false, fallback: Button);
             DropDownSelected = DropDownStyle(choiceHighlight, choiceHighlight, darkInk, arrow: false, fallback: ButtonSelected);
+
+            var selectedTab = GetSource(NeiAssets.RecipeTabSelected, readable: false);
+            var candidateTab = GetSource(NeiAssets.RecipeTabCandidate, readable: false);
+            RecipeTabSelected = RecipeTabStyle(selectedTab, darkInk, ButtonSelected, open: true);
+            RecipeTabCandidate = RecipeTabStyle(candidateTab, darkInk, Button);
+            RecipeMethodTitle = RecipeTabStyle(candidateTab, darkInk, TextStyle(TextAnchor.MiddleCenter, OverlayInk, 13));
 
             TextField = ContentStyle(TextAnchor.MiddleLeft, 6);
             ApplyStates(TextField, null, null, FieldUnfocusedInk, FieldFocusedInk);
@@ -945,6 +920,16 @@ internal static class NeiSkin
             // Every row is cropped into an isolated point-filtered texture before Unity slices it.
             style.border = new RectOffset(edge, edge, edge, edge);
             ApplyStates(style, normal, active, ink, ink);
+            return style;
+        }
+
+        private static GUIStyle RecipeTabStyle(Texture2D? background, Color ink, GUIStyle fallback, bool open = false)
+        {
+            if (background == null) return fallback;
+            var style = ContentStyle(TextAnchor.MiddleCenter, 2);
+            // Stretch only the flat interior of the supplied button texture.
+            style.border = new RectOffset(4, 4, open ? 4 : 3, open ? 0 : 2);
+            ApplyStates(style, background, background, ink, ink);
             return style;
         }
 

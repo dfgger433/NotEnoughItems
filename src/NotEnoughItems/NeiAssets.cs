@@ -17,7 +17,6 @@ internal static class NeiAssets
     internal const int RecipeBackgroundSlice = 9;
     internal const int RecipeBackgroundTransparentInset = 4;
     internal const string OriginalDirectory = "gui/original/";
-    internal const string OriginalRecipeBackground = OriginalDirectory + "recipebg.png";
     internal const string ControlsDirectory = "gui/controls/";
     internal const string DropDownAtlas = ControlsDirectory + "drop_down_list.png";
     internal const string CheckboxFile = "checkbox.png";
@@ -53,7 +52,6 @@ internal static class NeiAssets
         ModernityDirectory + "nei_sprites.png" or OriginalDirectory + "nei_sprites.png" => OriginalDirectory + "nei_sprites.png",
         ModernityDirectory + "nei_tabbed_sprites.png" or OriginalDirectory + "nei_tabbed_sprites.png" => OriginalDirectory + "nei_tabbed_sprites.png",
         ModernityDirectory + "slot.png" or OriginalDirectory + "slot.png" => OriginalDirectory + "slot.png",
-        OriginalRecipeBackground => OriginalRecipeBackground,
         _ => null
     };
 
@@ -66,7 +64,7 @@ internal static class NeiAssets
         ModernityDirectory + "slot.png" or OriginalDirectory + "slot.png" => (18, 18),
         ControlsDirectory + "text_field.png" => (128, 128),
         CheckboxAtlas => (64, 64),
-        RecipeBackgroundTexture or OriginalRecipeBackground or DropDownAtlas => (256, 256),
+        RecipeBackgroundTexture or DropDownAtlas => (256, 256),
         RecipeTabSelected => (RecipeTabWidth, RecipeTabSelectedHeight),
         RecipeTabCandidate => (RecipeTabWidth, RecipeTabCandidateHeight),
         _ => null

@@ -561,21 +561,18 @@ static void TextureLocations()
         ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(true, true)) is
         { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 16, Width: 12, Height: 11 },
         "Spawn mode uses the supplied default, hover, and selected square checkbox faces.");
-    Check(ModernityFrames.Find("method_tab_selected") is { ResourcePath: NeiAssets.RecipeTabSelected, X: 0, Y: 0, Width: 48, Height: 46 } &&
-        ModernityFrames.Find("method_tab") is { ResourcePath: NeiAssets.RecipeTabCandidate, X: 0, Y: 0, Width: 48, Height: 43 },
-        "Recipe tabs and buttons use the standalone selected and candidate PNGs, not frames from the original atlas.");
     Check(NeiAssets.ExpectedSize(NeiAssets.RecipeBackgroundTexture) == (256, 256) &&
         ModernityFrames.Find("recipe_background") is { ResourcePath: NeiAssets.RecipeBackgroundTexture, X: 0, Y: 0, Width: 184, Height: 174 } &&
-        ModernityFrames.Find("inspector_background") is { ResourcePath: NeiAssets.OriginalRecipeBackground, X: 0, Y: 0, Width: 184, Height: 174 } &&
-        NeiAssets.ExpectedSize(NeiAssets.OriginalRecipeBackground) == (256, 256) &&
         NeiAssets.RecipeBackgroundSlice == 9,
-        "Recipe panels use the Modernity 184x174 frame with nine-pixel borders.");
-    foreach (string path in new[] { NeiAssets.RecipeBackgroundTexture, NeiAssets.OriginalRecipeBackground, NeiAssets.RecipeTabSelected, NeiAssets.RecipeTabCandidate })
+        "The recipe inspector shares the Modernity 184x174 frame with nine-pixel borders.");
+    Check(ModernityFrames.Find("inspector_background") == null &&
+        ModernityFrames.Find("button") is { ResourcePath: "gui/modernity/widgets.png", Y: 66 } &&
+        ModernityFrames.Find("button_disabled") is { ResourcePath: "gui/modernity/widgets.png", Y: 46 },
+        "Use the existing Modernity frame and visible enabled/disabled widget faces, not the reference skin.");
+    foreach (string path in new[] { NeiAssets.RecipeBackgroundTexture, NeiAssets.RecipeTabSelected, NeiAssets.RecipeTabCandidate })
     {
         string canonical = NeiAssets.RelativePath(path);
-        var expected = path == NeiAssets.OriginalRecipeBackground
-            ? new[] { (NeiAssets.ActivePackDirectory + "/" + canonical, false), (canonical, true) }
-            : new[] { (NeiAssets.ActivePackDirectory + "/" + canonical, false), (canonical, false), (canonical, true) };
+        var expected = new[] { (NeiAssets.ActivePackDirectory + "/" + canonical, false), (canonical, false), (canonical, true) };
         Check(NeiAssets.TextureSources(path, true).SequenceEqual(expected), "Recipe artwork falls back from the active pack to the supplied file and then to the same embedded PNG: " + path);
     }
 }
@@ -718,6 +715,8 @@ static void Check(bool passed, string message)
 static void EmbeddedGuiTextures()
 {
     var assembly = typeof(Catalog).Assembly;
+    Check(!assembly.GetManifestResourceNames().Contains(NeiAssets.ResourceName(NeiAssets.OriginalDirectory + "recipebg.png")),
+        "Only the layout comes from the reference; do not ship its gray recipe background.");
     Span<byte> header = stackalloc byte[24];
     foreach (string path in new[] { NeiAssets.Modernity("widgets.png"), NeiAssets.Modernity("nei_tabbed_sprites.png"),
         NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png"), "gui/controls/text_field.png", NeiAssets.DropDownAtlas,

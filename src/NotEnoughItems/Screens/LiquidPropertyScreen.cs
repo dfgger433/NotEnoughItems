@@ -44,9 +44,7 @@ internal sealed partial class NeiWindow
         string name = Locale.currentLang?.other is { } terms && terms.TryGetValue(key, out var localized)
             ? localized : property.DisplayName.Length > 0 ? property.DisplayName : property.QualityId.Length > 0 ? property.QualityId : property.RequiredTag;
         string kind = property.IsLiquid ? L("Liquid", "流体") : L("Item", "物品");
-        NeiSkin.RecipeBar(panel.MethodTitle);
         NeiSkin.RecipeMethodTitle(panel.MethodTitle, L($"{kind} property: {name}", $"{kind}性质：{name}"));
-        NeiSkin.RecipeBar(panel.PageTitle);
 
         var area = panel.Content;
         float cell = Mathf.Min(29f * IconScale, area.width, area.height);
