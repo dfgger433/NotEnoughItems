@@ -24,9 +24,10 @@ internal static class TooltipPlacement
         protectedControls.width > 0 && protectedControls.height > 0 && tooltip.Overlaps(protectedControls)
             ? Place(tooltip, viewport, new[] { protectedControls }) : tooltip;
 
-    // Keep the pinned tooltip reachable across the gap between its source and its box.
-    internal static bool KeepItemTip(Vector2 pointer, Vector2 anchor, Rect source, Rect box)
+    // Only Shift can hold the tooltip across the gap between its source and its box.
+    internal static bool KeepItemTip(Vector2 pointer, Vector2 anchor, Rect source, Rect box, bool interactive)
     {
+        if (!interactive) return false;
         if (source.Contains(pointer) || box.Contains(pointer)) return true;
         const float slop = 4f;
         return Rect.MinMaxRect(Math.Min(anchor.x, box.xMin) - slop, Math.Min(anchor.y, box.yMin) - slop,

@@ -5,7 +5,7 @@ namespace NotEnoughItems;
 
 internal sealed partial class NeiWindow
 {
-    private (NativeTooltip.Content Content, Vector2 Anchor, Rect Source, Rect Box, Rect IdRow, Rect ModRow)? _pinnedIdTip;
+    private (NativeTooltip.Content Content, Vector2 Anchor, Rect Source, Rect Box, Rect IdRow, Rect ModRow)? _drawnItemTip;
     private (Rect IdRow, string? Id, Rect ModRow, string? Mod)? _supportedCopyId;
     private bool _tooltipCopyPressed;
     private bool _lastTooltipIdVisibility;
@@ -21,17 +21,36 @@ internal sealed partial class NeiWindow
 
     private void ClearItemTooltipInput()
     {
-        _pinnedIdTip = null;
+        _drawnItemTip = null;
         _supportedCopyId = null;
+        _tooltipCopyPressed = false;
     }
 
-    private bool ItemTooltipVisibleHit(Vector2 pointer) => _pinnedIdTip is { } tip && tip.Box.Contains(pointer) && CanUseTooltip;
-
-    private bool ItemTooltipHit(Vector2 pointer) => ItemTooltipVisibleHit(pointer) && TooltipCanInteract(SelectionShiftHeld, CanUseTooltip);
+    private bool ItemTooltipHit(Vector2 pointer) => _drawnItemTip is { } tip && tip.Box.Contains(pointer) && CanCopyTooltip;
 
     // Consume clicks over tooltip rows before slots and popups underneath receive them.
     private void HandleItemTooltipInput(Event e)
     {
+        if (!CanUseTooltip)
+        {
+            ClearItemTooltipInput();
+            return;
+        }
+        bool interactive = CanCopyTooltip;
+        if (_lastTooltipIdVisibility != _showTooltipId.Value)
+        {
+            _lastTooltipIdVisibility = _showTooltipId.Value;
+            _drawnItemTip = null;
+        }
+        Vector2 pointer = e.mousePosition;
+        if (_drawnItemTip is { } tip && !TooltipPlacement.KeepItemTip(pointer, tip.Anchor, tip.Source, tip.Box, interactive))
+            _drawnItemTip = null;
+
+        if (!interactive)
+        {
+            _tooltipCopyPressed = false;
+            return;
+        }
         if (e.type == EventType.MouseUp && e.button == 0 && _tooltipCopyPressed)
         {
             _tooltipCopyPressed = false;
@@ -39,41 +58,26 @@ internal sealed partial class NeiWindow
             return;
         }
         if (e.type == EventType.MouseDown && e.button == 0) _tooltipCopyPressed = false;
-        if (!CanUseTooltip)
-        {
-            ClearItemTooltipInput();
-            return;
-        }
-        if (_lastTooltipIdVisibility != _showTooltipId.Value)
-        {
-            _lastTooltipIdVisibility = _showTooltipId.Value;
-            _pinnedIdTip = null;
-        }
-        Vector2 pointer = e.mousePosition;
-        if (_pinnedIdTip is { } pinned && !TooltipPlacement.KeepItemTip(pointer, pinned.Anchor, pinned.Source, pinned.Box))
-            _pinnedIdTip = null;
 
-        bool overSupported = SupportedItemsHit(pointer);
-        bool overPinned = _pinnedIdTip is { } pinnedTip && pinnedTip.Box.Contains(pointer);
+        bool overItemTip = ItemTooltipHit(pointer);
         (Rect IdRow, string? Id, Rect ModRow, string? Mod) rows = default;
-        if (overPinned && _pinnedIdTip is { } item)
+        if (overItemTip && _drawnItemTip is { } item)
             rows = (item.IdRow, item.Content.Id, item.ModRow, item.Content.ModText);
-        else if (overSupported && _supportedCopyId is { } supported)
+        else if (SupportedItemsHit(pointer) && _supportedCopyId is { } supported)
             rows = supported;
 
         var idRow = _showTooltipId.Value ? rows.IdRow : default;
-        if (CopyTooltipValueAt(rows.Id, idRow, rows.Mod, rows.ModRow, pointer, e.type, e.button, SelectionShiftHeld) is { } copied)
+        if (CopyTooltipValueAt(rows.Id, idRow, rows.Mod, rows.ModRow, pointer, e.type, e.button, interactive) is { } copied)
         {
             GUIUtility.systemCopyBuffer = copied;
             _tooltipCopyPressed = true;
             Status(L("Copied: ", "已复制：") + copied);
             e.Use();
         }
-        else if ((overPinned || overSupported) && SelectionShiftHeld &&
-            e.type is (EventType.MouseDown or EventType.MouseUp or EventType.MouseDrag or EventType.ScrollWheel))
+        else if (overItemTip && e.type is (EventType.MouseDown or EventType.MouseUp or EventType.MouseDrag or EventType.ScrollWheel))
             e.Use();
-        else if (!overPinned && e.type is (EventType.MouseDown or EventType.ScrollWheel))
-            _pinnedIdTip = null;
+        else if (e.type is (EventType.MouseDown or EventType.ScrollWheel))
+            _drawnItemTip = null;
     }
 
     internal static string? CopyTooltipValueAt(string? id, Rect idRow, string? mod, Rect modRow,
@@ -88,13 +92,15 @@ internal sealed partial class NeiWindow
 
     private void DrawQueuedItemTip()
     {
-        // Draw after the chain and supported-items popups so the copy row is never behind them.
-        var next = _pinnedIdTip is { } pinned ? (pinned.Anchor, pinned.Source, pinned.Content) : _queuedItemTip;
+        // Paint passive tips from the current hover only. Shift can hold the last
+        // drawn tip in place so the pointer can leave the source to reach its rows.
+        bool copyEnabled = CanCopyTooltip;
+        var next = copyEnabled && _drawnItemTip is { } last ? (last.Anchor, last.Source, last.Content) : _queuedItemTip;
+        _drawnItemTip = null;
         if (next is not { } tip) return;
         var (anchor, source, content) = tip;
-        bool copyEnabled = CanCopyTooltip;
         var (box, idRow, modRow) = NeiSkin.ItemTooltip(anchor, new Vector2(_width, _height), content, RecipeNavigationBounds,
             copyIdEnabled: copyEnabled && _showTooltipId.Value, copyModEnabled: copyEnabled);
-        _pinnedIdTip = box.width > 0f ? (content, anchor, source, box, idRow, modRow) : null;
+        if (box.width > 0f) _drawnItemTip = (content, anchor, source, box, idRow, modRow);
     }
 }

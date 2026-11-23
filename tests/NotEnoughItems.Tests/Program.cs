@@ -22,6 +22,7 @@ static int RunTests()
         ("shared overlay regions match the reference pixels and scale with the viewport", OverlayLayout),
         ("inspectors stay in the viewport and the recipe panel is vertically centered", InspectorLayout),
         ("options center on screen regardless of the inventory or terminal anchor", OptionsLayout),
+        ("spawn mode choices share one row without overlapping at any settings scale", SpawnModeChoiceLayout),
         ("recipe pages keep rows reachable, with a 3×3 minimum and clipped actions", RecipeListLayoutTests.Run),
         ("catalog controls and history stay in the footer below the item grid", CatalogPanelLayout),
         ("history and quantity use the requested catalog footer bounds", HistoryCatalogTests.Run),
@@ -237,9 +238,14 @@ static void TooltipBounds()
         var box = TooltipPlacement.AtPointer(anchor, new Vector2(200, 60), viewport);
         var idRow = new Vector2(box.center.x, box.yMax - 20);
         for (int i = 0; i <= 20; i++)
-            Check(TooltipPlacement.KeepItemTip(Vector2.Lerp(anchor, idRow, i / 20f), anchor, source, box),
+        {
+            Vector2 pointer = Vector2.Lerp(anchor, idRow, i / 20f);
+            Check(TooltipPlacement.KeepItemTip(pointer, anchor, source, box, interactive: true),
                 "Shift must hold the tip while moving across the gap into the ID row, even when flipped.");
-        Check(!TooltipPlacement.KeepItemTip(new Vector2(12, 450), anchor, source, box),
+            Check(!TooltipPlacement.KeepItemTip(pointer, anchor, source, box, interactive: false),
+                "Without Shift an old hover must never stay pinned, even while the pointer is inside the tooltip.");
+        }
+        Check(!TooltipPlacement.KeepItemTip(new Vector2(12, 450), anchor, source, box, interactive: true),
             "Moving away from the source and popup must dismiss the pinned item.");
     }
 }
@@ -604,6 +610,18 @@ static void OptionsLayout()
                 optionsZoom > 0f && optionsZoom <= NeiLayout.OptionsZoom, "Scaled drawing keeps its pivot and room for all rows.");
             if (pixelWidth >= 1920) Equal(1.2f, optionsZoom, "Settings and text grow by 20% when there is room");
         }
+    }
+}
+
+static void SpawnModeChoiceLayout()
+{
+    foreach (float width in new[] { 221f, 360f, 536f })
+    {
+        var row = new Rect(12f, 174f, width, 54f);
+        var (nei, toPlayer) = NeiLayout.SpawnModeChoices(row);
+        Check(ContainsRect(row, nei) && ContainsRect(row, toPlayer) && nei.y == toPlayer.y &&
+            nei.size == toPlayer.size && nei.xMax < toPlayer.xMin && !nei.Overlaps(toPlayer),
+            "Both spawn choices should fit side-by-side as independent targets, even at the minimum panel width.");
     }
 }
 

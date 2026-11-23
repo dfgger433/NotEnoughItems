@@ -142,21 +142,64 @@ internal static class NeiSkin
     }
 
     // Keep the whole row clickable, but draw only the label and its indicator.
-    internal static bool Checkbox(Rect rect, string text, bool on, bool square = false)
+    internal static bool Checkbox(Rect rect, string text, bool on)
     {
-        var styles = Styles;
-        var style = square ? styles.SquareCheckboxLabel : styles.CheckboxLabel;
+        var style = Styles.CheckboxLabel;
         bool clicked = Click(rect, text, true, style, style);
         if (CanPaint(rect))
         {
             bool hovered = GUI.enabled && rect.Contains(Event.current.mousePosition);
             var indicator = new Rect(rect.x + 3f, rect.y + 1f, style.padding.left - 6f, rect.height - 2f);
-            if (CropFrame(ModernityFrames.CheckboxFace(on, hovered, square)) is { } texture)
-                DrawButtonSprite(indicator, texture, square ? 20f : float.PositiveInfinity, enlarge: true,
-                    GUI.enabled ? Color.white : IconDisabledTint);
+            if (CropFrame(ModernityFrames.CheckboxFace(on, hovered)) is { } texture)
+                DrawButtonSprite(indicator, texture, float.PositiveInfinity, enlarge: true, GUI.enabled ? Color.white : IconDisabledTint);
             else Label(indicator, on ? "✓" : "–", TextAnchor.MiddleCenter);
         }
         return clicked;
+    }
+
+    private const float SpawnChoiceInset = 24f, SpawnChoiceTitleHeight = 20f;
+
+    internal static float SpawnModeChoiceHeight(string description, float width) =>
+        SpawnChoiceTitleHeight + OptionsNoteHeight(description, width - SpawnChoiceInset - 2f) + 2f;
+
+    internal static bool SpawnModeChoice(Rect rect, string title, string description, bool selected)
+    {
+        // The square and both lines of copy are one hit target, with no row backplate.
+        bool clicked = GUI.Button(rect, GUIContent.none, GUIStyle.none);
+        if (!CanPaint(rect)) return clicked;
+
+        bool hovered = GUI.enabled && rect.Contains(Event.current.mousePosition);
+        var square = new Rect(rect.x + 3f, rect.y + 2f, 16f, 16f);
+        if (CropFrame(ModernityFrames.CheckboxFace(selected, hovered, square: true)) is { } texture)
+            DrawTexture(square, texture, ScaleMode.StretchToFill, GUI.enabled ? Color.white : IconDisabledTint);
+        else
+        {
+            Fill(square, Rgb(selected ? 0x4C91FFu : 0x92939Bu));
+            Outline(square, Rgb(0x232538));
+        }
+
+        float textX = rect.x + SpawnChoiceInset, textWidth = rect.xMax - textX - 2f;
+        OptionsHeading(new Rect(textX, rect.y, textWidth, SpawnChoiceTitleHeight), title);
+        OptionsNote(new Rect(textX, rect.y + SpawnChoiceTitleHeight, textWidth, rect.height - SpawnChoiceTitleHeight), description);
+        return clicked;
+    }
+
+    internal static void OptionsHeading(Rect rect, string text) => OptionsText(rect, text, Styles.OptionsHeading);
+
+    internal static void OptionsNote(Rect rect, string text) => OptionsText(rect, text, Styles.OptionsNote);
+
+    internal static float OptionsNoteHeight(string text, float width)
+    {
+        var styles = Styles;
+        styles.LabelContent.text = text;
+        return Mathf.Ceil(styles.OptionsNote.CalcHeight(styles.LabelContent, Mathf.Max(1f, width)));
+    }
+
+    private static void OptionsText(Rect rect, string text, GUIStyle style)
+    {
+        if (!CanPaint(rect)) return;
+        Styles.LabelContent.text = text;
+        Paint(style, rect, Styles.LabelContent);
     }
 
     internal static bool DropDownButton(Rect rect, string text, bool expanded) =>
@@ -714,7 +757,7 @@ internal static class NeiSkin
         internal readonly GUIStyle Button;
         internal readonly GUIStyle ButtonSelected;
         internal readonly GUIStyle ButtonDisabled;
-        internal readonly GUIStyle CheckboxLabel, SquareCheckboxLabel;
+        internal readonly GUIStyle CheckboxLabel, OptionsHeading, OptionsNote;
         internal readonly GUIStyle DropDownClosed, DropDownOpen, DropDownOption, DropDownSelected;
         internal readonly GUIStyle RecipeTabSelected, RecipeTabCandidate, RecipeTabDisabled, RecipeMethodTitle;
         internal readonly GUIStyle TextField;
@@ -744,7 +787,8 @@ internal static class NeiSkin
             CheckboxLabel = ContentStyle(TextAnchor.MiddleLeft, 4);
             CheckboxLabel.padding.left = 48;
             ApplyStates(CheckboxLabel, null, null, darkInk, darkInk);
-            SquareCheckboxLabel = new GUIStyle(CheckboxLabel) { padding = new RectOffset(30, 4, 2, 2) };
+            OptionsHeading = new GUIStyle(TextStyle(TextAnchor.MiddleLeft, darkInk, 13)) { fontStyle = FontStyle.Bold };
+            OptionsNote = TextStyle(TextAnchor.UpperLeft, Rgb(0x404459), 12, wrap: true);
 
             var choice = CropFrame("dropdown_option");
             var choiceHighlight = CropFrame("dropdown_option_hover");

@@ -254,7 +254,7 @@ internal sealed partial class NeiWindow
     internal bool NativeTooltipHit(Vector2 pointer)
     {
         pointer /= Mathf.Max(.01f, _scale);
-        if (ItemTooltipVisibleHit(pointer)) return true;
+        if (ItemTooltipHit(pointer)) return true;
         if (_plugin.IsCrafting) return (ShowLeft && _left.Contains(pointer)) || SupportedItemsHit(pointer);
         return LayoutEditHit(pointer) || ChainTipHit(pointer) || SupportedItemsHit(pointer) || _leftTools.Hit(pointer, !HideBookmarksForDrag) || NativeTooltip.Hit(pointer,
             (ModalOpen, ActiveInspectorBounds), (ShowLeft, _left), (ShowRight, _right), (ShowRight, _catalogControls),
@@ -606,9 +606,9 @@ internal sealed partial class NeiWindow
                     if (!DrawSupportedItemsTip(e.mousePosition) && !chainTipDrawn)
                     {
                         if (_itemTip is { } itemTip) QueueItemTip(e.mousePosition, _itemTipSource, itemTip);
-                        else if (_pinnedIdTip == null && _tipTitle != null)
+                        else if (_drawnItemTip == null && _tipTitle != null)
                             NeiSkin.Tooltip(e.mousePosition, guiSize, _tipTitle, _tipBody, boxed: _boxedTip, protectedControls: RecipeNavigationBounds);
-                        else if (_pinnedIdTip == null && Hit(screenMouse) && !string.IsNullOrEmpty(GUI.tooltip))
+                        else if (_drawnItemTip == null && Hit(screenMouse) && !string.IsNullOrEmpty(GUI.tooltip))
                             NeiSkin.Tooltip(e.mousePosition, guiSize, GUI.tooltip, boxed: true, protectedControls: RecipeNavigationBounds);
                     }
                 }

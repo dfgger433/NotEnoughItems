@@ -508,9 +508,10 @@ internal sealed partial class NeiWindow
                         a.ItemId.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase)));
                     var hit = new Rect(r.position + box.position, r.size);
                     string id = item?.BrowseId ?? (a.IsRequirement ? a.Ingredient?.BrowseId ?? a.ItemId : a.ItemId);
-                    _itemTargets.Add((hit, id, PropertyQuery(a.Ingredient)));
+                    // The preview is paint-only. Keep popup targets separate from underlying slots
+                    // so releasing Shift immediately restores the underlying shortcut targets.
                     if (pinned) _chainTipItems.Add((hit, id, block.Entry, a.IngredientIndex, PropertyQuery(a.Ingredient)));
-                    if (hit.Contains(mouse))
+                    if (pinned && hit.Contains(mouse))
                     {
                         NeiSkin.Slot(r, hovered: true, selected: true);
                         hovered = (hit, a, item, caption, block.Entry);

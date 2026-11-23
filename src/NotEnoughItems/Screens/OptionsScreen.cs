@@ -185,31 +185,39 @@ internal sealed partial class NeiWindow
         row.y += 30;
         if (NeiSkin.Checkbox(row, L("Show item ID", "是否显示物品 ID"), _showTooltipId.Value))
             _showTooltipId.Value = !_showTooltipId.Value;
-        row.y += 30;
-        bool vanilla = _plugin.ItemSpawnMode == SpawnMode.SpawnToPlayer;
-        string spawnMode = vanilla ? L("Spawn mode: Spawn to player", "刷取模式：原版刷给玩家")
-            : L("Spawn mode: NEI (default)", "刷取模式：现有模式");
-        if (NeiSkin.Checkbox(row, spawnMode, vanilla, square: true))
+        row.y += 32;
+        var heading = new Rect(row.x + 3, row.y, row.width - 6, 18);
+        NeiSkin.OptionsHeading(heading, L("Spawn mode", "刷取模式"));
+        row.y = heading.yMax + 4;
+        var (nei, toPlayer) = NeiLayout.SpawnModeChoices(row);
+        string neiDetails = L("Uses free slots and containers. Keeps your gear.", "放入空槽或容器，不替换装备。");
+        string vanillaDetails = L("Drops at your feet for vanilla pickup and equip.", "在脚下生成，按原版规则拾取或穿戴。");
+        nei.height = toPlayer.height = Math.Max(NeiSkin.SpawnModeChoiceHeight(neiDetails, nei.width),
+            NeiSkin.SpawnModeChoiceHeight(vanillaDetails, toPlayer.width));
+        SpawnMode current = _plugin.ItemSpawnMode;
+        DrawChoice(nei, SpawnMode.Nei, L("NEI (default)", "NEI（默认）"), neiDetails);
+        DrawChoice(toPlayer, SpawnMode.SpawnToPlayer, L("To player", "原版刷给玩家"), vanillaDetails);
+
+        row.x += 3;
+        row.width -= 6;
+        row.y = nei.yMax + 8;
+        DrawNote(L("Uncollected items stay nearby. This choice affects single-player items only; liquids still come in full temporary bottles.",
+            "未拾取的物品留在附近。此选项仅影响单机实物；液体仍刷取装满的临时瓶。"));
+        DrawNote(L("In Cheat mode, left click gives the quantity set next to search; right click gives one.",
+            "作弊模式下，左键按搜索框旁的数量刷取，右键刷取 1 件。"));
+
+        void DrawChoice(Rect choice, SpawnMode mode, string title, string description)
         {
-            vanilla = !vanilla;
-            _plugin.ItemSpawnMode = vanilla ? SpawnMode.SpawnToPlayer : SpawnMode.Nei;
+            if (NeiSkin.SpawnModeChoice(choice, title, description, current == mode) && current != mode)
+                _plugin.ItemSpawnMode = mode;
         }
 
-        row.y += 34;
-        row.height = 62;
-        NeiSkin.Text(row, vanilla
-            ? L("Spawns at your feet and follows vanilla pickup and equip rules. Items it cannot pick up stay on the ground.",
-                "在脚下生成，按原版规则自动拾取和穿戴。未拾取的物品留在地上。")
-            : L("Tries your containers and free slots without replacing gear. Items that do not fit stay nearby.",
-                "优先放入容器或空槽，不替换装备。放不下的物品留在附近。"));
-        row.y += row.height + 4;
-        row.height = 55;
-        NeiSkin.Text(row, L("In Cheat mode, left click gives the quantity set next to search; right click gives one.",
-            "作弊模式下，左键按搜索框旁的数量刷取，右键刷取 1 件。"));
-        row.y += row.height + 4;
-        row.height = 55;
-        NeiSkin.Text(row, L("This setting is single-player only. Liquids still use NEI's full temporary bottles.",
-            "此设置仅影响单机。液体仍按 NEI 原方式刷取装满的临时瓶。"));
+        void DrawNote(string text)
+        {
+            row.height = NeiSkin.OptionsNoteHeight(text, row.width);
+            NeiSkin.OptionsNote(row, text);
+            row.y += row.height + 6;
+        }
     }
 
     private void DrawKeyOptions(Rect row)

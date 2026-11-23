@@ -174,6 +174,13 @@ internal static class NeiLayout
 
     internal static Rect OptionsContentBounds(Rect bounds, float zoom) => new(bounds.position, bounds.size / zoom);
 
+    internal static (Rect Nei, Rect ToPlayer) SpawnModeChoices(Rect row)
+    {
+        const float gap = 8f;
+        float width = (row.width - gap) * .5f;
+        return (new Rect(row.x, row.y, width, row.height), new Rect(row.x + width + gap, row.y, width, row.height));
+    }
+
     internal static Rect Inspector(Rect center, float width, float height, float scale)
     {
         float w = Mathf.Min(width - 16, 560 * scale);
