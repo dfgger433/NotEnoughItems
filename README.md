@@ -2,28 +2,19 @@
 
 NEI 的本地 BepInEx 移植版。书签与物品目录在原版背包和 Unknown Inventory Terminal 中显示；打开原版制作菜单时只保留左侧书签。打开原版容器、交易、物品自定义、液体转移或医疗面板时隐藏。原版背包和终端的右侧物品目录默认都开启，可在 NEI 扳手设置的「显示」页分别关闭；升级时保留已保存的开关。背包和终端共用以 2560×1440 为基准的默认布局：横纵坐标分别随窗口宽高换算；扳手 → 布局可开启「拖动面板调整布局」，拖动各栏标题移动整栏，拖动边缘把手调整宽度，完成后点「完成」；宽度、位置、上下偏移和物品图标大小都会保存。背包侧栏默认透明，配方查询使用有底色的独立面板。默认爱心使用 [GTNH NEI 原版图集](<Assets/NotEnoughItems/textures/gui/original/SOURCES.md>)，其他已有按钮、书签和扳手继续使用 [Modernity-GTNH-UI 原贴图](<Assets/NotEnoughItems/textures/gui/modernity/SOURCES.md>)，不再读取自绘控件图集。
 
-## 编译、打包和部署
+## 编译与部署
 
 需要 PowerShell 7、.NET SDK 8 或更高、Mono 版游戏、BepInEx 5 和 CUCoreLib 1.1+。Unknown Inventory Terminal 0.4.4+ 为可选依赖。
 
 ```powershell
-# 编译到 dist 并运行回归检查，不写入游戏安装目录
+# 编译并运行回归测试
 pwsh -File ./scripts/Build.ps1
 
-# 同时构建本地使用 ZIP（包含附许可的 Modernity 原贴图）
-pwsh -File ./scripts/Build.ps1 -Package
-
-# 从 dist 安装先前构建的产物（保留已有换肤文件）
+# 退出游戏后，将 dist 中的插件和资源安装到游戏目录
 pwsh -File ./scripts/Install.ps1
-
-# 预览完整部署；不编译、不写文件
-pwsh -File ./scripts/Install.ps1 -Build -WhatIf
-
-# 退出游戏后，构建、测试并安装
-pwsh -File ./scripts/Install.ps1 -Build
 ```
 
-[Build.ps1](<scripts/Build.ps1>) 和 [Install.ps1](<scripts/Install.ps1>) 默认将项目目录上两级作为游戏根；构建产物和可选 ZIP 位于忽略的 `dist/`。可用 `-GameRoot 'D:\路径\Casualties Unknown'`、`-CUCoreLibPath 'D:\路径\CUCoreLib.dll'`、`-Configuration Debug` 和 `-SkipTests` 覆盖默认值。Build 编译并运行回归测试，不安装；Install 默认安装已有产物，附加 `-Build` 会先构建、测试再安装。安装脚本不启动或关闭游戏，检测到目标游戏正在运行时停止，并比对 DLL 的 SHA-256。安装只补齐资源，不覆盖已有换肤文件，旧 `Textures` 背景也只在目标资源缺失时迁移。可用 `Install.ps1 -Build -WhatIf` 预览完整操作；安装目录为游戏根下的 `BepInEx/plugins/NotEnoughItems/`。
+[Build.ps1](<scripts/Build.ps1>) 和 [Install.ps1](<scripts/Install.ps1>) 默认使用项目目录上三级作为游戏根；也可将游戏目录作为唯一参数传入。构建产物位于 `dist/`，安装目录为游戏根下的 `BepInEx/plugins/NotEnoughItems/`。安装前需关闭游戏。
 
 书签分组的交互以项目随附的 [GTNH 中文维基](https://gtnh.huijiwiki.com/wiki/Not_Enough_Items#分组与合成链) 和 [GTNH NEI 2.9.0 的书签面板](https://github.com/GTNewHorizons/NotEnoughItems/blob/8e1541eab1935a2a261afcabaeb822089a94d86b/src/main/java/codechicken/nei/BookmarkPanel.java) 为参照。书签仍使用本插件的 BepInEx 配置；不直接导入 Minecraft 的物品 ID 或 NBT。
 
