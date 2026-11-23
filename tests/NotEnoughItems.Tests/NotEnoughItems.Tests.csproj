@@ -18,7 +18,7 @@
     <IntermediateOutputPath>obj/$(Configuration)/core-only/</IntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs;BookmarkParityTests.cs;PinyinSearchTests.cs;$(NeiSourceDir)BookmarkBoardPaging.cs;$(NeiSourceDir)BookmarkShortcut.cs;$(NeiSourceDir)BookmarkHelp.cs;$(NeiSourceDir)PinyinSearch.cs;$(NeiSourceDir)PanelLayoutDrag.cs;$(NeiSourceDir)SlotQuantity.cs" />
+    <Compile Include="Program.cs;BookmarkParityTests.cs;PinyinSearchTests.cs;TogetherCraftRequestTests.cs;$(NeiSourceDir)TogetherCraftRequest.cs;$(NeiSourceDir)BookmarkBoardPaging.cs;$(NeiSourceDir)BookmarkShortcut.cs;$(NeiSourceDir)BookmarkHelp.cs;$(NeiSourceDir)PinyinSearch.cs;$(NeiSourceDir)PanelLayoutDrag.cs;$(NeiSourceDir)SlotQuantity.cs" />
     <Compile Include="RecipeListLayoutTests.cs;HistoryCatalogTests.cs;$(NeiSourceDir)RecipeListLayout.cs;$(NeiSourceDir)Screens/RecipeGridLayout.cs;$(NeiSourceDir)Screens/RecipePageLayout.cs;$(NeiSourceDir)TooltipPlacement.cs" />
     <Compile Include="$(NeiSourceDir)NeiSearch.cs;$(NeiSourceDir)NeiLayout.cs;$(NeiSourceDir)BookmarkBook.cs;$(NeiSourceDir)NeiAssets.cs;$(NeiSourceDir)ModernityFrames.cs;$(NeiSourceDir)DragInputPolicy.cs;$(NeiSourceDir)CheatPermission.cs;$(NeiSourceDir)TabFocusPolicy.cs" />
     <Reference Include="UnityEngine" HintPath="$(ManagedDir)/UnityEngine.dll" />
