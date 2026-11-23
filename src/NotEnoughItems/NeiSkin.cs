@@ -49,31 +49,64 @@ internal static class NeiSkin
     internal static void SlotAmount(Rect rect, SlotQuantity amount)
     {
         if (!CanPaint(rect) || rect.width <= 2f || rect.height <= 2f) return;
-        const float normalScale = .76f;
-        var alignment = amount.Liquid ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight;
-        var styles = Styles;
-        var ink = styles.Label(alignment, false);
-        var content = styles.LabelContent;
-        float availableWidth = rect.width - 2f;
-        content.text = amount.Fit(FitsAtNormalSize);
-        Vector2 size = ink.CalcSize(content) + Vector2.one * 2f;
-        float scale = Mathf.Min(normalScale, availableWidth / size.x, (rect.height - 2f) / size.y);
-        var target = amount.LabelBounds(rect, size);
-        var corner = new Vector2(amount.Liquid ? target.xMin : target.xMax, target.yMax);
-        Matrix4x4 previous = GUI.matrix;
-        try
-        {
-            GUIUtility.ScaleAroundPivot(Vector2.one * scale, corner);
-            Paint(styles.LabelShadow(alignment), Offset(target), content);
-            Paint(ink, target, content);
-        }
-        finally { GUI.matrix = previous; }
 
-        bool FitsAtNormalSize(string text)
+        // Do not scale GUI.matrix for an individual amount. Recipe slots are often
+        // painted inside a scroll view, and ScaleAroundPivot resolves its pivot
+        // through the current GUI clip. That makes a lower-left liquid label drift
+        // outside the slot as the recipe scrolls. Pick a smaller text style instead,
+        // then anchor the untransformed label rect to the slot corner.
+        const float normalScale = .76f;
+        const int largestFontSize = 10, smallestFontSize = 1;
+        var alignment = amount.Liquid ? TextAnchor.LowerLeft : TextAnchor.LowerRight;
+        var styles = Styles;
+        var content = styles.LabelContent;
+        float availableWidth = Mathf.Max(1f, rect.width - 2f);
+        float availableHeight = Mathf.Max(1f, rect.height - 2f);
+
+        // Keep the old 13px layout's notation decision: a label was previously
+        // measured at 13px and rendered at 76% of that size. Selecting the text
+        // before choosing the final font size prevents a smaller style from
+        // changing 1250mL into a less precise suffix unnecessarily.
+        var measurement = styles.Label(alignment, false);
+        string text = amount.Fit(value => FitsScaled(measurement, value));
+        GUIStyle? ink = null;
+        GUIStyle? shadow = null;
+        Vector2 size = default;
+        for (int fontSize = largestFontSize; fontSize >= smallestFontSize; fontSize--)
         {
+            var candidate = styles.Label(alignment, false, fontSize);
             content.text = text;
-            return (ink.CalcSize(content).x + 2f) * normalScale <= availableWidth;
+            Vector2 measured = candidate.CalcSize(content) + Vector2.one * 2f;
+            if (!FitsSize(measured)) continue;
+            ink = candidate;
+            shadow = styles.LabelShadow(alignment, fontSize);
+            size = measured;
+            break;
         }
+
+        // Very narrow custom layouts may still be smaller than the minimum
+        // readable font. Clip to the slot rather than allowing text to escape it.
+        ink ??= styles.Label(alignment, false, smallestFontSize);
+        shadow ??= styles.LabelShadow(alignment, smallestFontSize);
+        content.text = text;
+        if (size == default)
+        {
+            size = ink.CalcSize(content) + Vector2.one * 2f;
+            size.x = Mathf.Min(size.x, availableWidth);
+            size.y = Mathf.Min(size.y, availableHeight);
+        }
+
+        var target = amount.LabelBounds(rect, size);
+        Paint(shadow, Offset(target), content);
+        Paint(ink, target, content);
+
+        bool FitsScaled(GUIStyle style, string value)
+        {
+            content.text = value;
+            return style.CalcSize(content).x + 2f <= availableWidth / normalScale;
+        }
+
+        bool FitsSize(Vector2 measured) => measured.x <= availableWidth && measured.y <= availableHeight;
     }
 
     internal static void BookmarkTint(Rect rect, Color tint)
@@ -752,6 +785,8 @@ internal static class NeiSkin
     {
         private readonly GUIStyle?[,] _labels = new GUIStyle[9, 2];
         private readonly GUIStyle?[] _labelShadows = new GUIStyle[9];
+        private readonly GUIStyle?[,,] _labelsBySize = new GUIStyle?[9, 2, 14];
+        private readonly GUIStyle?[,] _labelShadowsBySize = new GUIStyle?[9, 14];
         internal readonly GUIStyle Wrapped;
         internal readonly GUIStyle WrappedShadow;
         internal readonly GUIStyle Button;
@@ -825,8 +860,21 @@ internal static class NeiSkin
             return _labels[(int)alignment, row] ??= TextStyle(alignment, muted ? OverlayMuted : OverlayInk, 13);
         }
 
+        internal GUIStyle Label(TextAnchor alignment, bool muted, int fontSize)
+        {
+            int row = muted ? 1 : 0;
+            fontSize = Mathf.Clamp(fontSize, 1, 13);
+            return _labelsBySize[(int)alignment, row, fontSize] ??= TextStyle(alignment, muted ? OverlayMuted : OverlayInk, fontSize);
+        }
+
         internal GUIStyle LabelShadow(TextAnchor alignment) =>
             _labelShadows[(int)alignment] ??= TextStyle(alignment, Shadow, 13);
+
+        internal GUIStyle LabelShadow(TextAnchor alignment, int fontSize)
+        {
+            fontSize = Mathf.Clamp(fontSize, 1, 13);
+            return _labelShadowsBySize[(int)alignment, fontSize] ??= TextStyle(alignment, Shadow, fontSize);
+        }
 
         private static GUIStyle TextStyle(TextAnchor alignment, Color color, int size, bool wrap = false)
         {
