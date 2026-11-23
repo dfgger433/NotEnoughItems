@@ -44,9 +44,9 @@ internal sealed partial class NeiWindow
         string name = Locale.currentLang?.other is { } terms && terms.TryGetValue(key, out var localized)
             ? localized : property.DisplayName.Length > 0 ? property.DisplayName : property.QualityId.Length > 0 ? property.QualityId : property.RequiredTag;
         string kind = property.IsLiquid ? L("Liquid", "流体") : L("Item", "物品");
-        NeiSkin.RecipeBar(panel.Method);
-        NeiSkin.RecipeMethodTitle(panel.MethodTitle, L($"{kind} property: {name}", $"{kind}性质：{name}"));
-        NeiSkin.RecipeBar(panel.Pages);
+        NeiSkin.RecipeBar(panel.MethodTitle);
+        NeiSkin.Label(panel.MethodTitle, L($"{kind} property: {name}", $"{kind}性质：{name}"), TextAnchor.MiddleCenter);
+        NeiSkin.RecipeBar(panel.PageTitle);
 
         var area = panel.Content;
         float cell = Mathf.Min(29f * IconScale, area.width, area.height);
@@ -55,7 +55,7 @@ internal sealed partial class NeiWindow
         int size = columns * Math.Max(1, (int)(area.height / cell));
         int pages = Math.Max(1, (count + size - 1) / size);
         var e = Event.current;
-        int delta = DrawRecipeArrows(panel.Pages, RecipePanelLayout.RowNavWidth, pages > 1, L("property result page", "性质结果页"));
+        int delta = DrawPageArrows(panel, pages > 1, property: true);
         if (pages > 1 && e.type == EventType.ScrollWheel && e.delta.y != 0 &&
             (area.Contains(e.mousePosition) || panel.Pages.Contains(e.mousePosition)))
         {
@@ -63,7 +63,7 @@ internal sealed partial class NeiWindow
             e.Use();
         }
         _propertyPage = Wrap(Math.Clamp(_propertyPage, 0, pages - 1) + delta, pages);
-        NeiSkin.Label(RecipePanelLayout.RowTitle(panel.Pages),
+        NeiSkin.Label(panel.PageTitle,
             L($"{count} matching types · {_propertyPage + 1} / {pages}", $"{count} 种匹配物品 · {_propertyPage + 1} / {pages}"), TextAnchor.MiddleCenter);
         if (count == 0)
             NeiSkin.Label(area, L("No items have this property", "没有物品含此性质"), TextAnchor.MiddleCenter, muted: true);

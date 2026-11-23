@@ -255,7 +255,7 @@ static void RecipeNavigationTooltipBounds()
     var viewport = new Rect(4, 4, 1306, 730);
     var panel = new RecipePanelLayout(new Rect(390, 8, 548, 722));
     Rect navigation = panel.NavigationBounds;
-    Check(new[] { panel.Back, panel.PreviousMethod, panel.MethodTitle, panel.NextMethod, panel.Pages }
+    Check(new[] { panel.Back, panel.Tab(0), panel.PreviousMethod, panel.MethodTitle, panel.NextMethod, panel.Pages, panel.SearchField }
         .All(control => ContainsRect(navigation, control)) && !navigation.Overlaps(panel.Content),
         "Only the top controls need to stay clear, not the entire recipe diagram.");
 
@@ -370,7 +370,8 @@ static void InspectorLayout()
             row.xMin == inner.xMin && row.xMax == inner.xMax) &&
             recipe.Method.yMax < recipe.Pages.yMin && recipe.Pages.yMax < recipe.Content.yMin,
             "Method, page controls and diagrams stay inside the frame in order.");
-        Check(ContainsRect(recipe.Header, recipe.Back) && ContainsRect(recipe.Frame, recipe.Method) &&
+        Check(ContainsRect(recipe.NavigationBounds, recipe.Back) && ContainsRect(recipe.NavigationBounds, recipe.Tab(0)) &&
+            ContainsRect(recipe.Frame, recipe.Method) &&
             !recipe.Back.Overlaps(recipe.Method) && recipe.PreviousMethod.xMin == recipe.Pages.xMin &&
             recipe.NextMethod.xMax == recipe.Pages.xMax,
             "Method switching is inside the recipe frame and shares page arrow columns.");
@@ -525,6 +526,12 @@ static void TextureLocations()
             square.X == (hover ? 43 : 29) && square.Y == (on ? 15 : 1),
             "Spawn mode uses the four square faces in the 26×26 block at (29, 1).");
     }
+    Check(ModernityFrames.Find("method_tab_selected") is { ResourcePath: "gui/original/nei_tabbed_sprites.png", X: 0, Y: 16, Width: 24, Height: 24 } &&
+        ModernityFrames.Find("method_tab") is { ResourcePath: "gui/original/nei_tabbed_sprites.png", X: 24, Y: 16, Width: 24, Height: 24 } &&
+        ModernityFrames.Find("recipe_search") is { ResourcePath: "gui/original/nei_sprites.png", X: 0, Y: 152, Width: 20, Height: 20 } &&
+        ModernityFrames.Find("inspector_background") is { ResourcePath: NeiAssets.OriginalRecipeBackground, X: 0, Y: 0, Width: 184, Height: 174 } &&
+        NeiAssets.TextureSources(NeiAssets.OriginalRecipeBackground, true).Last() == (NeiAssets.ResourceName(NeiAssets.OriginalRecipeBackground), true),
+        "Use the original NEI atlas frames and keep an embedded recipe background fallback.");
     Check(NeiAssets.ExpectedSize(NeiAssets.RecipeBackgroundTexture) == (256, 256) &&
         ModernityFrames.Find("recipe_background") is { ResourcePath: NeiAssets.RecipeBackgroundTexture, X: 0, Y: 0,
             Width: NeiAssets.RecipeBackgroundWidth, Height: NeiAssets.RecipeBackgroundHeight } &&
@@ -534,10 +541,15 @@ static void TextureLocations()
 
 static void DragReleaseOwnership()
 {
-    Check(!DragInputPolicy.CancelRelease(true, false, true), "A real native drop target at an overlapping rectangle still receives the original release.");
-    Check(DragInputPolicy.CancelRelease(true, false, false), "A preview over a NEI-only field is cancelled, not dropped into the world.");
-    Check(DragInputPolicy.CancelRelease(false, true, false), "A NEI click release must not close the radial menu.");
-    Check(!DragInputPolicy.CancelRelease(false, false, false), "A completed native click must not be mistaken for a NEI click.");
+    var release = DragInputPolicy.ReleaseOverOverlay;
+    Check(release(true, false, true) == DragInputPolicy.Release.Native,
+        "A real native drop target at an overlapping rectangle still receives the original release.");
+    Check(release(true, false, false) == DragInputPolicy.Release.CancelDrag,
+        "A preview over a NEI-only field is cancelled, not dropped into the world.");
+    Check(release(false, true, false) == DragInputPolicy.Release.OverlayClick,
+        "A NEI click must suppress native release without cancelling the MouseUp required by IMGUI.");
+    Check(release(false, false, false) == DragInputPolicy.Release.Native,
+        "A completed native click must not be mistaken for a NEI click.");
 }
 
 static void DragInventoryClose()
@@ -668,7 +680,7 @@ static void EmbeddedGuiTextures()
     Span<byte> header = stackalloc byte[24];
     foreach (string path in new[] { NeiAssets.Modernity("widgets.png"), NeiAssets.Modernity("nei_tabbed_sprites.png"),
         NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png"), "gui/controls/text_field.png", NeiAssets.DropDownAtlas,
-        NeiAssets.RecipeBackgroundTexture, NeiAssets.CheckboxAtlas })
+        NeiAssets.RecipeBackgroundTexture, NeiAssets.OriginalRecipeBackground, NeiAssets.CheckboxAtlas })
     {
         using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
         Check(png != null, "Missing namespaced resource: " + path);

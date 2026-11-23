@@ -2,10 +2,13 @@ namespace NotEnoughItems;
 
 internal static class DragInputPolicy
 {
-    // Called only on an interaction release over NEI. A real drop target keeps
-    // the original game path; NEI must never synthesize a world drop.
-    internal static bool CancelRelease(bool dragging, bool overlayOwnsPointer, bool nativeDropTarget) =>
-        dragging ? !nativeDropTarget : overlayOwnsPointer;
+    internal enum Release { Native, OverlayClick, CancelDrag }
+
+    // A real drop keeps the original path. A NEI click only suppresses the game
+    // handler; unlike cancelling a live drag it must leave IMGUI input active.
+    internal static Release ReleaseOverOverlay(bool dragging, bool overlayOwnsPointer, bool nativeDropTarget) =>
+        dragging ? (nativeDropTarget ? Release.Native : Release.CancelDrag) :
+        overlayOwnsPointer ? Release.OverlayClick : Release.Native;
 
     internal static bool CancelOnClose(bool closingWithDrag, bool stillOpen) => closingWithDrag && !stillOpen;
 

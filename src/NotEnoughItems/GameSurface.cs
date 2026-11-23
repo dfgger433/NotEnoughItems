@@ -445,10 +445,10 @@ internal sealed class GameSurface
         // Real inventory slots are still valid where the layout overlaps. Over a
         // NEI-only control, do not call native release: it can fall back to dropping.
         bool dragging = __instance.dragItem;
-        if (!DragInputPolicy.CancelRelease(dragging, plugin.OwnsPointer,
-                dragging && HasNativeDropTarget(__instance, uiCasts))) return true;
-        plugin.CancelNativeDrag(__instance);
-        return false;
+        var release = DragInputPolicy.ReleaseOverOverlay(dragging, plugin.OwnsPointer,
+            dragging && HasNativeDropTarget(__instance, uiCasts));
+        if (release == DragInputPolicy.Release.CancelDrag) plugin.CancelNativeDrag(__instance);
+        return release == DragInputPolicy.Release.Native;
     }
 
     private static bool HasNativeDropTarget(PlayerCamera camera, List<RaycastResult> hits)

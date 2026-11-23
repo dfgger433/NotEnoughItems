@@ -97,8 +97,8 @@ public sealed class Plugin : BaseUnityPlugin
         {
             if (!OverlayActive) return false;
             var point = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
-            return _window.OptionsHit(point) || _window.CandidatePopupHit(point) || _window.ItemTooltipPopupHit(point) ||
-                _window.Hit(point) && (_active != GameSurface.Kind.Terminal || !_bounds.Contains(point));
+            return _window.OptionsHit(point) || _window.RecipeNavigationHit(point) || _window.CandidatePopupHit(point) ||
+                _window.ItemTooltipPopupHit(point) || _window.Hit(point) && (_active != GameSurface.Kind.Terminal || !_bounds.Contains(point));
         }
     }
 
@@ -536,8 +536,8 @@ public sealed class Plugin : BaseUnityPlugin
     {
         if (_active == GameSurface.Kind.Terminal || !Input.GetKeyDown(KeyBinds.GetBind("iteminteract"))) return false;
         var pointer = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
-        return !_window.OptionsHit(pointer) && !_window.CandidatePopupHit(pointer) && !_window.ItemTooltipPopupHit(pointer) &&
-            _surface.HoveredItem(_active, forDrag: true) != null;
+        return !_window.OptionsHit(pointer) && !_window.RecipeNavigationHit(pointer) && !_window.CandidatePopupHit(pointer) &&
+            !_window.ItemTooltipPopupHit(pointer) && _surface.HoveredItem(_active, forDrag: true) != null;
     }
 
     private static bool Pressed(ConfigEntry<KeyCode> key) => key.Value != KeyCode.None && Input.GetKeyDown(key.Value);

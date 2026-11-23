@@ -927,7 +927,7 @@ namespace NotEnoughItems
             var input = new RecipeIngredient(string.Empty, ignoredItemId: "steak", displayName: meat, requiredTag: "meat");
             // Heater.OnCollisionEnter2D, cooker=true: replace a meat-tagged item other than steak; retain 30% of input condition.
             categories[category] = new RecipeCategory(category, chinese ? "烹饪" : "Cooking", "heater.cooker", source: NativeSource, icon: steak.Icon);
-            _recipes.Add(new Recipe("native.process.cook-meat", category, new[] { input }, new[] { new RecipeOutput("steak") },
+            _recipes.Add(new Recipe(RecipeMethods.CookingRecipeId, category, new[] { input }, new[] { new RecipeOutput("steak") },
                 machineId: "heater.cooker", name: steak.DisplayName,
                 description: chinese ? "将生肉贴近烹饪加热器。制成的牛排保留原料 30% 的耐久。"
                     : "Place raw meat against a cooking heater. The steak retains 30% of the input's condition.", source: NativeSource));
