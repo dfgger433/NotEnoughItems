@@ -252,7 +252,7 @@ internal sealed partial class NeiWindow
     internal bool NativeTooltipHit(Vector2 pointer)
     {
         pointer /= Mathf.Max(.01f, _scale);
-        if (ItemTooltipHit(pointer)) return true;
+        if (ItemTooltipVisibleHit(pointer)) return true;
         if (_plugin.IsCrafting) return (ShowLeft && _left.Contains(pointer)) || SupportedItemsHit(pointer);
         return LayoutEditHit(pointer) || ChainTipHit(pointer) || SupportedItemsHit(pointer) || _leftTools.Hit(pointer, !HideBookmarksForDrag) || NativeTooltip.Hit(pointer,
             (ModalOpen, ActiveInspectorBounds), (ShowLeft, _left), (ShowRight, _right), (ShowRight, _catalogControls),

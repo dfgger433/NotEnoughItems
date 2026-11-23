@@ -15,7 +15,9 @@ internal sealed partial class NeiWindow
         "Show item, liquid and entry IDs in NEI tooltips. Hold Shift and left-click an ID or mod name to copy it.");
 
     private bool CanUseTooltip => !_layoutEditing && !_plugin.NativePointerActive;
-    private bool CanCopyTooltip => SelectionShiftHeld && CanUseTooltip;
+    private bool CanCopyTooltip => TooltipCanInteract(SelectionShiftHeld, CanUseTooltip);
+
+    internal static bool TooltipCanInteract(bool shiftHeld, bool available) => shiftHeld && available;
 
     private void ClearItemTooltipInput()
     {
@@ -23,7 +25,9 @@ internal sealed partial class NeiWindow
         _supportedCopyId = null;
     }
 
-    private bool ItemTooltipHit(Vector2 pointer) => _pinnedIdTip is { } tip && tip.Box.Contains(pointer) && CanUseTooltip;
+    private bool ItemTooltipVisibleHit(Vector2 pointer) => _pinnedIdTip is { } tip && tip.Box.Contains(pointer) && CanUseTooltip;
+
+    private bool ItemTooltipHit(Vector2 pointer) => ItemTooltipVisibleHit(pointer) && TooltipCanInteract(SelectionShiftHeld, CanUseTooltip);
 
     // Consume clicks over tooltip rows before slots and popups underneath receive them.
     private void HandleItemTooltipInput(Event e)
@@ -65,9 +69,10 @@ internal sealed partial class NeiWindow
             Status(L("Copied: ", "已复制：") + copied);
             e.Use();
         }
-        else if ((overPinned || overSupported) && e.type is EventType.MouseDown or EventType.MouseUp or EventType.MouseDrag or EventType.ScrollWheel)
+        else if ((overPinned || overSupported) && SelectionShiftHeld &&
+            e.type is (EventType.MouseDown or EventType.MouseUp or EventType.MouseDrag or EventType.ScrollWheel))
             e.Use();
-        else if (e.type is EventType.MouseDown or EventType.ScrollWheel)
+        else if (!overPinned && e.type is (EventType.MouseDown or EventType.ScrollWheel))
             _pinnedIdTip = null;
     }
 
