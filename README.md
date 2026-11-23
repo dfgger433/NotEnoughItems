@@ -17,13 +17,13 @@ pwsh -File ./scripts/Build.ps1 -Package
 pwsh -File ./scripts/Install.ps1
 
 # 预览完整部署；不编译、不写文件
-pwsh -File ./scripts/Deploy.ps1 -WhatIf
+pwsh -File ./scripts/Install.ps1 -Build -WhatIf
 
 # 退出游戏后，构建、测试并安装
-pwsh -File ./scripts/Deploy.ps1
+pwsh -File ./scripts/Install.ps1 -Build
 ```
 
-[Build.ps1](<scripts/Build.ps1>)、[Install.ps1](<scripts/Install.ps1>) 和 [Deploy.ps1](<scripts/Deploy.ps1>) 默认将项目目录上两级作为游戏根；构建产物和可选 ZIP 位于忽略的 `dist/`，可用 `-GameRoot 'D:\路径\Casualties Unknown'`、`-CUCoreLibPath 'D:\路径\CUCoreLib.dll'`、`-Configuration Debug` 和 `-SkipTests` 覆盖默认值。Build 只编译并测试，不安装；Install 安装已有产物；Deploy 顺序执行构建、测试和安装。安装脚本不启动或关闭游戏，检测到目标游戏正在运行时停止；部署还会比对 DLL 的 SHA-256。安装只补齐资源，不覆盖已有换肤文件，旧 `Textures` 背景也只在目标资源缺失时迁移。安装目录为游戏根下的 `BepInEx/plugins/NotEnoughItems/`。
+[Build.ps1](<scripts/Build.ps1>) 和 [Install.ps1](<scripts/Install.ps1>) 默认将项目目录上两级作为游戏根；构建产物和可选 ZIP 位于忽略的 `dist/`。可用 `-GameRoot 'D:\路径\Casualties Unknown'`、`-CUCoreLibPath 'D:\路径\CUCoreLib.dll'`、`-Configuration Debug` 和 `-SkipTests` 覆盖默认值。Build 编译并运行回归测试，不安装；Install 默认安装已有产物，附加 `-Build` 会先构建、测试再安装。安装脚本不启动或关闭游戏，检测到目标游戏正在运行时停止，并比对 DLL 的 SHA-256。安装只补齐资源，不覆盖已有换肤文件，旧 `Textures` 背景也只在目标资源缺失时迁移。可用 `Install.ps1 -Build -WhatIf` 预览完整操作；安装目录为游戏根下的 `BepInEx/plugins/NotEnoughItems/`。
 
 书签分组的交互以项目随附的 [GTNH 中文维基](https://gtnh.huijiwiki.com/wiki/Not_Enough_Items#分组与合成链) 和 [GTNH NEI 2.9.0 的书签面板](https://github.com/GTNewHorizons/NotEnoughItems/blob/8e1541eab1935a2a261afcabaeb822089a94d86b/src/main/java/codechicken/nei/BookmarkPanel.java) 为参照。书签仍使用本插件的 BepInEx 配置；不直接导入 Minecraft 的物品 ID 或 NBT。
 
@@ -118,9 +118,11 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
 ## 验证与范围
 
 ```powershell
+# Build and run all regression checks
 pwsh -File ./scripts/Build.ps1
-# Or, after a build, run the manual test harness directly:
-dotnet run --project tests/NotEnoughItems.Tests/NotEnoughItems.Tests.csproj -c Release --no-build
+
+# Or build, test, and install in one workflow after closing the game
+pwsh -File ./scripts/Install.ps1 -Build
 ```
 
 实机检查：分别开启背包和终端，确认左书签、右目录、搜索、正反查、外侧点击不改变原版物品；再打开一个随身容器、缩窄窗口，并确认关闭宿主时两边收起。悬停篝火配方中的「易燃」原料，检查候选轮播；按住 `Shift` 移入候选格查配方，松开 `Shift` 后应恢复普通悬浮。用篝火样板打开合成树，悬停物品查看描述，并分别在背包有、无首选材料时查看配平结果。终端默认 `F7`；若本机的 Combined Cheat Mod 同样绑定 `F7`，可重绑其中一个再验收。
