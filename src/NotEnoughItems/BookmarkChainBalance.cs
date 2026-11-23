@@ -144,6 +144,7 @@ internal static class BookmarkChainBalance
     /// <param name="catalog">Catalog used to normalize item IDs and resolve substitutions.</param>
     /// <param name="entries">The entries belonging to this group only, in bookmark order.</param>
     /// <param name="available">Optional snapshot of carried quantities.</param>
+    /// <param name="favoriteMaterials">Optional preferred material IDs.</param>
     /// <returns>Net bill and per-entry recipe details.</returns>
     public static BookmarkChainBalanceResult Calculate(Catalog catalog, IEnumerable<BookmarkChainBalanceEntry> entries,
         IReadOnlyDictionary<string, int>? available = null, IReadOnlyCollection<string>? favoriteMaterials = null) =>

@@ -6,10 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <NuGetAudit>false</NuGetAudit>
-    <GameRoot Condition="'$(GameRoot)' == ''">$(MSBuildProjectDirectory)/../../..</GameRoot>
+    <NeiSourceDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'src', 'NotEnoughItems'))</NeiSourceDir>
+    <GameRoot Condition="'$(GameRoot)' == ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '..', '..', '..', '..'))</GameRoot>
     <ManagedDir>$(GameRoot)/CasualtiesUnknown_Data/Managed</ManagedDir>
     <CUCoreLibPath Condition="'$(CUCoreLibPath)' == ''">$(GameRoot)/BepInEx/plugins/CUCoreLib.dll</CUCoreLibPath>
-    <NeiAssemblyPath Condition="'$(NeiAssemblyPath)' == ''">$(MSBuildProjectDirectory)/../bin/$(Configuration)/netstandard2.1/NotEnoughItems.dll</NeiAssemblyPath>
+    <NeiAssemblyPath Condition="'$(NeiAssemblyPath)' == ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '..', '..', 'dist', 'NotEnoughItems.dll'))</NeiAssemblyPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(SkipRecipeTests)' == 'true'">
     <!-- The two configurations have different runtime dependencies and must not share a .deps.json. -->
@@ -17,9 +18,9 @@
     <IntermediateOutputPath>obj/$(Configuration)/core-only/</IntermediateOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs;BookmarkParityTests.cs;PinyinSearchTests.cs;../BookmarkBoardPaging.cs;../BookmarkShortcut.cs;../BookmarkHelp.cs;../PinyinSearch.cs;../PanelLayoutDrag.cs;../SlotQuantity.cs" />
-    <Compile Include="RecipeListLayoutTests.cs;HistoryCatalogTests.cs;../RecipeListLayout.cs;../Screens/RecipeGridLayout.cs;../Screens/RecipePageLayout.cs;../TooltipPlacement.cs" />
-    <Compile Include="../NeiSearch.cs;../NeiLayout.cs;../BookmarkBook.cs;../NeiAssets.cs;../ModernityFrames.cs;../DragInputPolicy.cs;../CheatPermission.cs;../TabFocusPolicy.cs" />
+    <Compile Include="Program.cs;BookmarkParityTests.cs;PinyinSearchTests.cs;$(NeiSourceDir)BookmarkBoardPaging.cs;$(NeiSourceDir)BookmarkShortcut.cs;$(NeiSourceDir)BookmarkHelp.cs;$(NeiSourceDir)PinyinSearch.cs;$(NeiSourceDir)PanelLayoutDrag.cs;$(NeiSourceDir)SlotQuantity.cs" />
+    <Compile Include="RecipeListLayoutTests.cs;HistoryCatalogTests.cs;$(NeiSourceDir)RecipeListLayout.cs;$(NeiSourceDir)Screens/RecipeGridLayout.cs;$(NeiSourceDir)Screens/RecipePageLayout.cs;$(NeiSourceDir)TooltipPlacement.cs" />
+    <Compile Include="$(NeiSourceDir)NeiSearch.cs;$(NeiSourceDir)NeiLayout.cs;$(NeiSourceDir)BookmarkBook.cs;$(NeiSourceDir)NeiAssets.cs;$(NeiSourceDir)ModernityFrames.cs;$(NeiSourceDir)DragInputPolicy.cs;$(NeiSourceDir)CheatPermission.cs;$(NeiSourceDir)TabFocusPolicy.cs" />
     <Reference Include="UnityEngine" HintPath="$(ManagedDir)/UnityEngine.dll" />
     <Reference Include="UnityEngine.CoreModule" HintPath="$(ManagedDir)/UnityEngine.CoreModule.dll" />
   </ItemGroup>
@@ -34,14 +35,14 @@
     <Reference Include="UnityEngine.IMGUIModule" HintPath="$(ManagedDir)/UnityEngine.IMGUIModule.dll" />
     <Reference Include="Unity.TextMeshPro" HintPath="$(ManagedDir)/Unity.TextMeshPro.dll" />
     <Compile Include="TooltipSmoke.cs;SurfaceSmoke.cs;CatalogQuantityTests.cs" />
-        <None Include="$(GameRoot)/BepInEx/plugins/JustUnknownCharacters.dll" Link="JustUnknownCharacters.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(GameRoot)/BepInEx/plugins/JustUnknownCharacters.dll')" />
-    <Compile Include="RecipeMethodsTests.cs;../RecipeMethods.cs;CatalogListingTests.cs;../CatalogListing.cs" />
+    <None Include="$(GameRoot)/BepInEx/plugins/JustUnknownCharacters.dll" Link="JustUnknownCharacters.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(GameRoot)/BepInEx/plugins/JustUnknownCharacters.dll')" />
+    <Compile Include="RecipeMethodsTests.cs;$(NeiSourceDir)RecipeMethods.cs;CatalogListingTests.cs;$(NeiSourceDir)CatalogListing.cs" />
   </ItemGroup>
   <PropertyGroup Condition="'$(SkipRecipeTests)' != 'true'">
     <DefineConstants>$(DefineConstants);RECIPE_TESTS</DefineConstants>
   </PropertyGroup>
   <Target Name="CheckTestReferences" BeforeTargets="ResolveAssemblyReferences">
     <Error Condition="!Exists('$(ManagedDir)/UnityEngine.CoreModule.dll')" Text="Casualties: Unknown assemblies not found. Set -p:GameRoot=..." />
-    <Error Condition="'$(SkipRecipeTests)' != 'true' and !Exists('$(NeiAssemblyPath)')" Text="Build NotEnoughItems in the same configuration first, set -p:NeiAssemblyPath=..., or pass -p:SkipRecipeTests=true." />
+    <Error Condition="'$(SkipRecipeTests)' != 'true' and !Exists('$(NeiAssemblyPath)')" Text="Build NotEnoughItems into dist first, set -p:NeiAssemblyPath=..., or pass -p:SkipRecipeTests=true." />
   </Target>
 </Project>

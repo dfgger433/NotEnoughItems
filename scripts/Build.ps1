@@ -4,8 +4,9 @@
 .SYNOPSIS
 Build the plugin without installing it. Run regression tests by default.
 .DESCRIPTION
-Use -Package to create a versioned ZIP in bin/<Configuration> and -SkipTests to omit tests.
-The installed .NET SDK and targeting packs are used offline; no dependencies are downloaded.
+Build artifacts go to the repository's dist directory. Use -Package to create a versioned ZIP
+there and -SkipTests to omit tests. The installed SDK and targeting packs are used offline;
+no dependencies are downloaded.
 #>
 [CmdletBinding()]
 param(
@@ -19,14 +20,13 @@ param(
 . (Join-Path $PSScriptRoot 'Common.ps1')
 
 function New-PluginPackage {
-    param([string]$DllPath, [string]$Version, [string]$Config)
+    param([hashtable]$Artifact, [string]$Version)
 
-    $packageDir = (Get-RequiredItem (Join-Path $script:ProjectRoot "bin/$Config") 'Package output' -Directory).FullName
+    $packageDir = $script:DistDirectory
     $packagePath = Join-Path $packageDir "NotEnoughItems-$Version.zip"
-    $entries = [ordered]@{ ([IO.Path]::GetFileName($DllPath)) = $DllPath }
-    foreach ($file in (Get-ProjectAssets | Sort-Object FullName)) {
-        $relative = [IO.Path]::GetRelativePath($script:AssetRoot, $file.FullName).Replace('\', '/')
-        $entries["assets/notenoughitems/$relative"] = $file.FullName
+    $entries = [ordered]@{ ($Artifact.Dll.Name) = $Artifact.Dll.FullName }
+    foreach ($file in $Artifact.Assets) {
+        $entries["$script:AssetRelativePath/$($file.RelativePath)"] = $file.Source
     }
     foreach ($name in @('README.md', 'CHANGELOG.md')) {
         $path = Join-Path $script:ProjectRoot $name
@@ -55,13 +55,18 @@ function New-PluginPackage {
 
 $game = Get-GameSettings $GameRoot $CUCoreLibPath
 $buildArguments = Get-OfflineBuildArguments $game
+Assert-SafeDistPath
+$null = Get-RequiredItem $script:ProjectFile 'Plugin project'
+if (-not $SkipTests) { $null = Get-RequiredItem $script:TestProjectFile 'Test project' }
+$null = Get-ProjectAssets
 Write-Host "Game root: $($game.Root)"
 Invoke-DotNetCommand (@('build', $script:ProjectFile, '-c', $Configuration) + $buildArguments)
 $build = Get-ProjectBuildInfo $Configuration $buildArguments
-Write-Host "Plugin DLL: $($build.TargetPath)"
+$artifact = Get-BuildArtifact
+Write-Host "Plugin DLL: $($artifact.Dll.FullName)"
 
 if (-not $SkipTests) {
-    $testArguments = $buildArguments + ('-p:NeiAssemblyPath=' + (ConvertTo-MSBuildPropertyValue $build.TargetPath))
+    $testArguments = $buildArguments + ('-p:NeiAssemblyPath=' + (ConvertTo-MSBuildPropertyValue $artifact.Dll.FullName))
     Invoke-DotNetCommand (@('build', $script:TestProjectFile, '-c', $Configuration) + $testArguments)
     Invoke-DotNetCommand @('run', '--project', $script:TestProjectFile, '-c', $Configuration, '--no-build')
 } else {
@@ -69,5 +74,5 @@ if (-not $SkipTests) {
 }
 
 if ($Package) {
-    New-PluginPackage $build.TargetPath $build.Version $Configuration
+    New-PluginPackage $artifact $build.Version
 }

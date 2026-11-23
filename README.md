@@ -1,26 +1,29 @@
 # Not Enough Items — Casualties: Unknown
 
-NEI 的本地 BepInEx 移植版。书签与物品目录在原版背包和 Unknown Inventory Terminal 中显示；打开原版制作菜单时只保留左侧书签。打开原版容器、交易、物品自定义、液体转移或医疗面板时隐藏。原版背包和终端的右侧物品目录默认都开启，可在 NEI 扳手设置的「显示」页分别关闭；升级时保留已保存的开关。背包和终端共用以 2560×1440 为基准的默认布局：横纵坐标分别随窗口宽高换算；扳手 → 布局可开启「拖动面板调整布局」，拖动各栏标题移动整栏，拖动边缘把手调整宽度，完成后点「完成」；宽度、位置、上下偏移和物品图标大小都会保存。背包侧栏默认透明，配方查询使用有底色的独立面板。默认爱心使用 [GTNH NEI 原版图集](<assets/notenoughitems/textures/gui/original/SOURCES.md>)，其他已有按钮、书签和扳手继续使用 [Modernity-GTNH-UI 原贴图](<assets/notenoughitems/textures/gui/modernity/SOURCES.md>)，不再读取自绘控件图集。
+NEI 的本地 BepInEx 移植版。书签与物品目录在原版背包和 Unknown Inventory Terminal 中显示；打开原版制作菜单时只保留左侧书签。打开原版容器、交易、物品自定义、液体转移或医疗面板时隐藏。原版背包和终端的右侧物品目录默认都开启，可在 NEI 扳手设置的「显示」页分别关闭；升级时保留已保存的开关。背包和终端共用以 2560×1440 为基准的默认布局：横纵坐标分别随窗口宽高换算；扳手 → 布局可开启「拖动面板调整布局」，拖动各栏标题移动整栏，拖动边缘把手调整宽度，完成后点「完成」；宽度、位置、上下偏移和物品图标大小都会保存。背包侧栏默认透明，配方查询使用有底色的独立面板。默认爱心使用 [GTNH NEI 原版图集](<Assets/NotEnoughItems/textures/gui/original/SOURCES.md>)，其他已有按钮、书签和扳手继续使用 [Modernity-GTNH-UI 原贴图](<Assets/NotEnoughItems/textures/gui/modernity/SOURCES.md>)，不再读取自绘控件图集。
 
 ## 编译、打包和部署
 
 需要 PowerShell 7、.NET SDK 8 或更高、Mono 版游戏、BepInEx 5 和 CUCoreLib 1.1+。Unknown Inventory Terminal 0.4.4+ 为可选依赖。
 
 ```powershell
-# 编译并运行回归检查，不写入游戏安装目录
+# 编译到 dist 并运行回归检查，不写入游戏安装目录
 pwsh -File ./scripts/Build.ps1
 
 # 同时构建本地使用 ZIP（包含附许可的 Modernity 原贴图）
 pwsh -File ./scripts/Build.ps1 -Package
 
-# 预览部署；不编译、不写文件
+# 从 dist 安装先前构建的产物（保留已有换肤文件）
+pwsh -File ./scripts/Install.ps1
+
+# 预览完整部署；不编译、不写文件
 pwsh -File ./scripts/Deploy.ps1 -WhatIf
 
 # 退出游戏后，构建、测试并安装
 pwsh -File ./scripts/Deploy.ps1
 ```
 
-[编译脚本](<scripts/Build.ps1>)和[部署脚本](<scripts/Deploy.ps1>)默认使用本项目上两级目录作为游戏根。可用 `-GameRoot 'D:\路径\Casualties Unknown'`、`-CUCoreLibPath 'D:\路径\CUCoreLib.dll'`、`-Configuration Debug` 和 `-SkipTests` 覆盖默认值。部署脚本不启动或关闭游戏；检测到目标游戏正在运行时停止，成功复制后还会比对 DLL 的 SHA-256。部署目录为游戏根下的 `BepInEx/plugins/NotEnoughItems/`。
+[Build.ps1](<scripts/Build.ps1>)、[Install.ps1](<scripts/Install.ps1>) 和 [Deploy.ps1](<scripts/Deploy.ps1>) 默认将项目目录上两级作为游戏根；构建产物和可选 ZIP 位于忽略的 `dist/`，可用 `-GameRoot 'D:\路径\Casualties Unknown'`、`-CUCoreLibPath 'D:\路径\CUCoreLib.dll'`、`-Configuration Debug` 和 `-SkipTests` 覆盖默认值。Build 只编译并测试，不安装；Install 安装已有产物；Deploy 顺序执行构建、测试和安装。安装脚本不启动或关闭游戏，检测到目标游戏正在运行时停止；部署还会比对 DLL 的 SHA-256。安装只补齐资源，不覆盖已有换肤文件，旧 `Textures` 背景也只在目标资源缺失时迁移。安装目录为游戏根下的 `BepInEx/plugins/NotEnoughItems/`。
 
 书签分组的交互以项目随附的 [GTNH 中文维基](https://gtnh.huijiwiki.com/wiki/Not_Enough_Items#分组与合成链) 和 [GTNH NEI 2.9.0 的书签面板](https://github.com/GTNewHorizons/NotEnoughItems/blob/8e1541eab1935a2a261afcabaeb822089a94d86b/src/main/java/codechicken/nei/BookmarkPanel.java) 为参照。书签仍使用本插件的 BepInEx 配置；不直接导入 Minecraft 的物品 ID 或 NBT。
 
@@ -51,14 +54,14 @@ Together 联机中，房主须启用服务器作弊；客户端同时需要服�
 
 ## 替换界面资源
 
-本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。布局代码仍在 [Screens](<Screens>)，物品图标仍由游戏或内容 Mod 提供。
+本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。布局代码仍在 [Screens](<src/NotEnoughItems/Screens>)，物品图标仍由游戏或内容 Mod 提供。
 
-- [Modernity 原贴图](<assets/notenoughitems/textures/gui/modernity>)保持上游 PNG 原样，用 [ModernityFrames.cs](<ModernityFrames.cs>) 中的坐标读取子区域。主材质包没有 NEI 贴图，使用它在 README 中链接的官方 UI 包同分支。此素材随本地包保留[来源和署名](<assets/notenoughitems/textures/gui/modernity/SOURCES.md>)、[原始许可](<assets/notenoughitems/textures/gui/modernity/LICENSE.txt>)；请按许可处理，不视为可用于商业分发。
-- [搜索框与悬浮提示框贴图](<assets/notenoughitems/textures/gui/controls/text_field.png>)是单独的资源。替换时保留 128×128 画布：搜索框使用从顶部算起的第 13–24 行作为常态，第 1–12 行作为聚焦态；悬浮提示框（包括按钮提示）使用第 1–12 行（`0,0–128,12`）并按边缘九宫切片拉伸。数量框和书签页名不使用这张图。
-- [语言下拉栏贴图](<assets/notenoughitems/textures/gui/controls/drop_down_list.png>)使用提供的 256×256 图集。替换时保留画布和原有帧位置。
-- [ID 与刷取模式开关贴图](<assets/notenoughitems/textures/gui/controls/checkbox.png>)使用提供的 64×64 图集。四帧均为 22×12：左列为常态，右列（`x=22`）为悬浮态；关在 `y=28`，开在 `y=40`。
-- 配方背景内的合成方式标题与切换按钮使用[选中贴图](<assets/notenoughitems/textures/gui/controls/vertical_buttons_bg.png>)（48×46）和[未选中贴图](<assets/notenoughitems/textures/gui/controls/vertical_buttons_bg_candidate.png>)（48×43）的视觉样式，替换时保留原尺寸。
-- [屏幕背景贴图](<assets/notenoughitems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。[recipebg.png](<assets/notenoughitems/textures/gui/modernity/recipebg.png>)用于配方、选项和合成树独立面板，按 184×174 源区域及 9 px 九宫格边框绘制；不会拉伸外框。[图集来源描述](<assets/notenoughitems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
+- [Modernity 原贴图](<Assets/NotEnoughItems/textures/gui/modernity>)保持上游 PNG 原样，用 [ModernityFrames.cs](<src/NotEnoughItems/ModernityFrames.cs>) 中的坐标读取子区域。主材质包没有 NEI 贴图，使用它在 README 中链接的官方 UI 包同分支。此素材随本地包保留[来源和署名](<Assets/NotEnoughItems/textures/gui/modernity/SOURCES.md>)、[原始许可](<Assets/NotEnoughItems/textures/gui/modernity/LICENSE.txt>)；请按许可处理，不视为可用于商业分发。
+- [搜索框与悬浮提示框贴图](<Assets/NotEnoughItems/textures/gui/controls/text_field.png>)是单独的资源。替换时保留 128×128 画布：搜索框使用从顶部算起的第 13–24 行作为常态，第 1–12 行作为聚焦态；悬浮提示框（包括按钮提示）使用第 1–12 行（`0,0–128,12`）并按边缘九宫切片拉伸。数量框和书签页名不使用这张图。
+- [语言下拉栏贴图](<Assets/NotEnoughItems/textures/gui/controls/drop_down_list.png>)使用提供的 256×256 图集。替换时保留画布和原有帧位置。
+- [ID 与刷取模式开关贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用提供的 64×64 图集。四帧均为 22×12：左列为常态，右列（`x=22`）为悬浮态；关在 `y=28`，开在 `y=40`。
+- 配方背景内的合成方式标题与切换按钮使用[选中贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>)（48×46）和[未选中贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)（48×43）的视觉样式，替换时保留原尺寸。
+- [屏幕背景贴图](<Assets/NotEnoughItems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。[recipebg.png](<Assets/NotEnoughItems/textures/gui/modernity/recipebg.png>)用于配方、选项和合成树独立面板，按 184×174 源区域及 9 px 九宫格边框绘制；不会拉伸外框。[图集来源描述](<Assets/NotEnoughItems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
 
 换肤时在 DLL 旁创建 `resourcepacks/active/`，在其中按相同的 `assets/notenoughitems/textures/gui/…` 结构放置 PNG，保留图集尺寸和坐标。重启后先读取启用的材质包；缺失或尺寸不兼容的 NEI 图集回退到嵌入的原版，其余资源保留原有覆盖规则。爱心覆盖路径是 `gui/original/nei_sprites.png`。部署只补缺失资源；旧 `Textures` 背景仍兼容，但旧自绘控制和图标不再读取。悬停 NEI 目录、书签或配方中的物品格会显示其名称、描述及可用的附加信息。鼠标在可见 NEI 面板内时不重复显示原版悬浮框；移到原版物品上仍使用游戏原版提示。
 
@@ -78,7 +81,7 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
     machineId: "example:press_device", name: "Press a plate", source: owner));
 ```
 
-`ReplaceSource` 与 `ClearSource` 分别替换／清除同一来源的类别和配方。请为类别、配方及虚拟物品使用自己的前缀，避免与游戏或其他模组冲突。完整类型见 [Catalog.cs](<Catalog.cs>)。查询可从 `Catalog.Shared` 获取按产物、用途及分类的索引。
+`ReplaceSource` 与 `ClearSource` 分别替换／清除同一来源的类别和配方。请为类别、配方及虚拟物品使用自己的前缀，避免与游戏或其他模组冲突。完整类型见 [Catalog.cs](<src/NotEnoughItems/Catalog.cs>)。查询可从 `Catalog.Shared` 获取按产物、用途及分类的索引。
 
 ## 1.2.9 悬浮框层级
 
@@ -115,8 +118,9 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
 ## 验证与范围
 
 ```powershell
-dotnet build -c Release -warnaserror
-dotnet run --project tests/Nei.Tests.csproj -c Release
+pwsh -File ./scripts/Build.ps1
+# Or, after a build, run the manual test harness directly:
+dotnet run --project tests/NotEnoughItems.Tests/NotEnoughItems.Tests.csproj -c Release --no-build
 ```
 
 实机检查：分别开启背包和终端，确认左书签、右目录、搜索、正反查、外侧点击不改变原版物品；再打开一个随身容器、缩窄窗口，并确认关闭宿主时两边收起。悬停篝火配方中的「易燃」原料，检查候选轮播；按住 `Shift` 移入候选格查配方，松开 `Shift` 后应恢复普通悬浮。用篝火样板打开合成树，悬停物品查看描述，并分别在背包有、无首选材料时查看配平结果。终端默认 `F7`；若本机的 Combined Cheat Mod 同样绑定 `F7`，可重绑其中一个再验收。

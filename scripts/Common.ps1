@@ -5,20 +5,122 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
 $script:ProjectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).ProviderPath
-$script:ProjectFile = Join-Path $script:ProjectRoot 'NotEnoughItems.csproj'
-$script:TestProjectFile = Join-Path $script:ProjectRoot 'tests/Nei.Tests.csproj'
-$script:AssetRoot = Join-Path $script:ProjectRoot 'assets/notenoughitems'
+$script:ProjectFile = Join-Path $script:ProjectRoot 'src/NotEnoughItems/NotEnoughItems.csproj'
+$script:TestProjectFile = Join-Path $script:ProjectRoot 'tests/NotEnoughItems.Tests/NotEnoughItems.Tests.csproj'
+$script:DistDirectory = Join-Path $script:ProjectRoot 'dist'
+$script:ArtifactDll = Join-Path $script:DistDirectory 'NotEnoughItems.dll'
+# The source directory's spelling may change, but the runtime path is lowercase.
+$script:AssetRelativePath = 'assets/notenoughitems'
+$script:LegacyBackgrounds = @{
+    'textures/gui/backgrounds/bookmarks.png' = 'Textures/background-bookmarks.png'
+    'textures/gui/backgrounds/catalog.png' = 'Textures/background-catalog.png'
+    'textures/gui/backgrounds/options.png' = 'Textures/background-options.png'
+    'textures/gui/backgrounds/recipe.png' = 'Textures/background-recipe.png'
+    'textures/gui/backgrounds/default.png' = 'Textures/background.png'
+}
 
 function Get-RequiredItem {
     param([string]$Path, [string]$Label, [switch]$Directory)
 
-    $item = Get-Item -LiteralPath $Path -ErrorAction SilentlyContinue
+    $item = Get-PathItem $Path
     if ($null -eq $item -or $item.PSProvider.Name -ne 'FileSystem' -or
         $item.PSIsContainer -ne $Directory.IsPresent) {
         $type = if ($Directory) { 'directory' } else { 'file' }
         throw "$Label $type not found or inaccessible: '$Path'."
     }
     return $item
+}
+
+function Get-PathItem {
+    param([string]$Path)
+
+    # Only absence is acceptable here; access errors are not evidence of absence.
+    try { Get-Item -LiteralPath $Path -Force -ErrorAction Stop }
+    catch [System.Management.Automation.ItemNotFoundException] { $null }
+}
+
+function Get-PhysicalPath {
+    param([string]$Path)
+
+    # Resolve directory junctions and symlinked files anywhere in an existing path.
+    $root = [IO.Path]::GetPathRoot($Path)
+    $physicalPath = $root
+    foreach ($segment in ($Path.Substring($root.Length) -split '[\\/]')) {
+        if (-not $segment) { continue }
+        $item = Get-Item -LiteralPath (Join-Path $physicalPath $segment) -Force
+        $physicalPath = $item.FullName
+        if ($null -ne $item.PSObject.Methods['ResolveLinkTarget']) {
+            $target = $item.ResolveLinkTarget($true)
+            if ($null -ne $target) { $physicalPath = $target.FullName }
+        } elseif ($item.LinkType -in @('Junction', 'SymbolicLink')) {
+            # FileSystemInfo.ResolveLinkTarget was added after PowerShell 7.0.
+            $target = [string](@($item.Target)[0])
+            if (-not [IO.Path]::IsPathFullyQualified($target)) {
+                $target = Join-Path (Split-Path -Parent $physicalPath) $target
+            }
+            $physicalPath = Get-PhysicalPath ([IO.Path]::GetFullPath($target))
+        }
+    }
+    return $physicalPath
+}
+
+function Assert-NoReparsePoints {
+    param([string]$Root, [string[]]$RelativePaths)
+
+    $rootItem = Get-RequiredItem $Root 'Trusted path root' -Directory
+    $rootPath = Get-PhysicalPath $rootItem.FullName
+    foreach ($relative in $RelativePaths) {
+        if ([IO.Path]::IsPathFullyQualified($relative) -or
+            ($relative -split '[\\/]') -contains '..') {
+            throw "Expected a relative path below '$rootPath', got '$relative'."
+        }
+        $path = $rootPath
+        foreach ($segment in ($relative -split '[\\/]')) {
+            if (-not $segment -or $segment -eq '.') { continue }
+            $path = Join-Path $path $segment
+            $item = Get-PathItem $path
+            if ($null -eq $item) { break }
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Refusing to use a linked or reparse path component: '$path'."
+            }
+        }
+    }
+}
+
+function Assert-SafeDistPath {
+    $paths = @(
+        'dist',
+        'dist/NotEnoughItems.dll',
+        'dist/assets',
+        'dist/assets/notenoughitems',
+        'src/NotEnoughItems/bin',
+        'src/NotEnoughItems/obj',
+        'src/NotEnoughItems/obj/Debug',
+        'src/NotEnoughItems/obj/Release',
+        'src/NotEnoughItems/obj/Debug/netstandard2.1',
+        'src/NotEnoughItems/obj/Release/netstandard2.1',
+        'tests/NotEnoughItems.Tests/bin',
+        'tests/NotEnoughItems.Tests/obj',
+        'tests/NotEnoughItems.Tests/bin/Debug/net8.0',
+        'tests/NotEnoughItems.Tests/bin/Release/net8.0',
+        'tests/NotEnoughItems.Tests/bin/Debug/core-only/net8.0',
+        'tests/NotEnoughItems.Tests/bin/Release/core-only/net8.0',
+        'tests/NotEnoughItems.Tests/obj/Debug/net8.0',
+        'tests/NotEnoughItems.Tests/obj/Release/net8.0',
+        'tests/NotEnoughItems.Tests/obj/Debug/core-only/net8.0',
+        'tests/NotEnoughItems.Tests/obj/Release/core-only/net8.0'
+    )
+    foreach ($asset in Get-ProjectAssets) {
+        $paths += 'dist/assets/notenoughitems/' + $asset.RelativePath
+    }
+    Assert-NoReparsePoints $script:ProjectRoot $paths
+}
+
+function Test-SamePath {
+    param([string]$Left, [string]$Right)
+
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    return [string]::Equals($Left, $Right, $comparison)
 }
 
 function ConvertTo-MSBuildPropertyValue {
@@ -62,12 +164,46 @@ function Get-GameSettings {
 }
 
 function Get-ProjectAssets {
-    $null = Get-RequiredItem $script:AssetRoot 'Plugin asset namespace' -Directory
-    $files = @(Get-ChildItem -LiteralPath $script:AssetRoot -File -Recurse -Force)
-    if ($files.Count -eq 0) {
-        throw "The plugin asset namespace has no files: '$script:AssetRoot'."
+    $assetRoot = $script:ProjectRoot
+    foreach ($segment in @('Assets', 'notenoughitems')) {
+        $matches = @(Get-ChildItem -LiteralPath $assetRoot -Directory -Force | Where-Object Name -EQ $segment)
+        if ($matches.Count -ne 1) {
+            throw "Expected exactly one asset directory named '$segment' (ignoring case) in '$assetRoot'."
+        }
+        $assetRoot = $matches[0].FullName
     }
-    return $files
+    $files = @(Get-ChildItem -LiteralPath $assetRoot -File -Recurse -Force | Sort-Object FullName)
+    if ($files.Count -eq 0) {
+        throw "The plugin asset namespace has no files: '$assetRoot'."
+    }
+    $assetPaths = @('Assets/NotEnoughItems')
+    foreach ($file in $files) {
+        $relative = [IO.Path]::GetRelativePath($assetRoot, $file.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
+        $assetPaths += 'Assets/NotEnoughItems/' + $relative
+    }
+    Assert-NoReparsePoints $script:ProjectRoot $assetPaths
+    foreach ($file in $files) {
+        [pscustomobject]@{
+            RelativePath = [IO.Path]::GetRelativePath($assetRoot, $file.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
+            Bytes = $file.Length
+        }
+    }
+}
+
+function Get-BuildArtifact {
+    $dll = Get-RequiredItem $script:ArtifactDll 'Build artifact (run Build.ps1 first)'
+    if ($dll.Length -eq 0) { throw "Build artifact is empty: '$($dll.FullName)'." }
+    $assetRoot = Join-Path $script:DistDirectory $script:AssetRelativePath
+    $assets = foreach ($asset in Get-ProjectAssets) {
+        $path = Join-Path $assetRoot $asset.RelativePath
+        $file = Get-RequiredItem $path 'Build artifact (run Build.ps1 first)'
+        [pscustomobject]@{
+            RelativePath = $asset.RelativePath
+            Source = $file.FullName
+            Bytes = $file.Length
+        }
+    }
+    return @{ Dll = $dll; Assets = @($assets) }
 }
 
 function Format-DotNetCommand {
@@ -123,7 +259,9 @@ function Get-ProjectBuildInfo {
     } catch {
         throw "Cannot read TargetPath and Version from MSBuild: $($_.Exception.Message)"
     }
-    $null = Get-RequiredItem $properties.TargetPath 'Built plugin DLL'
+    if (-not (Test-SamePath ([IO.Path]::GetFullPath($properties.TargetPath)) $script:ArtifactDll)) {
+        throw "Unexpected MSBuild TargetPath '$($properties.TargetPath)'; expected '$script:ArtifactDll'."
+    }
     return $properties
 }
 
@@ -134,6 +272,105 @@ function Get-OfflineBuildArguments {
     # directory only; required SDK/targeting packs must already be installed.
     $source = ConvertTo-MSBuildPropertyValue $script:ProjectRoot
     return @('-warnaserror', "-p:RestoreSources=$source", '-p:NuGetAudit=false') + $Game.Properties
+}
+
+function Get-GameExecutable {
+    param([string]$Root)
+
+    $executable = Get-RequiredItem (Join-Path $Root 'CasualtiesUnknown.exe') 'Game executable'
+    return Get-PhysicalPath $executable.FullName
+}
+
+function Assert-GameStopped {
+    param([string]$Root)
+
+    $expectedExe = Get-GameExecutable $Root
+    foreach ($process in (Get-Process -Name CasualtiesUnknown -ErrorAction SilentlyContinue)) {
+        $runningExe = $null
+        try {
+            if ($process.Path) { $runningExe = Get-PhysicalPath $process.Path }
+        } catch {
+            $runningExe = $null
+        }
+        if (-not $runningExe) {
+            if ($process.HasExited) { continue }
+            throw "Cannot verify the executable path of CasualtiesUnknown (PID $($process.Id)). Close it before installing."
+        }
+        if (Test-SamePath $runningExe $expectedExe) {
+            throw "The game is running from '$Root' (PID $($process.Id)). Close it before installing."
+        }
+    }
+}
+
+function Get-InstallPathItem {
+    param([string]$PluginParent, [string]$RelativePath, [switch]$Directory)
+
+    $path = $PluginParent
+    $segments = $RelativePath -split '/'
+    for ($i = 0; $i -lt $segments.Count; $i++) {
+        $path = Join-Path $path $segments[$i]
+        $item = Get-PathItem $path
+        if ($null -eq $item) { return $null }
+        # Do not follow links below BepInEx/plugins or write outside the plugin directory.
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "Unexpected link or reparse point in plugin path: '$path'."
+        }
+        $expectDirectory = ($i -lt ($segments.Count - 1)) -or $Directory.IsPresent
+        if ($item.PSIsContainer -ne $expectDirectory) {
+            $expectedType = if ($expectDirectory) { 'directory' } else { 'file' }
+            throw "Expected a $expectedType at plugin path '$path'."
+        }
+    }
+    return $item
+}
+
+function Assert-SafeInstallPath {
+    param([string]$GameRoot)
+
+    $paths = @('BepInEx', 'BepInEx/plugins', 'BepInEx/plugins/NotEnoughItems')
+    foreach ($asset in Get-ProjectAssets) {
+        $paths += 'BepInEx/plugins/NotEnoughItems/' + $script:AssetRelativePath + '/' + $asset.RelativePath
+    }
+    $paths += 'BepInEx/plugins/NotEnoughItems/NotEnoughItems.dll'
+    Assert-NoReparsePoints $GameRoot $paths
+}
+
+function Get-InstallPlan {
+    param([string]$GameRoot, [string]$Destination, [long]$DllBytes, [object[]]$Assets)
+
+    Assert-SafeInstallPath $GameRoot
+    $pluginParent = Split-Path -Parent $Destination
+    $pluginName = Split-Path -Leaf $Destination
+    $pluginDir = Get-InstallPathItem $pluginParent $pluginName -Directory
+    $dll = Get-InstallPathItem $pluginParent "$pluginName/NotEnoughItems.dll"
+    if ($null -ne $dll -and $dll.IsReadOnly) {
+        throw "Plugin DLL destination is read-only: '$($dll.FullName)'."
+    }
+
+    $required = $DllBytes
+    $assetCopies = foreach ($asset in $Assets) {
+        $relative = "$pluginName/$script:AssetRelativePath/$($asset.RelativePath)"
+        $existing = Get-InstallPathItem $pluginParent $relative
+        if ($null -ne $existing) { continue }  # Preserve all existing overrides.
+        $legacy = if ($script:LegacyBackgrounds.ContainsKey($asset.RelativePath)) {
+            Get-InstallPathItem $pluginParent "$pluginName/$($script:LegacyBackgrounds[$asset.RelativePath])"
+        }
+        if ($null -ne $legacy) {
+            $required += $legacy.Length
+            $source = $legacy.FullName
+        } else {
+            $required += $asset.Bytes
+            $source = if ($asset.PSObject.Properties['Source']) { $asset.Source }  # Only supplied by Install.
+        }
+        [pscustomobject]@{
+            Source = $source
+            Destination = Join-Path $pluginParent $relative
+        }
+    }
+    # Check the actual volume of an existing ancestor, with filesystem overhead.
+    $existingDirectory = if ($null -eq $pluginDir) { $pluginParent } else { $pluginDir.FullName }
+    Assert-FreeSpace (Get-PhysicalPath $existingDirectory) ($required + 1MB)
+    return $assetCopies
 }
 
 function Assert-FreeSpace {

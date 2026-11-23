@@ -1,7 +1,13 @@
-bin/
-obj/
+**/bin/
+**/obj/
+/dist/
+TestResults/
 .vs/
 *.user
-TestResults/
+*.suo
+*.dll
+*.pdb
+*.log
+.env
 参考
 贴图
