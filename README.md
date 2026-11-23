@@ -18,8 +18,6 @@ pwsh -File ./scripts/Install.ps1
 
 书签分组的交互以项目随附的 [GTNH 中文维基](https://gtnh.huijiwiki.com/wiki/Not_Enough_Items#分组与合成链) 和 [GTNH NEI 2.9.0 的书签面板](https://github.com/GTNewHorizons/NotEnoughItems/blob/8e1541eab1935a2a261afcabaeb822089a94d86b/src/main/java/codechicken/nei/BookmarkPanel.java) 为参照。书签仍使用本插件的 BepInEx 配置；不直接导入 Minecraft 的物品 ID 或 NBT。
 
-同时装有 **Unknown Enough Items (UEI 1.2.2)** 时，NEI 默认只在自身显示期间隐藏 UEI 侧栏，不卸载或修改 UEI；将 `ReplaceUEIPanel` 设为 `false` 可恢复并排显示。EMI 的原生制作界面不受影响。
-
 ## 使用
 
 | 操作 | 默认交互 |
@@ -104,7 +102,7 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
 ## 游戏内设置
 
 - 原生游戏设置的「游戏」分类只留 `NEI · 显示侧栏`。按 `O` 隐藏后，仍能在此处重新开启。
-- 在背包或终端中点击 NEI 左下角的扳手，打开垂直居中的设置页，可设置两个目录的开关、浏览记录、缩放、语言、UEI 兼容、单机作弊和快捷键。右侧目录底栏的数量同时用于刷取、带数量收藏和调整步进，不会改写已保存的书签。
+- 在背包或终端中点击 NEI 左下角的扳手，打开垂直居中的设置页，可设置两个目录的开关、浏览记录、缩放、语言、单机作弊和快捷键。右侧目录底栏的数量同时用于刷取、带数量收藏和调整步进，不会改写已保存的书签。
 - 「物品 → 刷取模式」并排显示「NEI（默认）」（尝试放入容器和空槽，不替换装备）和「原版刷给玩家」（在玩家脚下生成，按原版规则自动拾取或穿戴）。蓝框标出当前模式，切换立即保存。此选项只影响单机作弊下的实物；液体仍刷取满的临时瓶，Together 仍由服务器发放。
 - 物品子集已移除，搜索只处理物品文本、来源、标签和 ID。背包和终端的侧栏锚点不随鼠标移动，可在布局页调整宽度和位置。
 

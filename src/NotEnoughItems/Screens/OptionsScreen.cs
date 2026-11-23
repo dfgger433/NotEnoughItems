@@ -73,9 +73,6 @@ internal sealed partial class NeiWindow
         if (NeiSkin.Checkbox(row, L("History strip", "浏览记录"), _showHistory.Value))
             _showHistory.Value = !_showHistory.Value;
         row.y += 30;
-        if (NeiSkin.Checkbox(row, L("Hide legacy UEI panel", "隐藏旧版 UEI 侧栏"), _plugin.ReplaceUei))
-            _plugin.ReplaceUei = !_plugin.ReplaceUei;
-        row.y += 30;
         float scale = _plugin.Scale;
         if (NeiSkin.IconButton(new Rect(row.x, row.y, 26, row.height), "remove", L("Smaller sidebar", "缩小侧栏"), scale > .7f))
             _plugin.Scale = Mathf.Round((scale - .05f) * 100f) / 100f;
@@ -92,7 +89,7 @@ internal sealed partial class NeiWindow
     private static Rect LanguageRow(Rect panel)
     {
         var row = FirstOptionsRow(panel);
-        row.y += 6 * 30; // Five toggles and the scale control precede the language selector.
+        row.y += 5 * 30; // Four toggles and the scale control precede the language selector.
         return row;
     }
 
