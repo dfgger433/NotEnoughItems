@@ -490,6 +490,9 @@ public sealed class Plugin : BaseUnityPlugin
     private void OnGUI()
     {
         if (_window == null) return;
+        // Recover a release the checkbox could not see if its options page was closed mid-press.
+        if (Event.current.type == EventType.Repaint && !Input.GetMouseButton(0) && !Input.GetMouseButtonUp(0))
+            NeiSkin.CancelCheckboxPress();
         if (_clearFocus)
         {
             if (NeiWindow.IsTextControl(GUI.GetNameOfFocusedControl())) GUI.FocusControl(null);
