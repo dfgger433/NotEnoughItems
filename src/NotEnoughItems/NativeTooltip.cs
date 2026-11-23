@@ -129,8 +129,8 @@ internal static class NativeTooltip
     /// Captured pointer state and native dragging are intentionally not inputs: the
     /// overlay may be active while the pointer is outside every NEI panel.
     /// </summary>
-    internal static bool Suppress(bool overlayActive, bool pointerOverVisibleRegion) =>
-        overlayActive && pointerOverVisibleRegion;
+    internal static bool Suppress(bool overlayActive, bool pointerOverVisibleRegion, bool nativeUiTooltipVisible = false) =>
+        overlayActive && pointerOverVisibleRegion && !nativeUiTooltipVisible;
 
     /// <summary>Hit test over the rectangles NEI actually drew this frame.</summary>
     internal static bool Hit(Vector2 pointer, params (bool Visible, Rect Rect)[] regions)
