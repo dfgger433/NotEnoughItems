@@ -418,12 +418,12 @@ internal static class NeiSkin
     }
 
     internal static (Rect Box, Rect IdRow, Rect ModRow) ItemTooltip(Vector2 anchor, Vector2 guiSize, NativeTooltip.Content content,
-        Rect protectedControls, bool copyIdEnabled, bool copyModEnabled)
+        Rect protectedControls, bool copyIdEnabled, bool copyModEnabled, Rect? parentPopup)
     {
         var title = FormatItemText(content.Name);
         var body = FormatItemBody(content);
         return Tooltip(anchor, guiSize, title.Rich, body.Rich, boxed: true, title.Shadow, body.Shadow, content,
-            copyIdEnabled, copyModEnabled, protectedControls);
+            copyIdEnabled, copyModEnabled, protectedControls, parentPopup);
     }
 
     /// <summary>Draws a non-interactive tooltip; call last, outside any clipping groups.</summary>
@@ -433,7 +433,7 @@ internal static class NeiSkin
 
     private static (Rect Box, Rect IdRow, Rect ModRow) Tooltip(Vector2 mousePosition, Vector2 guiSize, string text, string? subtitle, bool boxed,
         string? titleShadow, string? bodyShadow, NativeTooltip.Content? item, bool copyIdEnabled = false, bool copyModEnabled = false,
-        Rect protectedControls = default)
+        Rect protectedControls = default, Rect? parentPopup = null)
     {
         if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(text))
             return default;
@@ -470,7 +470,7 @@ internal static class NeiSkin
         const float footerGap = 6f;
         float footerSpace = footerHeight > 0f ? footerHeight + footerGap : 0f;
         var box = TooltipPlacement.AtPointer(mousePosition, new Vector2(width, titleHeight + detailHeight + 2 * pad + footerSpace), viewport);
-        box = TooltipPlacement.Avoid(box, viewport, protectedControls);
+        box = TooltipPlacement.Avoid(box, viewport, protectedControls, parentPopup);
         if (boxed) TooltipBox(box);
 
         float titleY = box.y + pad;

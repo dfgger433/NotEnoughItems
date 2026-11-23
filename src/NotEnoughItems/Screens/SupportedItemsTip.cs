@@ -66,8 +66,9 @@ internal sealed partial class NeiWindow
                 candidates, selectCandidate, origin, ingredient, expanded, _showTooltipId.Value,
                 (held, showId) => NativeTooltip.ForItem(title, item, details, live, held, _plugin.Chinese, liquidVolume, showId));
             _supportedItemsHover = hover;
-            if (SelectionShiftHeld)
+            if (TooltipCanInteract(SelectionShiftHeld, available: true, nested: origin == CandidateSource.Chain))
             {
+                ClearItemTooltipInput();
                 _pinnedItems = hover;
                 _supportedItemsPage = 0;
             }
@@ -84,7 +85,7 @@ internal sealed partial class NeiWindow
     }
 
     private bool CanUseSupportedItems(SupportedItems items) => !_options && !_layoutEditing && !_plugin.NativePointerActive && SelectionShiftHeld &&
-        (items.Origin switch { CandidateSource.Bookmark => ShowLeft, CandidateSource.Chain => _pinnedChainTip != null && CanPinChainTip, _ => _open || _treeOpen });
+        (items.Origin switch { CandidateSource.Bookmark => ShowLeft, CandidateSource.Chain => false, _ => _open || _treeOpen });
 
     private bool SupportedItemsHit(Vector2 pointer) =>
         _pinnedItems is { } items && CanUseSupportedItems(items) && _supportedItemsBox.Contains(pointer);
@@ -176,7 +177,9 @@ internal sealed partial class NeiWindow
         var size = new Vector2(width, header + (page.End - page.Start) * cell + tail);
         bool pinned = _pinnedItems != null;
         Rect box = pinned ? TooltipPlacement.AtSlot(items.Source, size, viewport) : TooltipPlacement.AtPointer(pointer, size, viewport);
-        box = TooltipPlacement.Avoid(box, viewport, RecipeNavigationBounds);
+        bool chainPreview = items.Origin == CandidateSource.Chain;
+        box = TooltipPlacement.Avoid(box, viewport, RecipeNavigationBounds, chainPreview ? _chainTipBox : null);
+        if (chainPreview) _queuedItemTip = null; // Replaces the chain slot's plain fallback.
         var tray = new Rect(box.x + pad, box.y + header, box.width - 2 * pad, (page.End - page.Start) * cell + 4);
         var grid = new Rect(tray.x + 2, tray.y + 2, columns * cell, tray.height - 4);
 
@@ -209,17 +212,18 @@ internal sealed partial class NeiWindow
             if (items.Ingredient is { IsLiquid: true } ingredient && DiagramAmount(ingredient, candidate) is { } volume)
                 NeiSkin.SlotAmount(rect, volume);
         }
-        string hint = !pinned ? L("Hold Shift to pin the candidates", "按住 Shift 固定候选列表") :
+        string hint = chainPreview ? L("Click the chain slot to see all candidates", "点击合成链原料格查看全部候选") :
+            !pinned ? L("Hold Shift to pin the candidates", "按住 Shift 固定候选列表") :
             items.SelectCandidate != null ? L("Click: select · Click again: auto · Right-click: uses", "左键：选择 · 再点恢复自动 · 右键：用途") :
             L("Click: recipe · Right-click: uses", "左键：配方 · 右键：用途");
-        if (page.Pages > 1) hint += $"  ·  ↕ {page.Index + 1}/{page.Pages}";
+        if (!chainPreview && page.Pages > 1) hint += $"  ·  ↕ {page.Index + 1}/{page.Pages}";
         NeiSkin.Label(new Rect(box.x + pad, tray.yMax + 1, textWidth, line), hint, muted: true);
         if (footerHeight > 0f)
         {
             bool copyEnabled = pinned && CanCopyTooltip;
             var (idRow, modRow) = NeiSkin.DrawItemFooter(new Rect(box.x + pad, box.yMax - pad - footerHeight + 4f, textWidth, footerHeight - 4f),
                 tip, idHeight, copyIdEnabled: copyEnabled && _showTooltipId.Value, copyModEnabled: copyEnabled);
-            _supportedCopyId = (idRow, tip.Id, modRow, tip.ModText);
+            if (copyEnabled) _supportedCopyId = (idRow, tip.Id, modRow, tip.ModText);
         }
         if (hovered >= 0)
         {
@@ -227,7 +231,7 @@ internal sealed partial class NeiWindow
             var volume = items.Ingredient is { IsLiquid: true } input ? DiagramAmount(input, candidate)?.LiquidVolume : null;
             var live = SameId(candidate.BrowseId, _item) ? _lookupItem : null;
             var candidateTip = NativeTooltip.ForItem(candidate.DisplayName, candidate, null, live, ItemDetailsHeld, _plugin.Chinese, volume, _showTooltipId.Value);
-            QueueItemTip(pointer, TooltipPlacement.CandidateCell(grid, columns, cell, hovered - first), candidateTip);
+            QueueItemTip(pointer, TooltipPlacement.CandidateCell(grid, columns, cell, hovered - first), candidateTip, box);
         }
         return true;
     }

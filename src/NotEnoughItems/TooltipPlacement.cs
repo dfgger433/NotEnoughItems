@@ -19,10 +19,13 @@ internal static class TooltipPlacement
             Mathf.Clamp(y, viewport.yMin, viewport.yMax - height), width, height);
     }
 
-    // Leave normal placement alone unless the popup actually covers protected controls.
-    internal static Rect Avoid(Rect tooltip, Rect viewport, Rect protectedControls) =>
-        protectedControls.width > 0 && protectedControls.height > 0 && tooltip.Overlaps(protectedControls)
-            ? Place(tooltip, viewport, new[] { protectedControls }) : tooltip;
+    // Leave normal placement alone unless the popup covers controls or its parent.
+    internal static Rect Avoid(Rect tooltip, Rect viewport, Rect protectedControls, Rect? parentPopup = null)
+    {
+        bool coversControls = protectedControls.width > 0 && protectedControls.height > 0 && tooltip.Overlaps(protectedControls);
+        if (parentPopup is not { } parent) return coversControls ? Place(tooltip, viewport, new[] { protectedControls }) : tooltip;
+        return coversControls || tooltip.Overlaps(parent) ? Place(tooltip, viewport, new[] { protectedControls, parent }) : tooltip;
+    }
 
     // Only Shift can hold the tooltip across the gap between its source and its box.
     internal static bool KeepItemTip(Vector2 pointer, Vector2 anchor, Rect source, Rect box, bool interactive)

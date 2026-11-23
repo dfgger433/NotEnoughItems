@@ -9,7 +9,7 @@ internal sealed partial class NeiWindow
     private (Rect IdRow, string? Id, Rect ModRow, string? Mod)? _supportedCopyId;
     private bool _tooltipCopyPressed;
     private bool _lastTooltipIdVisibility;
-    private (Vector2 Pointer, Rect Source, NativeTooltip.Content Content)? _queuedItemTip;
+    private (Vector2 Pointer, Rect Source, NativeTooltip.Content Content, Rect? ParentPopup)? _queuedItemTip;
 
     internal static ConfigEntry<bool> BindTooltipId(ConfigFile config) => config.Bind("NotEnoughItems", "ShowTooltipId", true,
         "Show item, liquid and entry IDs in NEI tooltips. Hold Shift and left-click an ID or mod name to copy it.");
@@ -17,7 +17,8 @@ internal sealed partial class NeiWindow
     private bool CanUseTooltip => !_layoutEditing && !_plugin.NativePointerActive;
     private bool CanCopyTooltip => TooltipCanInteract(SelectionShiftHeld, CanUseTooltip);
 
-    internal static bool TooltipCanInteract(bool shiftHeld, bool available) => shiftHeld && available;
+    // Never pin a child preview with the same Shift that holds its parent open.
+    internal static bool TooltipCanInteract(bool shiftHeld, bool available, bool nested = false) => shiftHeld && available && !nested;
 
     private void ClearItemTooltipInput()
     {
@@ -87,20 +88,20 @@ internal sealed partial class NeiWindow
         return idRow.Contains(pointer) ? id : modRow.Contains(pointer) ? mod : null;
     }
 
-    private void QueueItemTip(Vector2 pointer, Rect source, NativeTooltip.Content content) =>
-        _queuedItemTip = (pointer, source, content);
+    private void QueueItemTip(Vector2 pointer, Rect source, NativeTooltip.Content content, Rect? parentPopup = null) =>
+        _queuedItemTip = (pointer, source, content, parentPopup);
 
     private void DrawQueuedItemTip()
     {
-        // Paint passive tips from the current hover only. Shift can hold the last
-        // drawn tip in place so the pointer can leave the source to reach its rows.
-        bool copyEnabled = CanCopyTooltip;
-        var next = copyEnabled && _drawnItemTip is { } last ? (last.Anchor, last.Source, last.Content) : _queuedItemTip;
+        // Shift can retain a top-level tip across the gap to its copy rows. A child
+        // preview always follows the current slot and never publishes an input box.
+        bool copyEnabled = TooltipCanInteract(SelectionShiftHeld, CanUseTooltip, nested: _queuedItemTip?.ParentPopup != null);
+        var next = copyEnabled && _drawnItemTip is { } last ? (last.Anchor, last.Source, last.Content, (Rect?)null) : _queuedItemTip;
         _drawnItemTip = null;
         if (next is not { } tip) return;
-        var (anchor, source, content) = tip;
+        var (anchor, source, content, parentPopup) = tip;
         var (box, idRow, modRow) = NeiSkin.ItemTooltip(anchor, new Vector2(_width, _height), content, RecipeNavigationBounds,
-            copyIdEnabled: copyEnabled && _showTooltipId.Value, copyModEnabled: copyEnabled);
-        if (box.width > 0f) _drawnItemTip = (content, anchor, source, box, idRow, modRow);
+            copyIdEnabled: copyEnabled && _showTooltipId.Value, copyModEnabled: copyEnabled, parentPopup: parentPopup);
+        if (parentPopup == null && box.width > 0f) _drawnItemTip = (content, anchor, source, box, idRow, modRow);
     }
 }

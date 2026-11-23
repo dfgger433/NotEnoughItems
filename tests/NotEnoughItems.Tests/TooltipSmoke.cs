@@ -127,10 +127,12 @@ internal static class TooltipSmoke
         finally { File.Delete(path); }
 
         var canInteract = window.GetMethod("TooltipCanInteract", NonPublic)!;
-        bool CanInteract(bool shift, bool available) => (bool)canInteract.Invoke(null, [shift, available])!;
+        bool CanInteract(bool shift, bool available, bool nested = false) => (bool)canInteract.Invoke(null, [shift, available, nested])!;
         if (CanInteract(shift: false, available: true) || CanInteract(shift: true, available: false) ||
             !CanInteract(shift: true, available: true))
             throw new InvalidOperationException("The item tooltip must only interact with the pointer while Shift is held and tooltip interaction is available.");
+        if (CanInteract(shift: true, available: true, nested: true))
+            throw new InvalidOperationException("The Shift that pins a chain or candidate list must never pin its child preview, even when it overlaps another slot.");
 
         var copy = window.GetMethod("CopyTooltipValueAt", NonPublic)!;
         var idRow = new Rect(100, 110, 200, 14);

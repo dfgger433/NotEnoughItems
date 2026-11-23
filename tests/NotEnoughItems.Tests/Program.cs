@@ -29,6 +29,7 @@ static int RunTests()
         ("only visible buttons intercept clicks inside the left tool area", LeftToolsLayout),
         ("item tooltips stay inside the scaled viewport and flip at its right and bottom edges", TooltipBounds),
         ("item and candidate tooltips leave recipe navigation visible", RecipeNavigationTooltipBounds),
+        ("nested tooltip previews leave their parent item grid visible when space permits", NestedTooltipBounds),
         ("liquid slot quantities use the bottom-left corner and fit with decimal suffixes", LiquidSlotAmounts),
         ("long supported-item lists page through every candidate without gaps", SupportedItemsPagination),
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
@@ -273,6 +274,30 @@ static void RecipeNavigationTooltipBounds()
     var clear = TooltipPlacement.AtPointer(new Vector2(90, 370), new Vector2(200, 90), viewport);
     RectEqual(clear, TooltipPlacement.Avoid(clear, viewport, navigation), "An unobstructed tooltip does not move.");
     RectEqual(right, TooltipPlacement.Avoid(right, viewport, default), "Only an open recipe inspector affects tooltip placement.");
+}
+
+static void NestedTooltipBounds()
+{
+    var viewport = new Rect(4, 4, 792, 472);
+    var chain = new Rect(258, 72, 350, 295);
+    var navigation = new Rect(618, 60, 176, 110);
+    // Adjoining chain slots reproduce the issue: the preview of the first
+    // slot covers the next one, and both try to use the same held Shift.
+    var first = new Rect(280, 215, 30, 30);
+    var adjacent = new Rect(311, 246, 30, 30);
+    foreach (var size in new[] { new Vector2(160, 80), new Vector2(170, 225) })
+    {
+        Rect preview = TooltipPlacement.AtPointer(first.center, size, viewport);
+        Check(preview.Overlaps(adjacent), "The default location must reproduce the overlap.");
+        Rect placed = TooltipPlacement.Avoid(preview, viewport, navigation, chain);
+        Check(!placed.Overlaps(chain) && !placed.Overlaps(navigation) && ContainsRect(viewport, placed) && placed.size == size,
+            "Both item and candidate previews should fit beside the parent without obscuring navigation.");
+    }
+    var almostFull = new Rect(10, 10, 780, 460);
+    var tallPreview = TooltipPlacement.AtPointer(first.center, new Vector2(360, 300), viewport);
+    Rect clamped = TooltipPlacement.Avoid(tallPreview, viewport, navigation, almostFull);
+    Check(ContainsRect(viewport, clamped) && clamped.Overlaps(almostFull),
+        "A cramped preview may overlap the parent, so its pointer behavior must be independent of placement.");
 }
 
 static void TabDoesNotFocusSearch()

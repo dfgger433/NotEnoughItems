@@ -343,6 +343,7 @@ internal sealed partial class NeiWindow
         if (details && CanPinChainTip)
         {
             ClearSupportedItemsTip();
+            ClearItemTooltipInput();
             _pinnedChainTip = tip;
         }
     }
@@ -529,11 +530,10 @@ internal sealed partial class NeiWindow
             ItemHover(selection.Rect, selection.Caption, selection.Item,
                 L("Quantity: ", "数量：") + TreeQty(selection.Amount, selection.Amount.Quantity),
                 candidates, candidates != null ? RequirementTitle(ingredient!) : null,
-                candidates != null && selection.Entry is { } entry
-                    ? candidate => SelectBookmarkVariant(entry, selection.Amount.IngredientIndex, candidate) : null,
-                CandidateSource.Chain, ingredient, selection.Item?.IsLiquid == true ? (float)selection.Amount.Quantity : null);
-            if (_supportedItemsHover == null && _pinnedItems == null && _itemTip is { } itemTip)
-                QueueItemTip(mouse, selection.Rect, itemTip);
+                origin: CandidateSource.Chain, ingredient: ingredient,
+                liquidVolume: selection.Item?.IsLiquid == true ? (float)selection.Amount.Quantity : null);
+            // Keep a plain preview as the fallback if the candidate list does not fit.
+            if (_itemTip is { } itemTip) QueueItemTip(mouse, selection.Rect, itemTip, box);
         }
         return true;
     }
