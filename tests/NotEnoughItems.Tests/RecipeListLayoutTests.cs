@@ -19,8 +19,10 @@ internal static class RecipeListLayoutTests
         var panel = new RecipePanelLayout(new Rect(13, 5, 250, 440));
         Check(panel.Bounds.Contains(panel.Back.center) && panel.Bounds.Contains(panel.Method.center) &&
             panel.Bounds.Contains(panel.Pages.center) && panel.Bounds.Contains(panel.Content.center));
-        Check(panel.Tab(0).yMin < panel.Frame.yMin && panel.Tab(0).yMax > panel.Frame.yMin &&
-            panel.Method.yMin >= panel.Frame.yMin && panel.Method.yMax < panel.Pages.yMin && panel.Pages.yMax < panel.Content.yMin);
+        float frameEdge = panel.Frame.yMin + NeiAssets.RecipeBackgroundTransparentInset;
+        Check(panel.Tab(0).yMin < frameEdge && panel.Tab(0).yMax > frameEdge &&
+            panel.Method.yMin >= panel.Frame.yMin && panel.Method.yMax < panel.Pages.yMin && panel.Pages.yMax < panel.Content.yMin,
+            "The open-bottom tab overlaps the visible frame edge, not just the transparent inset.");
         Check(panel.PreviousMethod.xMin == panel.Method.xMin && panel.NextMethod.xMax == panel.Method.xMax &&
             panel.PreviousMethod.xMax <= panel.MethodTitle.xMin && panel.MethodTitle.xMax <= panel.NextMethod.xMin);
         Check(panel.PreviousMethod.xMin == panel.PreviousPage.xMin && panel.NextMethod.xMax == panel.NextPage.xMax &&
