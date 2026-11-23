@@ -315,7 +315,8 @@ internal sealed partial class NeiWindow
         {
             string id = line.Id;
             bool liquid = id.StartsWith("liquid:", StringComparison.OrdinalIgnoreCase);
-            string name = _catalog.TryGetItem(id, out var item) ? item.DisplayName : id;
+            string name = line.Input is { MatchesAny: true } requirement && SameId(id, requirement.BrowseId)
+                ? RequirementTitle(requirement) : Display(id);
             if (line.Retained) name += L(" (reusable)", "（保留工具）");
             if (liquid) name += L(" (pour manually)", "（手动倾倒）");
             before.TryGetValue(id, out var stocked);

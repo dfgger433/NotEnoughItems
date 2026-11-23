@@ -50,6 +50,43 @@ internal static class RecipeMethodsTests
             "Every selection needs a distinct ID; changing the display language must not reset it.");
     }
 
+    internal static void BuiltInCookingLocalization()
+    {
+        const string categoryId = "native.cooking";
+        const string recipeId = "native.process.cook-meat";
+        var pluginType = typeof(Catalog).Assembly.GetType("NotEnoughItems.Plugin", throwOnError: true)!;
+        var instance = pluginType.GetProperty("Instance", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var prior = instance.GetValue(null);
+        var plugin = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(pluginType);
+        var config = new BepInEx.Configuration.ConfigFile(Path.Combine(Path.GetTempPath(), $"nei-cooker-{Guid.NewGuid():N}.cfg"),
+            saveOnInit: false) { SaveOnConfigSet = false };
+        var language = config.Bind("NotEnoughItems", "Language", "en");
+        pluginType.GetField("_language", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(plugin, language);
+        instance.SetValue(null, plugin);
+        try
+        {
+            var catalog = new Catalog();
+            catalog.RegisterItem(new CatalogItem("steak", "Game steak"));
+            string? methodId = null;
+            foreach (bool chinese in new[] { false, true, false })
+            {
+                language.Value = chinese ? "zh-CN" : "en";
+                catalog.Refresh();
+                var native = catalog.GetRecipesProducing("item:steak").Single(recipe => recipe.Id == recipeId);
+                var method = RecipeMethods.Group([native], catalog.RecipeCategories, "unused").Single();
+                methodId ??= method.Id;
+                string material = chinese ? "带肉类标签的物品" : "Meat-tagged item";
+                Check(method.Name == (chinese ? "烹饪" : "Cooking") && native.Name == "Game steak" && method.Id == methodId &&
+                    native.CategoryId == categoryId && native.MachineId == "heater.cooker" && native.Inputs.Single().BrowseId == "tag:meat" &&
+                    native.Inputs.Single().DisplayName == material && native.Description.Contains(chinese ? "耐久" : "condition"),
+                    "Translate NEI's own cooker labels without changing the game-provided name, method key, or ingredient ID.");
+                Check(catalog.TryGetItem("tag:meat", out var item) && item.DisplayName == material &&
+                    item.Description.Contains(chinese ? "烹饪加热器" : "cooker"), "The virtual requirement tooltip uses the same language.");
+            }
+        }
+        finally { instance.SetValue(null, prior); }
+    }
+
     internal static void MissingMetadataAndEmptyMatches()
     {
         Category[] categories = [new("unused")];
