@@ -120,7 +120,7 @@ internal sealed partial class NeiWindow
         else
         {
             foreach (var entry in entries)
-                foreach (var part in CellsForBookmark(entry, compact: false)) AddCell(part, part.Amount);
+                foreach (var part in CellsForBookmark(entry, compact: false, previewCarried: false)) AddCell(part, part.Amount);
         }
 
         var available = held.Where(i => i).Distinct().ToList();

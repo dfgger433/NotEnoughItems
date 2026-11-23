@@ -24,6 +24,7 @@ internal static class BookmarkParityTests
             ClipboardScopesAndRemapsGroups,
             BadClipboardIsAtomic,
 #if RECIPE_TESTS
+            OrdinaryAndGroupedToolsFollowCarriedStock,
             GroupBalanceStaysWithinSavedRecipes,
             GroupBalanceReusesProductionAndTools,
             GroupBalanceKeepsConditionAndTypeBoundaries,
@@ -500,6 +501,57 @@ internal static class BookmarkParityTests
         object plan = PlanCraft(new Catalog(), entries, 0, topUp: false, new Dictionary<string, int>());
 
         Check(HasDiagnostic(plan, "Cycle"), "A mutually dependent production order with no initial supply must report a cycle.");
+    }
+
+    private static void OrdinaryAndGroupedToolsFollowCarriedStock()
+    {
+        const string quality = "preview-grip";
+        const string example = "item:preview-a", carried = "item:preview-b", other = "item:preview-c";
+        var catalog = new Catalog();
+        foreach (string id in new[] { example, carried, other })
+            catalog.RegisterItem(new CatalogItem(id.Substring(5), id, qualities: [new CraftingQuality(quality, 2)]));
+        var tool = new RecipeIngredient("", 2, isCatalyst: true, qualityId: quality, minimumCondition: .5f);
+        var material = new RecipeIngredient("", 2, qualityId: quality);
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        var windowType = PluginType("NeiWindow");
+        var config = new BepInEx.Configuration.ConfigFile(System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "nei-bookmark-test-" + Guid.NewGuid() + ".cfg"), saveOnInit: false) { SaveOnConfigSet = false };
+        object window = Activator.CreateInstance(windowType, instance, null, [null, config], null)!;
+        windowType.GetField("_catalog", instance)!.SetValue(window, catalog);
+        var book = windowType.GetField("_book", instance)!.GetValue(window)!;
+        var add = book.GetType().GetMethod("Add", instance)!;
+        var loose = add.Invoke(book, ["0", "recipe/api/tools-preview", 3, "", true, null, true]);
+        var grouped = add.Invoke(book, ["0", "recipe/api/tools-preview", 3, "group", true, null, true]);
+        var layout = windowType.GetField("_bookmarkLayout", instance)!;
+        var update = windowType.GetMethod("UpdateCarriedBookmarkTools", instance)!;
+        var select = windowType.GetMethod("SelectedBookmarkVariant", instance)!;
+
+        void Update(params (string Id, float Condition)[] stock) => update.Invoke(window, [stock.ToHashSet()]);
+        string? Select(object? entry, int slot, RecipeIngredient ingredient, bool preview = true) =>
+            (string?)select.Invoke(window, [entry, slot, ingredient, preview]);
+        void Expect(string expectedTool, string groupedTool) =>
+            Check(Select(loose, 0, tool) == expectedTool && Select(grouped, 0, tool) == groupedTool,
+                "Both ordinary and grouped slots must follow carried stock unless explicitly pinned.");
+
+        Expect(example, example);
+        object cached = Activator.CreateInstance(layout.FieldType)!;
+        layout.SetValue(window, cached);
+        Update((carried, .8f), (other, .4f));
+        Check(layout.GetValue(window) == null, "New carried tools invalidate the cached bookmark rows.");
+        Expect(carried, carried);
+        Check(Select(loose, 1, material) == example && Select(loose, 0, tool, preview: false) == example,
+            "Consumed materials and group pull targets keep their original selection.");
+        layout.SetValue(window, cached);
+        Update((other, .4f), (carried, .8f));
+        Check(ReferenceEquals(cached, layout.GetValue(window)), "Unchanged stock must not invalidate the bookmark rows.");
+        Update((carried, .4f), (other, .8f));
+        Check(layout.GetValue(window) == null, "Durability changes can change which carried tool qualifies.");
+        Expect(other, other);
+        book.GetType().GetMethod("SetVariant", instance)!.Invoke(book, [grouped, 0, carried]);
+        Update();
+        Expect(example, carried);
+        Update((other, .9f));
+        Expect(other, carried);
     }
 
     private static ProviderRecipe Recipe(string id, RecipeIngredient[] inputs, RecipeOutput[] outputs) =>

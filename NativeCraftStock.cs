@@ -18,6 +18,20 @@ internal static class NativeCraftStock
                 yield return item;
     }
 
+    internal static HashSet<(string Id, float Condition)> CarriedSolids(Body? body)
+    {
+        var stock = new HashSet<(string, float)>();
+        if (body && body is not null)
+            foreach (var item in Items(body, carried: true, nearby: false))
+                if (!item.favourited && !string.IsNullOrEmpty(item.id) && UsableSolid(item))
+                    stock.Add(("item:" + item.id, item.condition));
+        return stock;
+    }
+
+    private static bool UsableSolid(Item item) => item.Stats != null &&
+        (!item.Stats.destroyAtZeroCondition || item.condition > 0f) &&
+        (!item.TryGetComponent<Container>(out var storage) || storage.itemCount == 0);
+
     internal static Dictionary<string, int> Quantities(Body? body, bool nearby = false)
     {
         var totals = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -25,8 +39,7 @@ internal static class NativeCraftStock
             foreach (var item in Items(body, carried: !nearby, nearby: nearby))
             {
                 if (item.favourited || string.IsNullOrEmpty(item.id)) continue;
-                if ((!item.Stats.destroyAtZeroCondition || item.condition > 0f) &&
-                    (!item.TryGetComponent<Container>(out var storage) || storage.itemCount == 0)) Count("item:" + item.id, 1);
+                if (UsableSolid(item)) Count("item:" + item.id, 1);
                 if (item.TryGetComponent<WaterContainerItem>(out var vessel) && vessel.stack != null)
                     foreach (var stack in vessel.stack)
                         if (stack != null && stack.amount > 0f && !float.IsInfinity(stack.amount) && !string.IsNullOrWhiteSpace(stack.liquidId))
