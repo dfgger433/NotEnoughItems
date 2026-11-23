@@ -26,7 +26,7 @@ pwsh -File ./scripts/Install.ps1
 |---|---|
 | 打开或恢复 NEI | 打开背包或终端后按 `O` 切换。即使侧栏已隐藏，也可在游戏原生「设置 → 游戏 → NEI · 显示侧栏」恢复。 |
 | 查配方 / 用途 | 悬停后 `R` / `U`，或点击 NEI 格子的左键 / 右键。用途含直接原料、性质、工具、机器；悬停有内容物的液体容器时也查其液体用途。终端聚合格未公开悬停接口，请从 NEI 目录查询 |
-| 浏览查询结果 | 配方背景内上方的方式名与左右箭头切换合成方式，下方页码与左右箭头翻页；两排按钮左右对齐，方式名居中显示。在配方区或页码栏向上／下滚动可翻到上一／下一页；超长配方或展开的长候选列表在配方区内滚动查看，仍可到页码栏翻页。左边显示所选方式的机器（若有）；原料至少显示 3×3，超过九格时加行。爱心设为样板，`+` 在可用时打开并选中原生制作配方，不消耗材料。返回箭头、`Backspace` 或右键方式标题可返回；编辑文本时退格仍删除字符。无匹配配方时只显示物品与收藏按钮；配方和用途仍用 `R` / `U` 或物品格左／右键查询。 |
+| 浏览查询结果 | 点顶部图标页签或方式行的左右箭头切换合成方式；页码行的箭头只翻当前方式的配方。点页码左侧的放大镜可按配方、原料或产物名称筛选当前方式；再点一次或切换方式便清空搜索。在配方区或页码行滚动也能翻页；超长配方在配方区内滚动，仍可到页码行翻页。左边显示所选方式的机器（若有）；原料至少显示 3×3。爱心设为样板，`+` 在可用时打开原生制作配方，不消耗材料。返回箭头、`Backspace` 或右键方式标题可返回；编辑文本时退格仍删除字符。无配方时显示物品与收藏按钮。 |
 | 搜索物品 | 在右侧历史记录下方搜索，或按 `Ctrl+F` 聚焦；在背包和终端中按 `Tab` 均不会聚焦 NEI 搜索框；右键清空。搜索匹配项中，已加书签或收藏的物品排在前面，其次是随身物品和容器内的流体，其余匹配项仍可浏览。支持普通文字（简体中文界面下可用拼音或首字母）、`@来源` `$标签` `#描述` `&ID`、`-排除`、`"短语"`，以及 `\|` 分隔的备选词。`@来源` 忽略空格和大小写，例如 `@CasualtiesUnknown` 或 `@casualtiesunknown` 可查原版物品；带空格的模组名也可写成 `@"Forge Guild"`。拼音搜索通过可选的 Just-Unknown-Characters 1.0.1 提供；未安装时普通文字与中文搜索照常可用。 |
 | 查看或复制 ID | NEI 扳手 →「物品」→「是否显示物品 ID」可开关 ID，默认开启；模组名仍会显示。不按 `Shift` 时悬浮框只作预览，不接管鼠标。悬停物品后按住任一侧 `Shift`，移到 ID 或模组名一行左键点击即可复制。 |
 | 选择数量 | 搜索框右侧输入 `1–64` 或用 `+`／`−` 调整。已保存的书签数量不受影响。 |
@@ -51,8 +51,8 @@ Together 联机中，房主须启用服务器作弊；客户端同时需要服�
 - [搜索框与悬浮提示框贴图](<Assets/NotEnoughItems/textures/gui/controls/text_field.png>)是单独的资源。替换时保留 128×128 画布：搜索框使用从顶部算起的第 13–24 行作为常态，第 1–12 行作为聚焦态；悬浮提示框（包括按钮提示）使用第 1–12 行（`0,0–128,12`）并按边缘九宫切片拉伸。数量框和书签页名不使用这张图。
 - [语言下拉栏贴图](<Assets/NotEnoughItems/textures/gui/controls/drop_down_list.png>)使用提供的 256×256 图集。替换时保留画布和原有帧位置。
 - [ID 与刷取模式选项贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用 64×64 图集。「是否显示物品 ID」使用 22×12 的滑块原图：松开与按住的帧在 `x=0/22`，关闭与开启在 `y=28/40`。单纯悬停仍显示松开帧；在同一行内松开左键才会切换。「刷取模式」的两个单选项共用 12×12 方框帧：常态与悬浮态在 `x=29/43`，未选中（灰色）与选中（蓝色）在 `y=1/15`。点击方框或右侧文字均可选择，不绘制整行按钮背板。
-- 配方背景内的合成方式标题与切换按钮使用[选中贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>)（48×46）和[未选中贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)（48×43）的视觉样式，替换时保留原尺寸。
-- [屏幕背景贴图](<Assets/NotEnoughItems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。[recipebg.png](<Assets/NotEnoughItems/textures/gui/modernity/recipebg.png>)用于配方、选项和合成树独立面板，按 184×174 源区域及 9 px 九宫格边框绘制；不会拉伸外框。[图集来源描述](<Assets/NotEnoughItems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
+- 配方查看器使用 [GTNH NEI 原版图集](<Assets/NotEnoughItems/textures/gui/original/SOURCES.md>)的方式页签、放大镜与灰色背景；搜索及翻页按钮使用同样的像素描边与凸边样式。此前的 `vertical_buttons_bg*.png` 不再用于配方页签。
+- [屏幕背景贴图](<Assets/NotEnoughItems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。原版[配方背景](<Assets/NotEnoughItems/textures/gui/original/recipebg.png>)和选项／合成树的 [Modernity 背景](<Assets/NotEnoughItems/textures/gui/modernity/recipebg.png>)都按 184×174 源区域及 9 px 九宫格边框绘制；不会拉伸外框。[图集来源描述](<Assets/NotEnoughItems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
 
 换肤时在 DLL 旁创建 `resourcepacks/active/`，在其中按相同的 `assets/notenoughitems/textures/gui/…` 结构放置 PNG，保留图集尺寸和坐标。重启后先读取启用的材质包；缺失或尺寸不兼容的 NEI 图集回退到嵌入的原版，其余资源保留原有覆盖规则。爱心覆盖路径是 `gui/original/nei_sprites.png`。部署只补缺失资源；旧 `Textures` 背景仍兼容，但旧自绘控制和图标不再读取。悬停 NEI 目录、书签或配方中的物品格会显示其名称、描述及可用的附加信息。鼠标在可见 NEI 面板内时不重复显示原版悬浮框；移到原版物品上仍使用游戏原版提示。
 

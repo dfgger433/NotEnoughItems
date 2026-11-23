@@ -19,12 +19,22 @@ internal static class RecipeListLayoutTests
         var panel = new RecipePanelLayout(new Rect(13, 5, 250, 440));
         Check(panel.Bounds.Contains(panel.Back.center) && panel.Bounds.Contains(panel.Method.center) &&
             panel.Bounds.Contains(panel.Pages.center) && panel.Bounds.Contains(panel.Content.center));
-        Check(panel.Frame.yMin > panel.Header.yMax && panel.Method.yMin >= panel.Frame.yMin &&
-            panel.Method.yMax < panel.Pages.yMin && panel.Pages.yMax < panel.Content.yMin);
+        Check(panel.Tab(0).yMin < panel.Frame.yMin && panel.Tab(0).yMax > panel.Frame.yMin &&
+            panel.Method.yMin >= panel.Frame.yMin && panel.Method.yMax < panel.Pages.yMin && panel.Pages.yMax < panel.Content.yMin);
         Check(panel.PreviousMethod.xMin == panel.Method.xMin && panel.NextMethod.xMax == panel.Method.xMax &&
             panel.PreviousMethod.xMax <= panel.MethodTitle.xMin && panel.MethodTitle.xMax <= panel.NextMethod.xMin);
-        Check(panel.PreviousMethod.xMin == panel.Pages.xMin && panel.NextMethod.xMax == panel.Pages.xMax,
-            "Method and page controls share the same left and right arrow columns.");
+        Check(panel.PreviousMethod.xMin == panel.PreviousPage.xMin && panel.NextMethod.xMax == panel.NextPage.xMax &&
+            panel.PreviousPage.xMax == panel.Search.xMin && panel.PageTitle.center.x == panel.MethodTitle.center.x &&
+            panel.Search.xMax == panel.SearchField.xMin && panel.SearchField.xMax == panel.SearchPageTitle.xMin &&
+            panel.NavigationBounds.Contains(panel.SearchField.center) && panel.NavigationBounds.Contains(panel.Tab(0).center),
+            "Method and page arrows share columns; the search icon and opened field use distinct hit targets.");
+        Check(panel.TabsPerPage == 7 && panel.TabPageCount(0) == 0 && panel.TabPageCount(7) == 1 && panel.TabPageCount(8) == 2 &&
+            panel.Tab(0).xMax == panel.Tab(1).xMin && panel.Tab(6).xMax == panel.NextTabs.xMin,
+            "The top row fits seven adjacent tabs and exposes overflow when needed.");
+        var narrow = new RecipePanelLayout(new Rect(0, 0, 104, 400));
+        Check(narrow.TabsPerPage < panel.TabsPerPage && narrow.Bounds.Contains(narrow.NextTabs.center) &&
+            narrow.NextTabs.xMax <= narrow.Bounds.xMax && !narrow.Back.Overlaps(narrow.PreviousTabs) &&
+            narrow.SearchField.width >= 22 && narrow.SearchPageTitle.xMax <= narrow.NextPage.xMin);
 
         float fits = panel.Content.height;
         float clipped = fits + 1;
