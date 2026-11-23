@@ -25,6 +25,11 @@ internal static class ModernityFrames
         "button" => new Frame("widgets.png", 0, 66, 200, 20),
         "button_hover" => new Frame("widgets.png", 0, 86, 200, 20),
         "recipe_background" => new Frame("recipebg.png", 0, 0, NeiAssets.RecipeBackgroundWidth, NeiAssets.RecipeBackgroundHeight),
+        "inspector_background" => new Frame("recipebg.png", 0, 0, NeiAssets.RecipeBackgroundWidth, NeiAssets.RecipeBackgroundHeight, NeiAssets.OriginalDirectory),
+        "method_tab_selected" => new Frame("vertical_buttons_bg.png", 0, 0, NeiAssets.RecipeTabWidth,
+            NeiAssets.RecipeTabSelectedHeight, NeiAssets.ControlsDirectory),
+        "method_tab" => new Frame("vertical_buttons_bg_candidate.png", 0, 0, NeiAssets.RecipeTabWidth,
+            NeiAssets.RecipeTabCandidateHeight, NeiAssets.ControlsDirectory),
         "recipe_slot" => new Frame("slot.png", 0, 0, 18, 18),
         "bookmark" => new Frame("nei_tabbed_sprites.png", 0, 0, 16, 16),
         "bookmark_selected" => new Frame("nei_tabbed_sprites.png", 16, 0, 16, 16),
@@ -47,10 +52,10 @@ internal static class ModernityFrames
         "checkbox_off_hover" => Checkbox(22, 28),
         "checkbox_on" => Checkbox(0, 40),
         "checkbox_on_hover" => Checkbox(22, 40),
-        "square_checkbox_off" => SquareCheckbox(29, 1),
-        "square_checkbox_off_hover" => SquareCheckbox(43, 1),
-        "square_checkbox_on" => SquareCheckbox(29, 15),
-        "square_checkbox_on_hover" => SquareCheckbox(43, 15),
+        "square_checkbox_off" => SquareCheckbox(29, 1, 12, 12),
+        "square_checkbox_off_hover" => SquareCheckbox(43, 2, 12, 11),
+        "square_checkbox_on" => SquareCheckbox(29, 16, 12, 11),
+        "square_checkbox_on_hover" => SquareCheckbox(29, 16, 12, 11),
         _ => null
     };
 
@@ -75,20 +80,21 @@ internal static class ModernityFrames
     // Each 22×12 switch is a complete track and knob, including its original transparent pixels.
     private static Frame Checkbox(int x, int y) => new(NeiAssets.CheckboxFile, x, y, 22, 12, NeiAssets.ControlsDirectory);
 
-    // Four 12×12 faces in the 26×26 block at (29, 1), separated by two-pixel gutters.
-    private static Frame SquareCheckbox(int x, int y) => new(NeiAssets.CheckboxFile, x, y, 12, 12, NeiAssets.ControlsDirectory);
-
-    internal static string CheckboxFace(bool on, bool hovered, bool square = false) => (square, on, hovered) switch
+    internal static string CheckboxFace(bool on, bool hovered) => (on, hovered) switch
     {
-        (true, true, true) => "square_checkbox_on_hover",
-        (true, true, false) => "square_checkbox_on",
-        (true, false, true) => "square_checkbox_off_hover",
-        (true, false, false) => "square_checkbox_off",
-        (false, true, true) => "checkbox_on_hover",
-        (false, true, false) => "checkbox_on",
-        (false, false, true) => "checkbox_off_hover",
+        (true, true) => "checkbox_on_hover",
+        (true, false) => "checkbox_on",
+        (false, true) => "checkbox_off_hover",
         _ => "checkbox_off"
     };
+
+    // The supplied single-choice faces have their own one-pixel height differences.
+    private static Frame SquareCheckbox(int x, int y, int width, int height) =>
+        new(NeiAssets.CheckboxFile, x, y, width, height, NeiAssets.ControlsDirectory);
+
+    internal static string SquareCheckboxFace(bool on, bool hovered) => on
+        ? "square_checkbox_on"
+        : hovered ? "square_checkbox_off_hover" : "square_checkbox_off";
 
     // Upstream uses glyph captions on widget buttons when there is no dedicated sprite.
     internal static string Caption(string name) => name switch

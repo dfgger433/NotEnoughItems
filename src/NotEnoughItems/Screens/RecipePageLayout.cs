@@ -7,45 +7,58 @@ namespace NotEnoughItems;
 /// <summary>Positions the recipe controls and content inside one NEI inspector.</summary>
 internal readonly struct RecipePanelLayout
 {
-    private const float RowHeight = 19, Gap = 2;
-    internal const float RowNavWidth = 18, DiagramInset = 23;
-    internal readonly Rect Bounds, Frame, Header, Back, Method, MethodTitle, PreviousMethod, NextMethod, Pages, Content, Catalyst;
+    internal const float DiagramInset = 23, ScrollbarAllowance = 17f;
+    internal readonly Rect Bounds, Frame, Back, Method, MethodTitle, PreviousMethod, NextMethod, Pages,
+        PageTitle, PreviousPage, NextPage, PreviousTabs, NextTabs, Content, Catalyst;
+    internal readonly int TabsPerPage;
+    private readonly float _tabX, _tabY, _tabSize;
 
     internal RecipePanelLayout(Rect available, float? centerX = null)
     {
-        const float inset = NeiAssets.RecipeBackgroundSlice;
+        this = default;
         float width = Math.Min(228, available.width);
         float height = Math.Min(426, available.height);
+        if (width < 104 || height < 100) return;
         float x = Math.Clamp((centerX ?? available.center.x) - width / 2, available.xMin, available.xMax - width);
         float y = available.center.y - height / 2;
         Bounds = new Rect(x, y, width, height);
+        float inset = NeiAssets.RecipeBackgroundSlice;
         float left = x + inset, right = Bounds.xMax - inset;
-        Header = Rect.MinMaxRect(left, y, right, y + RowHeight);
-        Back = new Rect(left, Header.y, RowNavWidth, RowHeight);
 
-        // Match the GTNH NEI two-row recipe header: the method selector and page
-        // selector share their left/right arrow columns, both inside the frame.
-        Frame = Rect.MinMaxRect(x, y + RowHeight + Gap, Bounds.xMax, Bounds.yMax);
-        Method = new Rect(left, Frame.y + inset, right - left, RowHeight);
-        PreviousMethod = new Rect(Method.x, Method.y, RowNavWidth, Method.height);
-        NextMethod = new Rect(Method.xMax - RowNavWidth, Method.y, RowNavWidth, Method.height);
-        MethodTitle = Rect.MinMaxRect(PreviousMethod.xMax + Gap, Method.y, NextMethod.x - Gap, Method.yMax);
-        Pages = new Rect(left, Method.yMax + Gap, right - left, RowHeight);
-        Content = Rect.MinMaxRect(left, Pages.yMax + 2 * Gap, right, Bounds.yMax - inset);
+        // Reserve a separate lane for Back and keep the magnifier flush with
+        // the left page arrow. Tabs overlap the visible top edge of the frame.
+        _tabSize = 24;
+        _tabY = y;
+        _tabX = x + 28;
+        Back = new Rect(x + 4, y + 3, 14, 18);
+        const float tabArrowWidth = 10;
+        PreviousTabs = new Rect(_tabX - tabArrowWidth, y + 2, tabArrowWidth, 20);
+        TabsPerPage = Math.Clamp((int)((Bounds.xMax - tabArrowWidth - _tabX) / _tabSize), 1, 7);
+        NextTabs = new Rect(_tabX + TabsPerPage * _tabSize, y + 2, tabArrowWidth, 20);
+
+        const float rowHeight = 16, arrow = 17, gap = 2;
+        Frame = Rect.MinMaxRect(x, y + _tabSize - NeiAssets.RecipeBackgroundTransparentInset - 2, Bounds.xMax, Bounds.yMax);
+        Method = new Rect(left, Frame.y + inset, right - left, rowHeight);
+        Pages = new Rect(left, Method.yMax + gap, right - left, rowHeight);
+        PreviousMethod = new Rect(left, Method.y, arrow, rowHeight);
+        NextMethod = new Rect(right - arrow, Method.y, arrow, rowHeight);
+        PreviousPage = new Rect(left, Pages.y, arrow, rowHeight);
+        NextPage = new Rect(right - arrow, Pages.y, arrow, rowHeight);
+        MethodTitle = Rect.MinMaxRect(PreviousMethod.xMax, Method.y, NextMethod.xMin, Method.yMax);
+        PageTitle = Rect.MinMaxRect(PreviousPage.xMax, Pages.y, NextPage.xMin, Pages.yMax);
+        Content = Rect.MinMaxRect(left, Pages.yMax + 4, right, Bounds.yMax - inset);
         Catalyst = new Rect(left, Content.y + 3f, 20, 20);
     }
 
-    // Keep the return button and both navigation rows visible when a lookup opens
-    // under a tooltip from an item in either sidebar.
-    internal Rect NavigationBounds => Rect.MinMaxRect(Header.xMin, Header.yMin, Header.xMax, Pages.yMax);
+    internal Rect Tab(int slot) => new(_tabX + slot * _tabSize, _tabY, _tabSize, _tabSize);
+    internal int TabPageCount(int methodCount) => TabsPerPage > 0 ? (methodCount + TabsPerPage - 1) / TabsPerPage : 0;
 
-    internal const float ScrollbarAllowance = 17f;
+    // Include the icon tabs and both navigation rows in tooltip avoidance and input ownership.
+    internal Rect NavigationBounds => Rect.MinMaxRect(Bounds.xMin, Bounds.yMin, Bounds.xMax, Pages.yMax + 1);
 
     // Both edge lanes have the same width: the machine and the possible scrollbar
     // do not shift the recipe itself when they appear or disappear.
     internal static Rect DiagramArea(Rect viewport, float y) => new(DiagramInset, y, viewport.width - 2f * DiagramInset, 0);
-
-    internal static Rect RowTitle(Rect row) => Rect.MinMaxRect(row.x + RowNavWidth + Gap, row.y, row.xMax - RowNavWidth - Gap, row.yMax);
 
     // The page bar always offers paging. A clipped diagram needs the wheel over
     // its viewport even at the scroll limits, so all of that recipe stays reachable.

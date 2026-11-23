@@ -13,4 +13,4 @@
 
 收藏按钮坐标来自[上游 `GuiFavoriteButton`](https://github.com/GTNewHorizons/NotEnoughItems/blob/6b7e465306810ad11d2413214077237798be13a7/src/main/java/codechicken/nei/recipe/GuiFavoriteButton.java#L35-L48)。以 PNG 左上角为原点，未收藏使用 `(20,152,18,20)`，已收藏使用 `(38,152,18,20)`；上游 Java 使用 256×256 的 UV，故坐标与尺寸均乘 2。
 
-配方查看器仍从原版图集的 `(0,152,20,20)` 读取[搜索图标](https://github.com/GTNewHorizons/NotEnoughItems/blob/6b7e465306810ad11d2413214077237798be13a7/src/main/java/codechicken/nei/recipe/GuiRecipe.java#L464-L514)，背景和按钮背板使用各自的独立贴图。
+配方查看器的灰色背景使用上表 `recipebg.png` 的 `(0,0,184,174)` 区域，四边九宫格边框为 9 px；制作方式页签另由本插件随附的 `gui/controls/vertical_buttons_bg*.png` 提供。页数与制作方式名称横条是程序绘制的黑色 `0x30` 半透明覆盖，不属于此图集。

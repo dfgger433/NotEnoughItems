@@ -29,6 +29,7 @@ static int RunTests()
         ("only visible buttons intercept clicks inside the left tool area", LeftToolsLayout),
         ("item tooltips stay inside the scaled viewport and flip at its right and bottom edges", TooltipBounds),
         ("item and candidate tooltips leave recipe navigation visible", RecipeNavigationTooltipBounds),
+        ("nested tooltip previews stay under the pointer without parent avoidance", NestedTooltipBounds),
         ("liquid slot quantities use the bottom-left corner and fit with decimal suffixes", LiquidSlotAmounts),
         ("long supported-item lists page through every candidate without gaps", SupportedItemsPagination),
         ("legacy bookmarks migrate and grouped quantities round-trip", BookmarkMigration),
@@ -115,6 +116,7 @@ static int RunTests()
         ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
         ("chain tooltip and dependency tree follow explicit language changes", BookmarkParityTests.ChainNotesFollowInterfaceLanguage),
         ("production and usage methods retain alternative rows in index order", RecipeMethodsTests.AlternateRows),
+        ("method navigation is independent of recipe pagination", RecipeMethodsTests.MethodNavigationIsIndependentOfRecipePages),
         ("native crafting, cooking and provider machines are distinct lookup methods", RecipeMethodsTests.NativeAndMachineMethods),
         ("built-in cooker labels are bilingual without changing recipe identity", RecipeMethodsTests.BuiltInCookingLocalization),
         ("method groups handle empty lookups and missing process metadata", RecipeMethodsTests.MissingMetadataAndEmptyMatches),
@@ -256,7 +258,7 @@ static void RecipeNavigationTooltipBounds()
     var viewport = new Rect(4, 4, 1306, 730);
     var panel = new RecipePanelLayout(new Rect(390, 8, 548, 722));
     Rect navigation = panel.NavigationBounds;
-    Check(new[] { panel.Back, panel.PreviousMethod, panel.MethodTitle, panel.NextMethod, panel.Pages }
+    Check(new[] { panel.Back, panel.Tab(0), panel.PreviousMethod, panel.MethodTitle, panel.NextMethod, panel.Pages, panel.PageTitle }
         .All(control => ContainsRect(navigation, control)) && !navigation.Overlaps(panel.Content),
         "Only the top controls need to stay clear, not the entire recipe diagram.");
 
@@ -274,6 +276,33 @@ static void RecipeNavigationTooltipBounds()
     var clear = TooltipPlacement.AtPointer(new Vector2(90, 370), new Vector2(200, 90), viewport);
     RectEqual(clear, TooltipPlacement.Avoid(clear, viewport, navigation), "An unobstructed tooltip does not move.");
     RectEqual(right, TooltipPlacement.Avoid(right, viewport, default), "Only an open recipe inspector affects tooltip placement.");
+}
+
+static void NestedTooltipBounds()
+{
+    var viewport = new Rect(4, 4, 792, 472);
+    var chain = new Rect(258, 72, 350, 295);
+    var navigation = new Rect(618, 60, 176, 110);
+    // Adjoining chain slots reproduce the issue: the preview of the first
+    // slot covers the next one, and both try to use the same held Shift.
+    var first = new Rect(280, 215, 30, 30);
+    var adjacent = new Rect(311, 246, 30, 30);
+    foreach (var size in new[] { new Vector2(160, 80), new Vector2(170, 225) })
+    {
+        Rect preview = TooltipPlacement.AtPointer(first.center, size, viewport);
+        Check(preview.Overlaps(adjacent), "The default location must reproduce the overlap.");
+        Rect underPointer = TooltipPlacement.Avoid(preview, viewport, navigation);
+        Check(underPointer.Overlaps(chain) && !underPointer.Overlaps(navigation) && ContainsRect(viewport, underPointer) && underPointer.size == size,
+            "A second-level preview stays under the mouse instead of being pushed outside its parent frame.");
+        Rect placed = TooltipPlacement.Avoid(preview, viewport, navigation, chain);
+        Check(!placed.Overlaps(chain) && !placed.Overlaps(navigation) && ContainsRect(viewport, placed) && placed.size == size,
+            "The optional parent obstacle still supports callers that need an independent popup.");
+    }
+    var almostFull = new Rect(10, 10, 780, 460);
+    var tallPreview = TooltipPlacement.AtPointer(first.center, new Vector2(360, 300), viewport);
+    Rect clamped = TooltipPlacement.Avoid(tallPreview, viewport, navigation, almostFull);
+    Check(ContainsRect(viewport, clamped) && clamped.Overlaps(almostFull),
+        "A cramped preview may overlap the parent, so its pointer behavior must be independent of placement.");
 }
 
 static void TabDoesNotFocusSearch()
@@ -371,7 +400,8 @@ static void InspectorLayout()
             row.xMin == inner.xMin && row.xMax == inner.xMax) &&
             recipe.Method.yMax < recipe.Pages.yMin && recipe.Pages.yMax < recipe.Content.yMin,
             "Method, page controls and diagrams stay inside the frame in order.");
-        Check(ContainsRect(recipe.Header, recipe.Back) && ContainsRect(recipe.Frame, recipe.Method) &&
+        Check(ContainsRect(recipe.NavigationBounds, recipe.Back) && ContainsRect(recipe.NavigationBounds, recipe.Tab(0)) &&
+            ContainsRect(recipe.Frame, recipe.Method) &&
             !recipe.Back.Overlaps(recipe.Method) && recipe.PreviousMethod.xMin == recipe.Pages.xMin &&
             recipe.NextMethod.xMax == recipe.Pages.xMax,
             "Method switching is inside the recipe frame and shares page arrow columns.");
@@ -516,29 +546,51 @@ static void TextureLocations()
     Check(NeiAssets.ExpectedSize(NeiAssets.CheckboxAtlas) == (64, 64) &&
         NeiAssets.TextureSources(NeiAssets.CheckboxAtlas, true).Last() == (NeiAssets.ResourceName(NeiAssets.CheckboxAtlas), true),
         "Checkbox replacements require the original atlas dimensions and have an embedded fallback.");
-    foreach (var (on, hover, x, y) in new[] { (false, false, 0, 28), (false, true, 22, 28), (true, false, 0, 40), (true, true, 22, 40) })
+    foreach (var (on, hovered, x, y) in new[] { (false, false, 0, 28), (false, true, 22, 28), (true, false, 0, 40), (true, true, 22, 40) })
     {
-        Check(ModernityFrames.Find(ModernityFrames.CheckboxFace(on, hover)) is
+        Check(ModernityFrames.Find(ModernityFrames.CheckboxFace(on, hovered)) is
             { ResourcePath: NeiAssets.CheckboxAtlas, Width: 22, Height: 12 } frame && frame.X == x && frame.Y == y,
-            "Each checked and hover combination uses its own complete switch frame.");
-        Check(ModernityFrames.Find(ModernityFrames.CheckboxFace(on, hover, square: true)) is
-            { ResourcePath: NeiAssets.CheckboxAtlas, Width: 12, Height: 12 } square &&
-            square.X == (hover ? 43 : 29) && square.Y == (on ? 15 : 1),
-            "Spawn mode uses the four square faces in the 26×26 block at (29, 1).");
+            "Each on/off and released/hovered combination uses its own complete switch frame.");
     }
+    Check(ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(false, false)) is
+        { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 1, Width: 12, Height: 12 } &&
+        ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(false, true)) is
+        { ResourcePath: NeiAssets.CheckboxAtlas, X: 43, Y: 2, Width: 12, Height: 11 } &&
+        ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(true, false)) is
+        { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 16, Width: 12, Height: 11 } &&
+        ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(true, true)) is
+        { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 16, Width: 12, Height: 11 },
+        "Spawn mode uses the supplied default, hover, and selected square checkbox faces.");
+    Check(ModernityFrames.Find("method_tab_selected") is { ResourcePath: NeiAssets.RecipeTabSelected, X: 0, Y: 0, Width: 48, Height: 46 } &&
+        ModernityFrames.Find("method_tab") is { ResourcePath: NeiAssets.RecipeTabCandidate, X: 0, Y: 0, Width: 48, Height: 43 },
+        "Recipe tabs and buttons use the standalone selected and candidate PNGs, not frames from the original atlas.");
     Check(NeiAssets.ExpectedSize(NeiAssets.RecipeBackgroundTexture) == (256, 256) &&
-        ModernityFrames.Find("recipe_background") is { ResourcePath: NeiAssets.RecipeBackgroundTexture, X: 0, Y: 0,
-            Width: NeiAssets.RecipeBackgroundWidth, Height: NeiAssets.RecipeBackgroundHeight } &&
+        ModernityFrames.Find("recipe_background") is { ResourcePath: NeiAssets.RecipeBackgroundTexture, X: 0, Y: 0, Width: 184, Height: 174 } &&
+        ModernityFrames.Find("inspector_background") is { ResourcePath: NeiAssets.OriginalRecipeBackground, X: 0, Y: 0, Width: 184, Height: 174 } &&
+        NeiAssets.ExpectedSize(NeiAssets.OriginalRecipeBackground) == (256, 256) &&
         NeiAssets.RecipeBackgroundSlice == 9,
-        "Recipe panels use the 184x174 source frame with nine-pixel nine-slice borders.");
+        "Recipe panels use the Modernity 184x174 frame with nine-pixel borders.");
+    foreach (string path in new[] { NeiAssets.RecipeBackgroundTexture, NeiAssets.OriginalRecipeBackground, NeiAssets.RecipeTabSelected, NeiAssets.RecipeTabCandidate })
+    {
+        string canonical = NeiAssets.RelativePath(path);
+        var expected = path == NeiAssets.OriginalRecipeBackground
+            ? new[] { (NeiAssets.ActivePackDirectory + "/" + canonical, false), (canonical, true) }
+            : new[] { (NeiAssets.ActivePackDirectory + "/" + canonical, false), (canonical, false), (canonical, true) };
+        Check(NeiAssets.TextureSources(path, true).SequenceEqual(expected), "Recipe artwork falls back from the active pack to the supplied file and then to the same embedded PNG: " + path);
+    }
 }
 
 static void DragReleaseOwnership()
 {
-    Check(!DragInputPolicy.CancelRelease(true, false, true), "A real native drop target at an overlapping rectangle still receives the original release.");
-    Check(DragInputPolicy.CancelRelease(true, false, false), "A preview over a NEI-only field is cancelled, not dropped into the world.");
-    Check(DragInputPolicy.CancelRelease(false, true, false), "A NEI click release must not close the radial menu.");
-    Check(!DragInputPolicy.CancelRelease(false, false, false), "A completed native click must not be mistaken for a NEI click.");
+    var release = DragInputPolicy.ReleaseOverOverlay;
+    Check(release(true, false, true) == DragInputPolicy.Release.Native,
+        "A real native drop target at an overlapping rectangle still receives the original release.");
+    Check(release(true, false, false) == DragInputPolicy.Release.CancelDrag,
+        "A preview over a NEI-only field is cancelled, not dropped into the world.");
+    Check(release(false, true, false) == DragInputPolicy.Release.OverlayClick,
+        "A NEI click must suppress native release without cancelling the MouseUp required by IMGUI.");
+    Check(release(false, false, false) == DragInputPolicy.Release.Native,
+        "A completed native click must not be mistaken for a NEI click.");
 }
 
 static void DragInventoryClose()

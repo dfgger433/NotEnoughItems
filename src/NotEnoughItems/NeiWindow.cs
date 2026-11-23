@@ -226,6 +226,7 @@ internal sealed partial class NeiWindow
         return _searchRect.Contains(pointer) || _groupRect.Contains(pointer) ||
             (ShowRight && (_catalogLayout.Search.Contains(pointer) || _catalogLayout.Quantity.Contains(pointer)));
     }
+    internal bool RecipeNavigationHit(Vector2 pointer) => RecipeNavigationBounds.Contains(pointer / Mathf.Max(.01f, _scale));
     internal static bool IsTextControl(string? name) => name is SearchControl or CatalogSearchControl or CatalogQuantityControl or GroupControl;
     internal string? ItemAt(Vector2 pointer) => ItemTargetAt(pointer).Id;
 
@@ -471,7 +472,7 @@ internal sealed partial class NeiWindow
         if (_treeOpen) { _treeOpen = false; _returnToTree = true; _open = false; _back.Clear(); }
         else if (!_open) _returnToTree = false;
         if (_open && _back.Count < 64)
-            _back.Push((_item, _usage, _method, _recipeIndex, _recipeScroll, _lookupContents, _lookupItem, _propertyQuery, _propertyPage));
+            _back.Push((_item, _usage, _method, UnfilteredRecipeIndex(), _recipeScroll, _lookupContents, _lookupItem, _propertyQuery, _propertyPage));
         _item = id;
         _propertyQuery = null;
         _propertyPage = 0;
@@ -527,7 +528,7 @@ internal sealed partial class NeiWindow
         _propertyPage = 0;
         _back.Clear();
         _itemTargets.Clear();
-        ResetRecipePosition();
+        ResetRecipeResults();
         if (_focusSearch == SearchControl) _focusSearch = null;
         _skipFocusFrame = true;
     }
