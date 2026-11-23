@@ -215,8 +215,9 @@ internal sealed partial class NeiWindow
         NeiSkin.Label(new Rect(box.x + pad, tray.yMax + 1, textWidth, line), hint, muted: true);
         if (footerHeight > 0f)
         {
+            bool copyEnabled = pinned && CanCopyTooltip;
             var (idRow, modRow) = NeiSkin.DrawItemFooter(new Rect(box.x + pad, box.yMax - pad - footerHeight + 4f, textWidth, footerHeight - 4f),
-                tip, idHeight, copyIdEnabled: pinned && CanCopyTooltipId, copyModEnabled: pinned && CanUseTooltip);
+                tip, idHeight, copyIdEnabled: copyEnabled && _showTooltipId.Value, copyModEnabled: copyEnabled);
             _supportedCopyId = (idRow, tip.Id, modRow, tip.ModText);
         }
         if (hovered >= 0)

@@ -12,10 +12,10 @@ internal sealed partial class NeiWindow
     private (Vector2 Pointer, Rect Source, NativeTooltip.Content Content)? _queuedItemTip;
 
     internal static ConfigEntry<bool> BindTooltipId(ConfigFile config) => config.Bind("NotEnoughItems", "ShowTooltipId", true,
-        "Show item, liquid and entry IDs in NEI tooltips. Hold Shift and click an ID to copy it; click a mod name to copy it.");
+        "Show item, liquid and entry IDs in NEI tooltips. Hold Shift and left-click an ID or mod name to copy it.");
 
     private bool CanUseTooltip => !_layoutEditing && !_plugin.NativePointerActive;
-    private bool CanCopyTooltipId => _showTooltipId.Value && SelectionShiftHeld && CanUseTooltip;
+    private bool CanCopyTooltip => SelectionShiftHeld && CanUseTooltip;
 
     private void ClearItemTooltipInput()
     {
@@ -51,15 +51,14 @@ internal sealed partial class NeiWindow
 
         bool overSupported = SupportedItemsHit(pointer);
         bool overPinned = _pinnedIdTip is { } pinnedTip && pinnedTip.Box.Contains(pointer);
-        Rect row = default;
-        string? value = null;
-        bool copy = false, requireShift = true;
+        (Rect IdRow, string? Id, Rect ModRow, string? Mod) rows = default;
         if (overPinned && _pinnedIdTip is { } item)
-            SelectRow(item.IdRow, item.Content.Id, item.ModRow, item.Content.ModText);
+            rows = (item.IdRow, item.Content.Id, item.ModRow, item.Content.ModText);
         else if (overSupported && _supportedCopyId is { } supported)
-            SelectRow(supported.IdRow, supported.Id, supported.ModRow, supported.Mod);
+            rows = supported;
 
-        if (CopyTooltipValueAt(value, row, pointer, e.type, e.button, SelectionShiftHeld, requireShift) is { } copied)
+        var idRow = _showTooltipId.Value ? rows.IdRow : default;
+        if (CopyTooltipValueAt(rows.Id, idRow, rows.Mod, rows.ModRow, pointer, e.type, e.button, SelectionShiftHeld) is { } copied)
         {
             GUIUtility.systemCopyBuffer = copied;
             _tooltipCopyPressed = true;
@@ -70,19 +69,14 @@ internal sealed partial class NeiWindow
             e.Use();
         else if (e.type is EventType.MouseDown or EventType.ScrollWheel)
             _pinnedIdTip = null;
-
-        void SelectRow(Rect idRow, string? id, Rect modRow, string? mod)
-        {
-            if (_showTooltipId.Value && idRow.Contains(pointer))
-                (row, value, copy) = (idRow, id, CanCopyTooltipId);
-            else if (modRow.Contains(pointer))
-                (row, value, copy, requireShift) = (modRow, mod, true, false);
-        }
     }
 
-    internal static string? CopyTooltipValueAt(string? value, Rect row, Vector2 pointer, EventType type, int button, bool shift,
-        bool requireShift = true) =>
-        (!requireShift || shift) && type == EventType.MouseDown && button == 0 && row.Contains(pointer) ? value : null;
+    internal static string? CopyTooltipValueAt(string? id, Rect idRow, string? mod, Rect modRow,
+        Vector2 pointer, EventType type, int button, bool shift)
+    {
+        if (!shift || type != EventType.MouseDown || button != 0) return null;
+        return idRow.Contains(pointer) ? id : modRow.Contains(pointer) ? mod : null;
+    }
 
     private void QueueItemTip(Vector2 pointer, Rect source, NativeTooltip.Content content) =>
         _queuedItemTip = (pointer, source, content);
@@ -93,9 +87,9 @@ internal sealed partial class NeiWindow
         var next = _pinnedIdTip is { } pinned ? (pinned.Anchor, pinned.Source, pinned.Content) : _queuedItemTip;
         if (next is not { } tip) return;
         var (anchor, source, content) = tip;
-        bool copyId = CanCopyTooltipId && content.Id != null;
-        bool copyMod = CanUseTooltip && content.ModText != null;
-        var (box, idRow, modRow) = NeiSkin.ItemTooltip(anchor, new Vector2(_width, _height), content, copyId, copyMod);
+        bool copyEnabled = CanCopyTooltip;
+        var (box, idRow, modRow) = NeiSkin.ItemTooltip(anchor, new Vector2(_width, _height), content,
+            copyIdEnabled: copyEnabled && _showTooltipId.Value, copyModEnabled: copyEnabled);
         _pinnedIdTip = box.width > 0f ? (content, anchor, source, box, idRow, modRow) : null;
     }
 }

@@ -127,16 +127,22 @@ internal static class TooltipSmoke
         finally { File.Delete(path); }
 
         var copy = window.GetMethod("CopyTooltipValueAt", NonPublic)!;
-        var row = new Rect(100, 110, 200, 14);
-        string? Copy(string? value, bool shift, bool requireShift = true, EventType type = EventType.MouseDown, int button = 0, Vector2? pointer = null) =>
-            (string?)copy.Invoke(null, [value, row, pointer ?? row.center, type, button, shift, requireShift]);
-        if (Copy("example:pliers", shift: true) != "example:pliers" ||
-            Copy("example.tools", shift: false, requireShift: false) != "example.tools" ||
-            Copy(null, shift: true) != null || Copy("water", shift: false) != null ||
-            Copy("water", shift: true, button: 1) != null || Copy("water", shift: true, type: EventType.MouseUp) != null ||
-            Copy("water", shift: true, pointer: row.center + new Vector2(0, row.height)) != null ||
-            Copy("example.tools", shift: true, requireShift: false, button: 1) != null)
-            throw new InvalidOperationException("IDs copy only on Shift-left-click; mod names copy on plain left-click without activating rows or other buttons.");
+        var idRow = new Rect(100, 110, 200, 14);
+        var modRow = new Rect(100, 124, 200, 14);
+        string? Copy(Vector2 pointer, bool shift, EventType type = EventType.MouseDown, int button = 0, bool showId = true,
+            string? id = "example:pliers", string? mod = "Forge Guild") =>
+            (string?)copy.Invoke(null, [id, showId ? idRow : default, mod, modRow, pointer, type, button, shift]);
+        foreach (var (row, value) in new[] { (idRow, "example:pliers"), (modRow, "Forge Guild") })
+        {
+            if (Copy(row.center, shift: true) != value || Copy(row.center, shift: false) != null ||
+                Copy(row.center, shift: true, button: 1) != null || Copy(row.center, shift: true, type: EventType.MouseUp) != null)
+                throw new InvalidOperationException("Both tooltip rows must copy their exact value only on Shift-left-click.");
+        }
+        if (Copy(modRow.center + new Vector2(0, modRow.height), shift: true) != null ||
+            Copy(idRow.center, shift: true, id: null) != null || Copy(modRow.center, shift: true, mod: null) != null ||
+            Copy(idRow.center, shift: true, showId: false) != null ||
+            Copy(modRow.center, shift: true, showId: false) != "Forge Guild" || Copy(modRow.center, shift: false, showId: false) != null)
+            throw new InvalidOperationException("Hidden or missing rows cannot copy; hiding the ID must not change Shift-left-click on the mod name.");
     }
 
     internal static void Colors()
