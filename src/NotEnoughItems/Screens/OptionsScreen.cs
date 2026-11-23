@@ -60,23 +60,20 @@ internal sealed partial class NeiWindow
         }
     }
 
-    private string ToggleLabel(string en, string zh, bool on) =>
-        L(en + (on ? ": On" : ": Off"), zh + (on ? "：开" : "：关"));
-
     private void DrawDisplayOptions(Rect row)
     {
-        if (NeiSkin.Button(row, ToggleLabel("Inventory catalog", "背包右侧目录", _showInventoryGrid.Value)))
+        if (NeiSkin.Checkbox(row, L("Inventory catalog", "背包右侧目录"), _showInventoryGrid.Value))
             _showInventoryGrid.Value = !_showInventoryGrid.Value;
         row.y += 30;
-        if (NeiSkin.Button(row, ToggleLabel("Terminal catalog", "终端右侧目录", _showGrid.Value)))
+        if (NeiSkin.Checkbox(row, L("Terminal catalog", "终端右侧目录"), _showGrid.Value))
             _showGrid.Value = !_showGrid.Value;
         row.y += 30;
-        if (NeiSkin.Button(row, ToggleLabel("Bookmarks", "书签栏", _bookmarksVisible))) ToggleBookmarks();
+        if (NeiSkin.Checkbox(row, L("Bookmarks", "书签栏"), _bookmarksVisible)) ToggleBookmarks();
         row.y += 30;
-        if (NeiSkin.Button(row, ToggleLabel("History strip", "浏览记录", _showHistory.Value)))
+        if (NeiSkin.Checkbox(row, L("History strip", "浏览记录"), _showHistory.Value))
             _showHistory.Value = !_showHistory.Value;
         row.y += 30;
-        if (NeiSkin.Button(row, ToggleLabel("Hide legacy UEI panel", "隐藏旧版 UEI 侧栏", _plugin.ReplaceUei)))
+        if (NeiSkin.Checkbox(row, L("Hide legacy UEI panel", "隐藏旧版 UEI 侧栏"), _plugin.ReplaceUei))
             _plugin.ReplaceUei = !_plugin.ReplaceUei;
         row.y += 30;
         float scale = _plugin.Scale;
@@ -137,7 +134,7 @@ internal sealed partial class NeiWindow
 
     private void DrawLayoutOptions(Rect row)
     {
-        if (NeiSkin.Button(row, ToggleLabel("Drag panels to arrange", "拖动面板调整布局", _layoutEditing), selected: _layoutEditing))
+        if (NeiSkin.Checkbox(row, L("Drag panels to arrange", "拖动面板调整布局"), _layoutEditing))
         {
             ToggleLayoutEditing();
             if (_layoutEditing) _options = false;
@@ -175,7 +172,7 @@ internal sealed partial class NeiWindow
             Status(notice);
         }
         row.y += 30;
-        if (NeiSkin.Button(row, ToggleLabel("Single-player cheats", "单机作弊", _plugin.AllowCheats), selected: _plugin.AllowCheats))
+        if (NeiSkin.Checkbox(row, L("Single-player cheats", "单机作弊"), _plugin.AllowCheats))
         {
             _plugin.SetAllowCheats(!_plugin.AllowCheats);
             Status(_plugin.AllowCheats
