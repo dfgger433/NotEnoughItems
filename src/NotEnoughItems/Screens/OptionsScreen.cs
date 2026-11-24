@@ -6,7 +6,7 @@ namespace NotEnoughItems;
 
 internal sealed partial class NeiWindow
 {
-    private enum OptionsTab { Display, Layout, Items, Keys }
+    private enum OptionsTab { Display, Layout, Items, Keys, Devbug }
     private OptionsTab _optionsTab;
     private bool _languageMenuOpen;
     internal bool LanguageMenuOpen => _options && _languageMenuOpen;
@@ -33,11 +33,12 @@ internal sealed partial class NeiWindow
     {
         NeiSkin.RecipePanel(p);
         Header(p, L("NEI options", "NEI 选项"), "NEI");
-        float x = p.x + 12, w = p.width - 24, tabWidth = (w - 6) / 4;
+        float x = p.x + 12, w = p.width - 24, tabWidth = (w - 8) / 5;
         DrawTab(OptionsTab.Display, L("Display", "显示"));
         DrawTab(OptionsTab.Layout, L("Layout", "布局"));
         DrawTab(OptionsTab.Items, L("Items", "物品"));
         DrawTab(OptionsTab.Keys, L("Keys", "按键"));
+        DrawTab(OptionsTab.Devbug, L("Devbug", "调试"));
 
         var row = FirstOptionsRow(p);
         switch (_optionsTab)
@@ -46,6 +47,7 @@ internal sealed partial class NeiWindow
             case OptionsTab.Layout: DrawLayoutOptions(row); break;
             case OptionsTab.Items: DrawItemOptions(row); break;
             case OptionsTab.Keys: DrawKeyOptions(row); break;
+            case OptionsTab.Devbug: DrawDevbugOptions(row); break;
         }
         if (NeiSkin.Button(new Rect(x, p.yMax - 35, w, 26), L("Done", "完成"))) Back();
 
@@ -209,6 +211,37 @@ internal sealed partial class NeiWindow
             NeiSkin.OptionsNote(row, text);
             row.y += row.height + 6;
         }
+    }
+
+    private void DrawDevbugOptions(Rect row)
+    {
+        NeiSkin.OptionsHeading(new Rect(row.x, row.y, row.width, 20), L("Developer diagnostics", "开发调试"));
+        row.y += 28;
+        if (NeiSkin.Button(row, L("Retry catalog refresh", "重试刷新目录")))
+        {
+            _plugin.RetryCatalogRefresh();
+            ResetRecipeResults();
+            Status(_lastError == null
+                ? L("Catalog refresh completed.", "目录刷新完成。")
+                : L("Catalog refresh failed; see the log.", "目录刷新失败；请查看日志。"));
+        }
+        row.y += 42;
+        string detail;
+        try
+        {
+            detail = _lastError == null
+                ? L($"Catalog: {_catalog.Items.Count} items, {_catalog.Recipes.Count} recipes.",
+                    $"目录：{_catalog.Items.Count} 个物品，{_catalog.Recipes.Count} 个配方。")
+                : L($"Last catalog error: {_lastError}", $"目录错误：{_lastError}");
+        }
+        catch (Exception error)
+        {
+            _lastError = error.Message;
+            detail = L("The catalog is not ready yet. Retry after the game registry is ready.",
+                "目录尚未准备好；请在游戏注册表准备好后重试。");
+        }
+        row.height = NeiSkin.OptionsNoteHeight(detail, row.width);
+        NeiSkin.OptionsNote(row, detail);
     }
 
     private void DrawKeyOptions(Rect row)

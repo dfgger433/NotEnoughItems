@@ -269,6 +269,18 @@ internal sealed partial class NeiWindow
         return true;
     }
 
+    internal void RetryCatalogRefresh(ManualLogSource log)
+    {
+        try { _catalog.Refresh(); }
+        catch (Exception error)
+        {
+            _lastError = error.Message;
+            log.LogError("NEI catalog retry failed: " + error);
+            return;
+        }
+        RefreshCatalog(log);
+    }
+
     internal void RefreshCatalog(ManualLogSource log)
     {
         try

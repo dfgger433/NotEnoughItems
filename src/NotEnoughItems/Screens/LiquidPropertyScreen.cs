@@ -63,6 +63,7 @@ internal sealed partial class NeiWindow
         _propertyPage = Wrap(Math.Clamp(_propertyPage, 0, pages - 1) + delta, pages);
         NeiSkin.Label(panel.PageTitle,
             L($"{count} matching types · {_propertyPage + 1} / {pages}", $"{count} 种匹配物品 · {_propertyPage + 1} / {pages}"), TextAnchor.MiddleCenter);
+        NeiSkin.Icon(panel.Search, "recipe_search");
         if (count == 0)
             NeiSkin.Label(area, L("No items have this property", "没有物品含此性质"), TextAnchor.MiddleCenter, muted: true);
         int first = _propertyPage * size;

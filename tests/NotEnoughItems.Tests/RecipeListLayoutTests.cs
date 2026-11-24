@@ -24,7 +24,11 @@ internal static class RecipeListLayoutTests
             panel.Method.yMin >= panel.Frame.yMin && panel.Method.yMax < panel.Pages.yMin && panel.Pages.yMax < panel.Content.yMin,
             "The open-bottom tab overlaps the visible frame edge, not just the transparent inset.");
         Check(panel.PreviousMethod.xMin == panel.Method.xMin && panel.NextMethod.xMax == panel.Method.xMax &&
-            panel.PreviousMethod.xMax <= panel.MethodTitle.xMin && panel.MethodTitle.xMax <= panel.NextMethod.xMin);
+            panel.PreviousMethod.xMax <= panel.MethodTitle.xMin && panel.MethodTitle.xMax <= panel.NextMethod.xMin &&
+            panel.Search.xMin >= panel.PageTitle.xMin && panel.Search.xMax <= panel.PageTitle.xMax &&
+            panel.PageTitle.xMax <= panel.NextPage.xMin && panel.Search.yMin >= panel.Pages.yMin &&
+            panel.Search.yMax <= panel.Pages.yMax,
+            "Method/page navigation keeps the page-row magnifier inside the page title lane.");
         Check(panel.PreviousMethod.xMin == panel.PreviousPage.xMin && panel.NextMethod.xMax == panel.NextPage.xMax &&
             panel.PageTitle.center.x == panel.MethodTitle.center.x &&
             panel.NavigationBounds.Contains(panel.PageTitle.center) && panel.NavigationBounds.Contains(panel.Tab(0).center),
