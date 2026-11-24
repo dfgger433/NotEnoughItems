@@ -391,10 +391,8 @@ public sealed class Plugin : BaseUnityPlugin
         }
         var id = _window.ItemAt(mouse);
         string[]? contents = null;
-        Item? lookupItem = null;
         if (id == null && !_window.Hit(mouse) && _surface.HoveredItem(_active) is { } native)
         {
-            lookupItem = native;
             id = "item:" + native.id;
             if (!bookmark && native.TryGetComponent<WaterContainerItem>(out var container) && container.stack != null)
                 contents = container.stack.Where(stack => stack != null && stack.amount > 0 && !string.IsNullOrWhiteSpace(stack.liquidId))
@@ -406,7 +404,7 @@ public sealed class Plugin : BaseUnityPlugin
             return;
         }
         if (string.IsNullOrEmpty(id)) return;
-        _window.Lookup(id, usages, contents, lookupItem);
+        _window.Lookup(id, usages, contents);
         CaptureKey();
     }
 

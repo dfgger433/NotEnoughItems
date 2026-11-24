@@ -63,6 +63,23 @@ internal static class TooltipSmoke
             throw new InvalidOperationException("Zero and one eligible matches must not gain phantom alternatives.");
     }
 
+    internal static void DryPreview()
+    {
+        var assembly = typeof(CatalogItem).Assembly;
+        var previewFactory = assembly.GetType("NotEnoughItems.NativeTooltipPreview", true)!;
+        var initialize = previewFactory.GetMethod("InitializeWetness", NonPublic)!;
+        var preview = (Item)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Item));
+        preview.wetTime = 0f; // Serialized state of e.g. the bread and lantern prefabs.
+        preview.condition = .75f;
+        initialize.Invoke(null, [preview]);
+        if (preview.wetTime != -1000f || preview.condition != .75f)
+            throw new InvalidOperationException("Inactive previews should use the game's dry initial timestamp without modifying condition.");
+
+        var forItem = assembly.GetType("NotEnoughItems.NativeTooltip", true)!.GetMethod("ForItem", NonPublic)!;
+        if (forItem.GetParameters().Any(parameter => parameter.ParameterType == typeof(Item)))
+            throw new InvalidOperationException("A lookup on a live item must not supply that item's state to NEI tooltips.");
+    }
+
     internal static void ItemContent()
     {
         var native = typeof(CatalogItem).Assembly.GetType("NotEnoughItems.NativeTooltip", true)!;
@@ -70,7 +87,7 @@ internal static class TooltipSmoke
         (string? Name, string? Description, string? Note, string? Id, string? IdText, string? ModText) Read(CatalogItem item, string? note = null,
             bool expanded = false, bool chinese = false, float? volume = null, bool showId = true)
         {
-            var result = forItem.Invoke(null, [item.DisplayName, item, note, null, expanded, chinese, volume, showId])!;
+            var result = forItem.Invoke(null, [item.DisplayName, item, note, expanded, chinese, volume, showId])!;
             string? Get(string name) => (string?)result.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(result);
             return (Get("Name"), Get("Description"), Get("Note"), Get("Id"), Get("IdText"), Get("ModText"));
         }

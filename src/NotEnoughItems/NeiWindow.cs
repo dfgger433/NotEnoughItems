@@ -20,11 +20,10 @@ internal sealed partial class NeiWindow
     private readonly ConfigEntry<bool> _showInventoryGrid;
     private readonly BookmarkBook _book = new();
     private readonly List<string> _recent = new();
-    private readonly Stack<(string? Item, bool Usage, string? Method, int Index, Vector2 Scroll, string[] Contents, Item? LiveItem,
+    private readonly Stack<(string? Item, bool Usage, string? Method, int Index, Vector2 Scroll, string[] Contents,
         RecipeIngredient? Property, int PropertyPage)> _back = new();
     private string[] _lookupContents = Array.Empty<string>();
     private readonly List<(Rect Rect, string? Id, RecipeIngredient? Property)> _itemTargets = new();
-    private Item? _lookupItem;
     private Rect _left, _right, _catalogControls, _center, _inspector, _optionsBounds, _searchRect, _groupRect;
     private NeiLayout.ToolButtons _leftTools;
     private NeiLayout.CatalogPanel _catalogLayout;
@@ -65,10 +64,6 @@ internal sealed partial class NeiWindow
     private int _layoutPreviewWidth;
     private bool _layoutEditing;
     private IReadOnlyList<CatalogItem> _filtered = Array.Empty<CatalogItem>();
-    private readonly HashSet<string> _catalogCarried = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _catalogNativeFavorites = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _nextCatalogCarried = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _nextCatalogNativeFavorites = new(StringComparer.OrdinalIgnoreCase);
     private bool _catalogFilterDirty = true;
     private string? _lastError;
     internal bool SearchFocused { get => _searchFocused; set => _searchFocused = value; }
@@ -148,7 +143,6 @@ internal sealed partial class NeiWindow
         _catalogLayout = default;
         _recipePanel = default;
         _itemTargets.Clear();
-        _lookupItem = null;
         NativeTooltipPreview.Release();
         ClearItemTooltipInput();
         _tooltipCopyPressed = false;
@@ -185,7 +179,6 @@ internal sealed partial class NeiWindow
         ClearBookmarkHits();
         _back.Clear();
         _itemTargets.Clear();
-        _lookupItem = null;
     }
 
     private bool HideBookmarksForDrag
@@ -297,7 +290,6 @@ internal sealed partial class NeiWindow
                 if (first || _lastError != null)
                     log.LogInfo($"NEI catalog: {_catalog.Items.Count} entries, {_catalog.Recipes.Count} recipes, {_catalog.RecipeCategories.Count} categories.");
             }
-            if (ShowRight) RefreshCatalogCarried();
             _lastError = null;
         }
         catch (Exception error)
@@ -307,34 +299,9 @@ internal sealed partial class NeiWindow
         }
     }
 
-    private void RefreshCatalogCarried()
-    {
-        var camera = PlayerCamera.main;
-        _nextCatalogCarried.Clear();
-        _nextCatalogNativeFavorites.Clear();
-        NativeCraftStock.CollectCarriedTypes(camera ? camera.body : null, _nextCatalogCarried, _nextCatalogNativeFavorites);
-        if (_catalogCarried.SetEquals(_nextCatalogCarried) && _catalogNativeFavorites.SetEquals(_nextCatalogNativeFavorites)) return;
-        _catalogCarried.Clear();
-        _catalogCarried.UnionWith(_nextCatalogCarried);
-        _catalogNativeFavorites.Clear();
-        _catalogNativeFavorites.UnionWith(_nextCatalogNativeFavorites);
-        _catalogFilterDirty = true;
-    }
-
     private void ApplyFilter()
     {
-        var favorites = new HashSet<string>(PreferredMaterials, StringComparer.OrdinalIgnoreCase);
-        favorites.UnionWith(_catalogNativeFavorites);
-        foreach (var entry in _book.Entries)
-        {
-            if (entry.IsRecipe)
-            {
-                if (BookmarkedRecipe(entry.Id) is { } recipe && BookmarkProduct(entry, recipe) is { } product)
-                    favorites.Add(product.BrowseId);
-            }
-            else if (_catalog.TryGetItem(entry.Id, out var item)) favorites.Add(item.BrowseId);
-        }
-        _filtered = CatalogListing.Filter(_catalog.Items, _query, _plugin.Pinyin, favorites, _catalogCarried, NativeTooltip.SourceName);
+        _filtered = CatalogListing.Filter(_catalog.Items, _query, _plugin.Pinyin, NativeTooltip.SourceName);
         _catalogFilterDirty = false;
     }
 
@@ -347,7 +314,6 @@ internal sealed partial class NeiWindow
     {
         _productionContext++;
         _preferredMaterials = null;
-        _catalogFilterDirty = true;
         _favoriteCandidates.Clear();
         _saved.Value = _book.Serialize();
         InvalidateBookmarkView();
@@ -443,13 +409,12 @@ internal sealed partial class NeiWindow
         return true;
     }
 
-    internal void Lookup(string id, bool usage, string[]? contents = null, Item? liveItem = null)
+    internal void Lookup(string id, bool usage, string[]? contents = null)
     {
         contents ??= Array.Empty<string>();
-        if (_open && _item == id && _usage == usage && _lookupContents.SequenceEqual(contents) && _lookupItem == liveItem) return;
+        if (_open && _item == id && _usage == usage && _lookupContents.SequenceEqual(contents)) return;
         OpenView(id, usage);
         _lookupContents = contents;
-        _lookupItem = liveItem;
         if (RecentBrowseId(id) is { } recent)
         {
             _recent.Remove(recent);
@@ -484,12 +449,11 @@ internal sealed partial class NeiWindow
         if (_treeOpen) { _treeOpen = false; _returnToTree = true; _open = false; _back.Clear(); }
         else if (!_open) _returnToTree = false;
         if (_open && _back.Count < 64)
-            _back.Push((_item, _usage, _method, UnfilteredRecipeIndex(), _recipeScroll, _lookupContents, _lookupItem, _propertyQuery, _propertyPage));
+            _back.Push((_item, _usage, _method, UnfilteredRecipeIndex(), _recipeScroll, _lookupContents, _propertyQuery, _propertyPage));
         _item = id;
         _propertyQuery = null;
         _propertyPage = 0;
         _lookupContents = Array.Empty<string>();
-        _lookupItem = null;
         _selectedRecipeBookmark = null;
         _selectedRecipeIngredient = -1;
         _usage = usage;
@@ -530,7 +494,7 @@ internal sealed partial class NeiWindow
         ResetRecipeResults();
         _selectedRecipeBookmark = null;
         _skipFocusFrame = true;
-        (_item, _usage, _method, _recipeIndex, _recipeScroll, _lookupContents, _lookupItem, _propertyQuery, _propertyPage) = _back.Pop();
+        (_item, _usage, _method, _recipeIndex, _recipeScroll, _lookupContents, _propertyQuery, _propertyPage) = _back.Pop();
     }
 
     private void CloseRecipe()

@@ -18,24 +18,6 @@ internal static class NativeCraftStock
                 yield return item;
     }
 
-    internal static void CollectCarriedTypes(Body? body, ISet<string> carried, ISet<string> favorited)
-    {
-        if (!body || body is null) return;
-        foreach (var item in Items(body, carried: true, nearby: false))
-        {
-            if (!string.IsNullOrWhiteSpace(item.id))
-            {
-                string id = "item:" + item.id;
-                carried.Add(id);
-                if (item.favourited) favorited.Add(id);
-            }
-            if (item.TryGetComponent<WaterContainerItem>(out var vessel) && vessel.stack != null)
-                foreach (var stack in vessel.stack)
-                    if (stack != null && stack.amount > 0f && float.IsFinite(stack.amount) && !string.IsNullOrWhiteSpace(stack.liquidId))
-                        carried.Add("liquid:" + stack.liquidId);
-        }
-    }
-
     internal static HashSet<(string Id, float Condition)> CarriedSolids(Body? body)
     {
         var stock = new HashSet<(string, float)>();

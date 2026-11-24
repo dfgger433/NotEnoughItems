@@ -714,7 +714,7 @@ internal static class BookmarkParityTests
         var property = windowType.GetField("_propertyQuery", instance)!;
         var page = windowType.GetField("_propertyPage", instance)!;
         var itemId = windowType.GetField("_item", instance)!;
-        normal.Invoke(window, ["item:prior", true, null, null]);
+        normal.Invoke(window, ["item:prior", true, null]);
         Check(Equals(itemAt.Invoke(window, [pointer]), strong.BrowseId) && (bool)lookup.Invoke(window, [pointer])! &&
             Equals(property.GetValue(window), input), "The requirement opens a typed quality view but retains the displayed concrete ID for U and bookmarks.");
         page.SetValue(window, 2);
@@ -722,7 +722,7 @@ internal static class BookmarkParityTests
         targets.Add((slot, weak.BrowseId, (RecipeIngredient?)null));
         Check(!(bool)lookup.Invoke(window, [pointer])! && Equals(itemAt.Invoke(window, [pointer]), weak.BrowseId),
             "A concrete result on top of the property target resolves as the concrete item.");
-        normal.Invoke(window, [weak.BrowseId, false, null, null]);
+        normal.Invoke(window, [weak.BrowseId, false, null]);
         Check(property.GetValue(window) == null && Equals(itemId.GetValue(window), weak.BrowseId), "Result lookup uses its normal recipe context.");
         var back = windowType.GetMethod("Back", instance)!;
         back.Invoke(window, null);

@@ -53,9 +53,8 @@ internal sealed partial class NeiWindow
             var hint = L($"{key}: all items with this property", $"{key}：查询含此性质的所有物品");
             details = string.IsNullOrEmpty(details) ? hint : details + "\n" + hint;
         }
-        Item? live = item != null && SameId(item.BrowseId, _item) ? _lookupItem : null;
         bool expanded = ItemDetailsHeld || PlayerCamera.alwaysExpandDescriptions;
-        var tooltip = NativeTooltip.ForItem(title, item, details, live, expanded, _plugin.Chinese, liquidVolume, _showTooltipId.Value);
+        var tooltip = NativeTooltip.ForItem(title, item, details, expanded, _plugin.Chinese, liquidVolume, _showTooltipId.Value);
         if (string.IsNullOrWhiteSpace(tooltip.Name)) return;
         _itemTip = tooltip;
         _itemTipSource = source;
@@ -64,7 +63,7 @@ internal sealed partial class NeiWindow
         {
             var hover = new SupportedItems(source, tooltip, NativeTooltip.PlainGameText(requirement ?? tooltip.Name),
                 candidates, selectCandidate, origin, ingredient, expanded, _showTooltipId.Value,
-                (held, showId) => NativeTooltip.ForItem(title, item, details, live, held, _plugin.Chinese, liquidVolume, showId));
+                (held, showId) => NativeTooltip.ForItem(title, item, details, held, _plugin.Chinese, liquidVolume, showId));
             _supportedItemsHover = hover;
             if (SelectionShiftHeld)
             {
@@ -225,8 +224,7 @@ internal sealed partial class NeiWindow
         {
             var candidate = items.Candidates[hovered];
             var volume = items.Ingredient is { IsLiquid: true } input ? DiagramAmount(input, candidate)?.LiquidVolume : null;
-            var live = SameId(candidate.BrowseId, _item) ? _lookupItem : null;
-            var candidateTip = NativeTooltip.ForItem(candidate.DisplayName, candidate, null, live, ItemDetailsHeld, _plugin.Chinese, volume, _showTooltipId.Value);
+            var candidateTip = NativeTooltip.ForItem(candidate.DisplayName, candidate, null, ItemDetailsHeld, _plugin.Chinese, volume, _showTooltipId.Value);
             QueueItemTip(pointer, TooltipPlacement.CandidateCell(grid, columns, cell, hovered - first), candidateTip);
         }
         return true;
