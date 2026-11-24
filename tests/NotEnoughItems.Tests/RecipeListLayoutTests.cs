@@ -25,14 +25,14 @@ internal static class RecipeListLayoutTests
             "The open-bottom tab overlaps the visible frame edge, not just the transparent inset.");
         Check(panel.PreviousMethod.xMin == panel.Method.xMin && panel.NextMethod.xMax == panel.Method.xMax &&
             panel.PreviousMethod.xMax <= panel.MethodTitle.xMin && panel.MethodTitle.xMax <= panel.NextMethod.xMin &&
-            panel.Search.xMin >= panel.PageTitle.xMin && panel.Search.xMax <= panel.PageTitle.xMax &&
+            panel.Search.xMin >= panel.PreviousPage.xMax && panel.Search.xMax < panel.PageTitle.xMin &&
             panel.PageTitle.xMax <= panel.NextPage.xMin && panel.Search.yMin >= panel.Pages.yMin &&
             panel.Search.yMax <= panel.Pages.yMax,
-            "Method/page navigation keeps the page-row magnifier inside the page title lane.");
+            "Method/page navigation gives the page-row magnifier its own lane before the counter.");
         Check(panel.PreviousMethod.xMin == panel.PreviousPage.xMin && panel.NextMethod.xMax == panel.NextPage.xMax &&
-            panel.PageTitle.center.x == panel.MethodTitle.center.x &&
+            panel.PageTitle.xMax == panel.NextPage.xMin && panel.PageTitle.xMin > panel.Search.xMax &&
             panel.NavigationBounds.Contains(panel.PageTitle.center) && panel.NavigationBounds.Contains(panel.Tab(0).center),
-            "Method and page arrows share columns while the page title remains a single non-search bar.");
+            "Method and page arrows share columns while the page title stays clear of the magnifier.");
         Check(panel.MethodTitle.height >= 19 && panel.PreviousMethod.size == panel.PreviousPage.size &&
             panel.NextMethod.size == panel.NextPage.size && panel.PreviousMethod.width >= 18 &&
             panel.NavigationBounds.Contains(panel.PreviousMethod.center) && panel.NavigationBounds.Contains(panel.NextMethod.center),

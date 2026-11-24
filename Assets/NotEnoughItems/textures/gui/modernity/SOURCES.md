@@ -24,11 +24,11 @@
 
 `widgets.png` 虽不是 `nei` 命名空间，但原版 NEI 的通用按钮确实引用它。独立 UI 的 `assets/nei/textures/items/cheat_speical.png` 属于物品贴图，不是 GUI，本目录未引入；其他模组的 NEI 配方处理器素材也未引入。
 
-## 主包的书页翻页箭头
+## 主包的书页图集（保留来源）
 
 [book.png](<book.png>) 是指定的 Modernity-GTNH **主材质包** `29x` 分支在提交 [`69f42027`](https://github.com/ModernityGTNH/Modernity-GTNH/tree/69f42027b932aab8a0982d2943dac4d1773a86cc)中的 [原装书页图集](https://github.com/ModernityGTNH/Modernity-GTNH/blob/69f42027b932aab8a0982d2943dac4d1773a86cc/assets/minecraft/textures/gui/book.png)；未修改，256×256，Git blob `192ad96be7f62f45a785f39cc42b18a9f805bc68`。归属 Modernity-GTNH 及其贡献者；参见[主包许可「The code and other textures」](https://github.com/ModernityGTNH/Modernity-GTNH/blob/69f42027b932aab8a0982d2943dac4d1773a86cc/LICENSE.md#the-code-and-other-textures)及随附的 [CC BY-NC-SA 4.0 全文](<LICENSE.txt>)。此资源只用于本地非商业安装。
 
-从左上取完整 `23×13` 帧：上一页常态 `(0,192)`、悬停 `(23,192)`；下一页常态 `(0,205)`、悬停 `(23,205)`。方向按这张重绘图集中的实际箭头判定。绘制时整帧等比放入按钮，不拉伸或裁切箭头。
+书页箭头帧坐标仍记录为：上一页常态 `(0,192)`、悬停 `(23,192)`；下一页常态 `(0,205)`、悬停 `(23,205)`。当前 Unity 渲染器不读取该图集的翻页帧，而是使用按钮内置 `<`／`>` 字符；保留本文件仅用于来源、许可和材质包兼容记录。
 
 ## 可直接映射的原版 NEI 区域
 
