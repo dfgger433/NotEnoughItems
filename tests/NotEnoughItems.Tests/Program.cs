@@ -519,8 +519,15 @@ static void TextureLocations()
         "The embedded fallback uses the same resource path as the disk override.");
     Check(NeiAssets.LegacyPath(NeiAssets.Background("recipe")) == "Textures/background-recipe.png" &&
         NeiAssets.LegacyPath(NeiAssets.Modernity("widgets.png")) == null, "Legacy backgrounds stay readable, not obsolete control art.");
-    Check(ModernityFrames.Caption("previous") == "<" && ModernityFrames.Caption("next") == ">" &&
-        ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" }, "Official sprite positions and paging glyphs.");
+    Check(ModernityFrames.Caption("previous") == string.Empty && ModernityFrames.Caption("next") == string.Empty &&
+        ModernityFrames.Find("previous") is { ResourcePath: NeiAssets.IconsDirectory + "previous.png", Width: 16, Height: 16 } &&
+        ModernityFrames.Find("next") is { ResourcePath: NeiAssets.IconsDirectory + "next.png", Width: 16, Height: 16 } &&
+        ModernityFrames.Find("back") is { ResourcePath: NeiAssets.IconsDirectory + "back.png", Width: 16, Height: 16 } &&
+        ModernityFrames.Find("add") is { ResourcePath: NeiAssets.IconsDirectory + "add.png", Width: 16, Height: 16 } &&
+        ModernityFrames.Find("remove") is { ResourcePath: NeiAssets.IconsDirectory + "remove.png", Width: 16, Height: 16 } &&
+        ModernityFrames.Find("close") is { ResourcePath: NeiAssets.IconsDirectory + "close.png", Width: 16, Height: 16 } &&
+        ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" },
+        "Navigation and quantity controls use replaceable icon assets.");
     string original = NeiAssets.ResourceName(NeiAssets.OriginalDirectory + "nei_sprites.png");
     Check(NeiAssets.TextureSources(NeiAssets.Modernity("nei_sprites.png"), true).Take(2).SequenceEqual(new[]
     {
@@ -720,7 +727,9 @@ static void EmbeddedGuiTextures()
     Span<byte> header = stackalloc byte[24];
     foreach (string path in new[] { NeiAssets.Modernity("widgets.png"), NeiAssets.Modernity("nei_tabbed_sprites.png"),
         NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png"), "gui/controls/text_field.png", NeiAssets.DropDownAtlas,
-        NeiAssets.RecipeBackgroundTexture, NeiAssets.CheckboxAtlas })
+        NeiAssets.RecipeBackgroundTexture, NeiAssets.CheckboxAtlas,
+        NeiAssets.Icon("back"), NeiAssets.Icon("previous"), NeiAssets.Icon("next"), NeiAssets.Icon("add"),
+        NeiAssets.Icon("remove"), NeiAssets.Icon("close") })
     {
         using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
         Check(png != null, "Missing namespaced resource: " + path);
@@ -734,6 +743,15 @@ static void EmbeddedGuiTextures()
             Check(width == 256 && height == 256, "The recipe panel atlas must retain its 256x256 canvas.");
         if (path == NeiAssets.CheckboxAtlas)
             Check(width == 64 && height == 64, "The checkbox atlas must retain its 64x64 canvas.");
+    }
+    using (var arrow = assembly.GetManifestResourceStream(NeiAssets.ResourceName(NeiAssets.Icon("recipe_arrow"))))
+    {
+        Check(arrow != null, "Missing recipe arrow resource.");
+        arrow!.ReadExactly(header);
+        Check(header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) &&
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[16..]) == 33 &&
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[20..]) == 36,
+            "Recipe arrow keeps its explicit 33x36 canvas.");
     }
     foreach (var (path, height) in new[] { (NeiAssets.RecipeTabSelected, NeiAssets.RecipeTabSelectedHeight),
         (NeiAssets.RecipeTabCandidate, NeiAssets.RecipeTabCandidateHeight) })

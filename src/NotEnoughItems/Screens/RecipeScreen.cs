@@ -33,7 +33,7 @@ internal sealed partial class NeiWindow
         NeiSkin.RecipePanel(panel.Frame);
         NeiSkin.RecipeBar(panel.Method);
         NeiSkin.RecipeBar(panel.Pages);
-        if (NeiSkin.RecipeTab(panel.Back, ModernityFrames.Caption("back"), tooltip: L("Back · Backspace", "返回 · 退格键")))
+        if (NeiSkin.RecipeTab(panel.Back, string.Empty, tooltip: L("Back · Backspace", "返回 · 退格键"), icon: "back"))
         {
             NavigateBack();
             return;

@@ -11,6 +11,7 @@ internal static class NeiAssets
     internal const string TextureRoot = "assets/" + Namespace + "/textures/";
 
     internal const string ModernityDirectory = "gui/modernity/";
+    internal const string IconsDirectory = "gui/icons/";
     internal const string RecipeBackgroundTexture = ModernityDirectory + "recipebg.png";
     internal const int RecipeBackgroundWidth = 184;
     internal const int RecipeBackgroundHeight = 174;
@@ -26,6 +27,7 @@ internal static class NeiAssets
     internal const int RecipeTabWidth = 48, RecipeTabSelectedHeight = 46, RecipeTabCandidateHeight = 43;
     internal const string ActivePackDirectory = "resourcepacks/active";
     internal static string Modernity(string file) => ModernityDirectory + file;
+    internal static string Icon(string file) => IconsDirectory + file + ".png";
     internal static string Background(string screen) => "gui/backgrounds/" + (screen.Length == 0 ? "default" : screen) + ".png";
 
     internal static string RelativePath(string resourcePath) => TextureRoot + resourcePath;
@@ -65,6 +67,9 @@ internal static class NeiAssets
         ControlsDirectory + "text_field.png" => (128, 128),
         CheckboxAtlas => (64, 64),
         RecipeBackgroundTexture or DropDownAtlas => (256, 256),
+        IconsDirectory + "back.png" or IconsDirectory + "previous.png" or IconsDirectory + "next.png" or
+            IconsDirectory + "add.png" or IconsDirectory + "remove.png" or IconsDirectory + "close.png" => (16, 16),
+        IconsDirectory + "recipe_arrow.png" => (33, 36),
         RecipeTabSelected => (RecipeTabWidth, RecipeTabSelectedHeight),
         RecipeTabCandidate => (RecipeTabWidth, RecipeTabCandidateHeight),
         _ => null

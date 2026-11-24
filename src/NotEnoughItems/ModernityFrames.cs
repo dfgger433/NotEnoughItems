@@ -26,6 +26,13 @@ internal static class ModernityFrames
         "button_hover" => new Frame("widgets.png", 0, 86, 200, 20),
         "recipe_background" => new Frame("recipebg.png", 0, 0, NeiAssets.RecipeBackgroundWidth, NeiAssets.RecipeBackgroundHeight),
         "recipe_slot" => new Frame("slot.png", 0, 0, 18, 18),
+        "recipe_arrow" => new Frame("recipe_arrow.png", 0, 0, 33, 36, NeiAssets.IconsDirectory),
+        "back" => new Frame("back.png", 0, 0, 16, 16, NeiAssets.IconsDirectory),
+        "previous" => new Frame("previous.png", 0, 0, 16, 16, NeiAssets.IconsDirectory),
+        "next" => new Frame("next.png", 0, 0, 16, 16, NeiAssets.IconsDirectory),
+        "add" => new Frame("add.png", 0, 0, 16, 16, NeiAssets.IconsDirectory),
+        "remove" => new Frame("remove.png", 0, 0, 16, 16, NeiAssets.IconsDirectory),
+        "close" => new Frame("close.png", 0, 0, 16, 16, NeiAssets.IconsDirectory),
         "bookmark" => new Frame("nei_tabbed_sprites.png", 0, 0, 16, 16),
         "bookmark_selected" => new Frame("nei_tabbed_sprites.png", 16, 0, 16, 16),
         "options" or "wrench" => new Frame("nei_tabbed_sprites.png", 32, 0, 16, 16),
@@ -95,9 +102,7 @@ internal static class ModernityFrames
         _ => "square_checkbox_off"
     };
 
-    // Upstream uses glyph captions on widget buttons when there is no dedicated sprite.
-    internal static string Caption(string name) => name switch
-    {
-        "previous" => "<", "next" => ">", "add" => "+", "remove" => "−", "back" => "↶", "close" => "×", _ => string.Empty
-    };
+    // All icon-button names use replaceable frames; keep this API for callers that
+    // still ask whether a text caption is needed.
+    internal static string Caption(string name) => string.Empty;
 }

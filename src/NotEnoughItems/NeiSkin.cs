@@ -140,7 +140,8 @@ internal static class NeiSkin
         SkinStyles styles = Styles;
         string caption = ModernityFrames.Caption(icon);
         var content = new GUIContent(caption, tooltip);
-        // NEI renders paging and quantity controls as captioned widgets, not sprites.
+        // Keep text captions for any future controls without an asset frame. Migrated
+        // navigation and quantity controls use replaceable PNGs below.
         if (caption.Length > 0)
             return ClickContent(rect, content, enabled, selected ? styles.ButtonSelected : styles.Button, styles.ButtonDisabled);
 
@@ -151,9 +152,12 @@ internal static class NeiSkin
             "options" or "wrench" when NeiActions.Mode == NeiActions.LocalMode.Cheat => "options_cheat",
             _ => icon
         };
-        // Only toolbar icons opt into an existing widget background; inline sprites stay transparent.
-        var background = backed ? (selected ? styles.ButtonSelected : styles.Button) : GUIStyle.none;
-        bool clicked = ClickContent(rect, content, enabled, background, backed ? styles.ButtonDisabled : GUIStyle.none);
+        // Keep the widget backplate used by the former glyph controls. Toolbar icons
+        // opt in explicitly, while inline item sprites remain transparent.
+        bool buttonSprite = icon is "previous" or "next" or "add" or "remove" or "close";
+        bool useBackground = backed || buttonSprite;
+        var background = useBackground ? (selected ? styles.ButtonSelected : styles.Button) : GUIStyle.none;
+        bool clicked = ClickContent(rect, content, enabled, background, useBackground ? styles.ButtonDisabled : GUIStyle.none);
         if (CanPaint(rect) && CropFrame(graphic) is { } texture)
         {
             bool hovered = rect.Contains(Event.current.mousePosition);
@@ -353,18 +357,15 @@ internal static class NeiSkin
     internal static void RecipeSlot(Rect rect)
     {
         if (!CanPaint(rect)) return;
-        Fill(rect, Rgb(0xAAAEBD));
-        Outline(rect, Rgb(0xE7E8EF));
+        if (CropFrame("recipe_slot") is { } texture)
+            DrawTexture(rect, texture, ScaleMode.StretchToFill, Color.white);
     }
 
     internal static void RecipeArrow(Rect rect)
     {
         if (!CanPaint(rect)) return;
-        Color ink = Rgb(0x737A90);
-        float y = rect.center.y;
-        Fill(new Rect(rect.x + 3, y - 2, rect.width - 13, 4), ink);
-        for (int i = 0; i < 9; i++)
-            Fill(new Rect(rect.xMax - 11 + i, y - 9 + i, 1, 18 - 2 * i), ink);
+        if (CropFrame("recipe_arrow") is { } texture)
+            DrawTexture(rect, texture, ScaleMode.StretchToFill, Color.white);
     }
 
     /// <summary>Draws an option tab. The caller owns which tab is selected.</summary>
@@ -372,9 +373,14 @@ internal static class NeiSkin
         Button(rect, text, enabled, selected);
 
     // Selected method tabs are open along the bottom to meet the recipe frame.
-    internal static bool RecipeTab(Rect rect, string text, bool selected = false, string tooltip = "") =>
-        ClickContent(rect, new GUIContent(text, tooltip), true,
+    internal static bool RecipeTab(Rect rect, string text, bool selected = false, string tooltip = "", string? icon = null)
+    {
+        bool clicked = ClickContent(rect, new GUIContent(text, tooltip), true,
             selected ? Styles.RecipeTabSelected : Styles.RecipeTabCandidate, Styles.ButtonDisabled);
+        if (CanPaint(rect) && icon is { Length: > 0 } && CropFrame(icon) is { } texture)
+            DrawButtonSprite(rect, texture, maxSize: 16f, enlarge: true, Color.white);
+        return clicked;
+    }
 
     internal static void RecipeMethodTitle(Rect rect, string text)
     {
