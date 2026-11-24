@@ -21,8 +21,7 @@ internal sealed partial class NeiWindow
         Vector2 mouse = e.mousePosition;
         if (e.type == EventType.MouseDown && e.button == 0)
         {
-            if (LayoutEditDone.Contains(mouse)) { ToggleLayoutEditing(); e.Use(); }
-            else if (LayoutEditHitBox(false).Contains(mouse)) { BeginLayoutDrag(false, false, mouse); e.Use(); }
+            if (LayoutEditHitBox(false).Contains(mouse)) { BeginLayoutDrag(false, false, mouse); e.Use(); }
             else if (LayoutEditResize(false).Contains(mouse)) { BeginLayoutDrag(false, true, mouse); e.Use(); }
             else if (ShowRight && LayoutEditHitBox(true).Contains(mouse)) { BeginLayoutDrag(true, false, mouse); e.Use(); }
             else if (ShowRight && LayoutEditResize(true).Contains(mouse)) { BeginLayoutDrag(true, true, mouse); e.Use(); }
