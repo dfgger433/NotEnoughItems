@@ -234,7 +234,7 @@ internal static class NeiSkin
         bool hovered = GUI.enabled && rect.Contains(Event.current.mousePosition);
         var square = new Rect(rect.x + 3f, rect.y + 2f, 16f, 16f);
         if (CropFrame(ModernityFrames.SquareCheckboxFace(selected, hovered)) is { } texture)
-            DrawTexture(square, texture, ScaleMode.StretchToFill, GUI.enabled ? Color.white : IconDisabledTint);
+            DrawTexture(square, texture, ScaleMode.ScaleToFit, GUI.enabled ? Color.white : IconDisabledTint);
         else
         {
             Fill(square, Rgb(selected ? 0x4C91FFu : 0x92939Bu));

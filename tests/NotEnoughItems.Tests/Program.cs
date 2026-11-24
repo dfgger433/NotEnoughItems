@@ -550,7 +550,7 @@ static void TextureLocations()
     {
         Check(ModernityFrames.Find(ModernityFrames.CheckboxFace(on, hovered)) is
             { ResourcePath: NeiAssets.CheckboxAtlas, Width: 22, Height: 12 } frame && frame.X == x && frame.Y == y,
-            "Each on/off and released/hovered combination uses its own complete switch frame.");
+            "Each on/off and idle/hovered combination uses its own complete switch frame.");
     }
     Check(ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(false, false)) is
         { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 1, Width: 12, Height: 12 } &&

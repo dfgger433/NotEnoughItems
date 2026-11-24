@@ -47,10 +47,9 @@ internal static class ModernityFrames
         "checkbox_off_hover" => Checkbox(22, 28),
         "checkbox_on" => Checkbox(0, 40),
         "checkbox_on_hover" => Checkbox(22, 40),
-        "square_checkbox_off" => SquareCheckbox(29, 1, 12, 12),
-        "square_checkbox_off_hover" => SquareCheckbox(43, 2, 12, 11),
-        "square_checkbox_on" => SquareCheckbox(29, 16, 12, 11),
-        "square_checkbox_on_hover" => SquareCheckbox(29, 16, 12, 11),
+        "square_checkbox_off" => SquareCheckbox(29, 1, 12),
+        "square_checkbox_off_hover" => SquareCheckbox(43, 2, 11),
+        "square_checkbox_on" => SquareCheckbox(29, 16, 11),
         _ => null
     };
 
@@ -83,11 +82,10 @@ internal static class ModernityFrames
         _ => "checkbox_off"
     };
 
-    // The supplied single-choice faces have their own one-pixel height differences.
-    private static Frame SquareCheckbox(int x, int y, int width, int height) =>
-        new(NeiAssets.CheckboxFile, x, y, width, height, NeiAssets.ControlsDirectory);
+    private static Frame SquareCheckbox(int x, int y, int height) =>
+        new(NeiAssets.CheckboxFile, x, y, 12, height, NeiAssets.ControlsDirectory);
 
-    internal static string SquareCheckboxFace(bool on, bool hovered) => on
+    internal static string SquareCheckboxFace(bool selected, bool hovered) => selected
         ? "square_checkbox_on"
         : hovered ? "square_checkbox_off_hover" : "square_checkbox_off";
 

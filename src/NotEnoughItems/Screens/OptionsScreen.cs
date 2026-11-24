@@ -131,11 +131,8 @@ internal sealed partial class NeiWindow
 
     private void DrawLayoutOptions(Rect row)
     {
-        if (NeiSkin.Checkbox(row, L("Drag panels to arrange", "拖动面板调整布局"), _layoutEditing))
-        {
+        if (NeiSkin.Button(row, L("Drag panels to arrange", "拖动面板调整布局")))
             ToggleLayoutEditing();
-            if (_layoutEditing) _options = false;
-        }
         row.y += 30;
         Adjust(_bookmarkWidth, L("Bookmark width", "书签栏宽度"), 5, 65, 120);
         Adjust(_catalogWidth, L("Catalog width", "目录栏宽度"), 5, 65, 120);
