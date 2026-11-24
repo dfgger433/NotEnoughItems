@@ -19,7 +19,9 @@ internal static class NeiAssets
     internal const string RecipeTabSelected = "recipe_tab_selected";
     internal const string RecipeTabCandidate = "recipe_tab_candidate";
     internal const int RecipeTabX = 160, RecipeTabY = 112, RecipeTabStripWidth = 96;
-    internal const int RecipeTabWidth = RecipeTabStripWidth / 2, RecipeTabHeight = 48;
+    // Both faces end at y=158; the last row of each original 48px cell is transparent.
+    internal const int RecipeTabWidth = RecipeTabStripWidth / 2, RecipeTabHeight = 47;
+    internal const int RecipeTabHighlightRow = 44; // y=156, followed by two panel-fill rows
     internal const float RecipeTabOffset = 1f;
     internal const string RecipeBackgroundTexture = GuisDirectory + "recipebg.png";
     internal const int RecipeBackgroundWidth = 184, RecipeBackgroundHeight = 174;
