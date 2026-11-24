@@ -555,12 +555,12 @@ static void TextureLocations()
     Check(ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(false, false)) is
         { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 1, Width: 12, Height: 12 } &&
         ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(false, true)) is
-        { ResourcePath: NeiAssets.CheckboxAtlas, X: 43, Y: 2, Width: 12, Height: 11 } &&
+        { ResourcePath: NeiAssets.CheckboxAtlas, X: 43, Y: 1, Width: 12, Height: 12 } &&
         ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(true, false)) is
-        { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 16, Width: 12, Height: 11 } &&
+        { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 15, Width: 12, Height: 12 } &&
         ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(true, true)) is
-        { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 16, Width: 12, Height: 11 },
-        "Spawn mode uses the supplied default, hover, and selected square checkbox faces.");
+        { ResourcePath: NeiAssets.CheckboxAtlas, X: 43, Y: 15, Width: 12, Height: 12 },
+        "Spawn mode uses all four supplied square checkbox states.");
     Check(NeiAssets.ExpectedSize(NeiAssets.RecipeBackgroundTexture) == (256, 256) &&
         ModernityFrames.Find("recipe_background") is { ResourcePath: NeiAssets.RecipeBackgroundTexture, X: 0, Y: 0, Width: 184, Height: 174 } &&
         NeiAssets.RecipeBackgroundSlice == 9,

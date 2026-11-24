@@ -47,9 +47,10 @@ internal static class ModernityFrames
         "checkbox_off_hover" => Checkbox(22, 28),
         "checkbox_on" => Checkbox(0, 40),
         "checkbox_on_hover" => Checkbox(22, 40),
-        "square_checkbox_off" => SquareCheckbox(29, 1, 12),
-        "square_checkbox_off_hover" => SquareCheckbox(43, 2, 11),
-        "square_checkbox_on" => SquareCheckbox(29, 16, 11),
+        "square_checkbox_off" => SquareCheckbox(29, 1),
+        "square_checkbox_off_hover" => SquareCheckbox(43, 1),
+        "square_checkbox_on" => SquareCheckbox(29, 15),
+        "square_checkbox_on_hover" => SquareCheckbox(43, 15),
         _ => null
     };
 
@@ -82,12 +83,17 @@ internal static class ModernityFrames
         _ => "checkbox_off"
     };
 
-    private static Frame SquareCheckbox(int x, int y, int height) =>
-        new(NeiAssets.CheckboxFile, x, y, 12, height, NeiAssets.ControlsDirectory);
+    // Four 12x12 radio faces occupy a 26x26 block with two-pixel gutters.
+    private static Frame SquareCheckbox(int x, int y) =>
+        new(NeiAssets.CheckboxFile, x, y, 12, 12, NeiAssets.ControlsDirectory);
 
-    internal static string SquareCheckboxFace(bool selected, bool hovered) => selected
-        ? "square_checkbox_on"
-        : hovered ? "square_checkbox_off_hover" : "square_checkbox_off";
+    internal static string SquareCheckboxFace(bool selected, bool hovered) => (selected, hovered) switch
+    {
+        (true, true) => "square_checkbox_on_hover",
+        (true, false) => "square_checkbox_on",
+        (false, true) => "square_checkbox_off_hover",
+        _ => "square_checkbox_off"
+    };
 
     // Upstream uses glyph captions on widget buttons when there is no dedicated sprite.
     internal static string Caption(string name) => name switch
