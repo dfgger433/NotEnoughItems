@@ -16,10 +16,12 @@ internal static class NeiAssets
     internal const string TextFieldAtlas = SpritesDirectory + "text_field.png";
     internal const string DropDownAtlas = SpritesDirectory + "drop_down_list.png";
     internal const string CheckboxAtlas = SpritesDirectory + "checkbox.png";
+    internal const string RecipeTabSelected = "gui/controls/vertical_buttons_bg.png";
+    internal const string RecipeTabCandidate = "gui/controls/vertical_buttons_bg_candidate.png";
+    internal const int RecipeTabWidth = 48, RecipeTabSelectedHeight = 46, RecipeTabCandidateHeight = 43;
     internal const string RecipeBackgroundTexture = GuisDirectory + "recipebg.png";
     internal const int RecipeBackgroundWidth = 184, RecipeBackgroundHeight = 174;
     internal const int RecipeBackgroundSlice = 9, RecipeBackgroundTransparentInset = 4;
-    internal const int RecipeTabFrameSize = 48, RecipeTabFaceHeight = 44;
     internal const string ActivePackDirectory = "resourcepacks/active";
     internal static string Background(string screen) => "gui/backgrounds/" + (screen.Length == 0 ? "default" : screen) + ".png";
 
@@ -56,6 +58,8 @@ internal static class NeiAssets
         StatesAtlas or WidgetsAtlas or RecipeBackgroundTexture or DropDownAtlas => (256, 256),
         TextFieldAtlas => (128, 128),
         CheckboxAtlas => (64, 64),
+        RecipeTabSelected => (RecipeTabWidth, RecipeTabSelectedHeight),
+        RecipeTabCandidate => (RecipeTabWidth, RecipeTabCandidateHeight),
         _ => null
     };
 
