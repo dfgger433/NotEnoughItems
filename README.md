@@ -45,17 +45,17 @@ Together 联机**刷取物品**时，房主须启用服务器作弊；客户端�
 
 ## 替换界面资源
 
-本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。布局代码仍在 [Screens](<src/NotEnoughItems/Screens>)，动态物品图标仍由游戏或内容 Mod 提供；NEI 自己的返回、分页、数量、关闭和配方方向图标统一来自 [可替换图标资源](<Assets/NotEnoughItems/textures/gui/icons>)。
+本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。布局代码在 [Screens](<src/NotEnoughItems/Screens>)，动态物品图标仍由游戏或内容 Mod 提供。
 
 - [Modernity 原贴图](<Assets/NotEnoughItems/textures/gui/modernity>)保持上游 PNG 原样，用 [ModernityFrames.cs](<src/NotEnoughItems/ModernityFrames.cs>) 中的坐标读取子区域。主材质包没有 NEI 贴图，使用它在 README 中链接的官方 UI 包同分支。此素材随本地包保留[来源和署名](<Assets/NotEnoughItems/textures/gui/modernity/SOURCES.md>)、[原始许可](<Assets/NotEnoughItems/textures/gui/modernity/LICENSE.txt>)；请按许可处理，不视为可用于商业分发。
 - [搜索框与悬浮提示框贴图](<Assets/NotEnoughItems/textures/gui/controls/text_field.png>)是单独的资源。替换时保留 128×128 画布：搜索框使用从顶部算起的第 13–24 行作为常态，第 1–12 行作为聚焦态；悬浮提示框（包括按钮提示）使用第 1–12 行（`0,0–128,12`）并按边缘九宫切片拉伸。数量框和书签页名不使用这张图。
 - [语言下拉栏贴图](<Assets/NotEnoughItems/textures/gui/controls/drop_down_list.png>)使用提供的 256×256 图集。替换时保留画布和原有帧位置。
-- [NEI 操作图标](<Assets/NotEnoughItems/textures/gui/icons>)使用独立的 16×16 PNG；返回、上一页、下一页、加、减和关闭按钮不再依赖内置字形。配方方向箭头使用 `recipe_arrow.png` 的 33×36 画布。替换时保留文件名和尺寸；资源会按 `assets/notenoughitems/textures/gui/icons/` 复制并嵌入 DLL 作为回退。
+- 翻页和制作方式切换使用指定 Modernity-GTNH 主材质包的 [书页箭头图集](<Assets/NotEnoughItems/textures/gui/modernity/book.png>)；按钮是 1:1，帧完整等比绘制。加减恢复内置 `+`／`−`，不读取独立 PNG。[返回图标](<Assets/NotEnoughItems/textures/gui/icons/back.png>) 与 [关闭图标](<Assets/NotEnoughItems/textures/gui/icons/close.png>) 仍可分别替换（16×16）；[配方方向箭头](<Assets/NotEnoughItems/textures/gui/icons/recipe_arrow.png>) 为 33×36。
 - [设置开关与刷取模式贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用 64×64 图集。开关滑块为 22×12：常态与按下在 `x=0/22`，关闭与开启在 `y=28/40`；悬停但未按下仍显示常态帧。「刷取模式」使用右上角 26×26 区域中的四个 12×12 单选帧：未选中 `(29,1)`、未选中悬停 `(43,1)`、选中 `(29,15)`、选中悬停 `(43,15)`。点击方框或右侧文字均可选择，不绘制整行按钮背板。
-- 配方查看器顶部制作方式页签使用已有的 [48×46 选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>) 和 [48×43 未选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)，按 24×24 逻辑像素显示。方式名称使用已有的未选中态背板，方式切换与配方翻页沿用原有 Modernity 按钮；两行背景为原有不透明底色。配方页不提供独立搜索，目录搜索不变。
+- 配方查看器顶部制作方式页签使用已有的 [48×46 选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>) 和 [48×43 未选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)，按 24×24 逻辑像素显示。方式名称独立绘制，页签图标无法绘制时回退为方式简称。无配方或仅查看性质时，两侧仍显示不可点击的方式箭头。配方页不提供独立搜索，目录搜索不变。
 - [屏幕背景贴图](<Assets/NotEnoughItems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。配方查看器、选项及合成树共用 [Modernity 背景](<Assets/NotEnoughItems/textures/gui/modernity/recipebg.png>)，按 184×174 源区域及 9 px 九宫格边框绘制，不拉伸外框。[图集来源描述](<Assets/NotEnoughItems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
 
-换肤时在 DLL 旁创建 `resourcepacks/active/`，在其中按相同的 `assets/notenoughitems/textures/gui/…` 结构放置 PNG，保留图集尺寸和坐标。重启后先读取启用的材质包；缺失或尺寸不兼容的 NEI 图集回退到嵌入的原版，其余资源保留原有覆盖规则。爱心覆盖路径是 `gui/original/nei_sprites.png`。部署只补缺失资源；旧 `Textures` 背景仍兼容，但旧自绘控制和图标不再读取。悬停 NEI 目录、书签或配方中的物品格会显示其名称、描述及可用的附加信息。鼠标在可见 NEI 面板内时不重复显示原版悬浮框；移到原版物品上仍使用游戏原版提示。
+换肤时在 DLL 旁创建 `resourcepacks/active/`，在其中按相同的 `assets/notenoughitems/textures/gui/…` 结构放置 PNG，保留图集尺寸和坐标。完整的 Modernity-GTNH 材质包也可保留原本的 `assets/minecraft/textures/gui/book.png` 路径。重启后先读取启用的材质包；缺失或尺寸不兼容的 NEI 图集回退到嵌入的原版，其余资源保留原有覆盖规则。爱心覆盖路径是 `gui/original/nei_sprites.png`。部署只补缺失资源；旧 `Textures` 背景仍兼容，但旧自绘控制和图标不再读取。悬停 NEI 目录、书签或配方中的物品格会显示其名称、描述及可用的附加信息。鼠标在可见 NEI 面板内时不重复显示原版悬浮框；移到原版物品上仍使用游戏原版提示。
 
 ## 机器扩展接口
 

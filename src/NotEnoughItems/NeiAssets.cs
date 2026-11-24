@@ -11,6 +11,9 @@ internal static class NeiAssets
     internal const string TextureRoot = "assets/" + Namespace + "/textures/";
 
     internal const string ModernityDirectory = "gui/modernity/";
+    internal const string BookAtlasFile = "book.png";
+    internal const string BookAtlas = ModernityDirectory + BookAtlasFile;
+    internal const string MinecraftBookAtlas = "assets/minecraft/textures/gui/" + BookAtlasFile;
     internal const string IconsDirectory = "gui/icons/";
     internal const string RecipeBackgroundTexture = ModernityDirectory + "recipebg.png";
     internal const int RecipeBackgroundWidth = 184;
@@ -37,7 +40,12 @@ internal static class NeiAssets
     internal static IEnumerable<(string Path, bool Embedded)> TextureSources(string resourcePath, bool activePack)
     {
         string canonical = RelativePath(resourcePath);
-        if (activePack) yield return (ActivePackDirectory + "/" + canonical, false);
+        if (activePack)
+        {
+            yield return (ActivePackDirectory + "/" + canonical, false);
+            // Also accept the original Minecraft path when using an intact Modernity pack.
+            if (resourcePath == BookAtlas) yield return (ActivePackDirectory + "/" + MinecraftBookAtlas, false);
+        }
 
         if (OriginalFallback(resourcePath) is { } original &&
             (activePack || resourcePath.StartsWith(OriginalDirectory, StringComparison.Ordinal)))
@@ -62,13 +70,13 @@ internal static class NeiAssets
     internal static (int Width, int Height)? ExpectedSize(string path) => path switch
     {
         ModernityDirectory + "nei_sprites.png" or OriginalDirectory + "nei_sprites.png" => (512, 512),
-        ModernityDirectory + "nei_tabbed_sprites.png" or OriginalDirectory + "nei_tabbed_sprites.png" or ModernityDirectory + "widgets.png" => (256, 256),
+        ModernityDirectory + "nei_tabbed_sprites.png" or OriginalDirectory + "nei_tabbed_sprites.png" or
+            ModernityDirectory + "widgets.png" or BookAtlas => (256, 256),
         ModernityDirectory + "slot.png" or OriginalDirectory + "slot.png" => (18, 18),
         ControlsDirectory + "text_field.png" => (128, 128),
         CheckboxAtlas => (64, 64),
         RecipeBackgroundTexture or DropDownAtlas => (256, 256),
-        IconsDirectory + "back.png" or IconsDirectory + "previous.png" or IconsDirectory + "next.png" or
-            IconsDirectory + "add.png" or IconsDirectory + "remove.png" or IconsDirectory + "close.png" => (16, 16),
+        IconsDirectory + "back.png" or IconsDirectory + "close.png" => (16, 16),
         IconsDirectory + "recipe_arrow.png" => (33, 36),
         RecipeTabSelected => (RecipeTabWidth, RecipeTabSelectedHeight),
         RecipeTabCandidate => (RecipeTabWidth, RecipeTabCandidateHeight),

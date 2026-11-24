@@ -123,24 +123,15 @@ internal sealed partial class NeiWindow
         else Status(dropped > 0 ? L($"Given; {dropped} left nearby", $"已给予；{dropped} 件放在地上") : L("Item given", "已给予物品"));
     }
 
-    private static void DrawSpriteFallback(Rect rect, string? fallback)
+    private static void DrawSprite(Rect rect, Sprite? sprite, Color tint, string? fallback)
     {
-        if (fallback != null)
+        if (!TryDrawSprite(rect, sprite, tint) && fallback != null)
             NeiSkin.Label(rect, fallback.Length == 0 ? "?" : fallback.Substring(0, 1).ToUpperInvariant(), TextAnchor.MiddleCenter, true);
     }
 
-    private static void DrawSprite(Rect rect, Sprite? sprite, Color tint, string? fallback)
+    private static bool TryDrawSprite(Rect rect, Sprite? sprite, Color tint)
     {
-        if (Event.current.type != EventType.Repaint) return;
-        var originalColor = GUI.color;
-        GUI.color = tint;
-        if (!sprite || !sprite!.texture)
-        {
-            if (fallback != null)
-                NeiSkin.Label(rect, fallback.Length == 0 ? "?" : fallback.Substring(0, 1).ToUpperInvariant(), TextAnchor.MiddleCenter, true);
-            GUI.color = originalColor;
-            return;
-        }
+        if (Event.current.type != EventType.Repaint || !sprite || !sprite!.texture) return false;
         var tex = sprite.texture;
         Rect src;
         try
@@ -150,22 +141,19 @@ internal sealed partial class NeiWindow
             // coordinates and would sample an unrelated tile from the packed texture.
             src = sprite.textureRect;
         }
-        catch (UnityException)
-        {
-            DrawSpriteFallback(rect, fallback);
-            GUI.color = originalColor;
-            return;
-        }
-        if (src.width <= 0 || src.height <= 0)
-        {
-            DrawSpriteFallback(rect, fallback);
-            GUI.color = originalColor;
-            return;
-        }
+        catch (UnityException) { return false; }
+        if (src.width <= 0 || src.height <= 0) return false;
+
         var ratio = Mathf.Min(rect.width / src.width, rect.height / src.height);
         float w = src.width * ratio, h = src.height * ratio;
         var dst = new Rect(rect.center.x - w / 2, rect.center.y - h / 2, w, h);
-        GUI.DrawTextureWithTexCoords(dst, tex, new Rect(src.x / tex.width, src.y / tex.height, src.width / tex.width, src.height / tex.height), true);
-        GUI.color = originalColor;
+        var originalColor = GUI.color;
+        try
+        {
+            GUI.color = tint;
+            GUI.DrawTextureWithTexCoords(dst, tex, new Rect(src.x / tex.width, src.y / tex.height, src.width / tex.width, src.height / tex.height), true);
+        }
+        finally { GUI.color = originalColor; }
+        return true;
     }
 }

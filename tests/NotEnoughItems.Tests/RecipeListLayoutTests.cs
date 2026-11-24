@@ -37,6 +37,9 @@ internal static class RecipeListLayoutTests
             panel.NextMethod.size == panel.NextPage.size && panel.PreviousMethod.width >= 18 &&
             panel.NavigationBounds.Contains(panel.PreviousMethod.center) && panel.NavigationBounds.Contains(panel.NextMethod.center),
             "Reserve a full-height title and button-sized hit targets for both method arrows inside the protected header.");
+        foreach (Rect arrow in new[] { panel.PreviousMethod, panel.NextMethod, panel.PreviousPage, panel.NextPage, panel.PreviousTabs, panel.NextTabs })
+            Check(arrow.width == arrow.height && arrow.width > 0 && panel.NavigationBounds.Contains(arrow.center),
+                "Every navigation button fits its header in a square (1:1) hit target.");
         Check(panel.TabsPerPage == 7 && panel.TabPageCount(0) == 0 && panel.TabPageCount(7) == 1 && panel.TabPageCount(8) == 2 &&
             panel.Tab(0).xMax == panel.Tab(1).xMin && panel.Tab(6).xMax == panel.NextTabs.xMin,
             "The top row fits seven adjacent tabs and exposes overflow when needed.");
