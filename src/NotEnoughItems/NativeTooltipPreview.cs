@@ -61,6 +61,7 @@ internal static class NativeTooltipPreview
                 LiquidAwake?.Invoke(liquid, null);
                 if (liquid.Capacity > 0f) liquid.UpdateCondition();
             }
+            InitializeWetness(preview);
             return _preview = preview;
         }
         catch (Exception)
@@ -71,6 +72,10 @@ internal static class NativeTooltipPreview
             return null;
         }
     }
+
+    // Some prefabs serialize wetTime as zero. The inactive clone never runs Item.Start,
+    // which normally resets it before use. Keep the preview dry without registering it in the world.
+    internal static void InitializeWetness(Item preview) => preview.wetTime = -1000f;
 
     internal static void Release()
     {

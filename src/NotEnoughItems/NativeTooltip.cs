@@ -21,14 +21,14 @@ internal static class NativeTooltip
 
     /// <summary>Reads native tooltip content; NEI annotations and provenance stay separate from its markup.</summary>
     internal static Content ForItem(string title, CatalogItem? entry, string? details,
-        Item? instance = null, bool expanded = false, bool chinese = false, float? liquidVolume = null, bool showId = true)
+        bool expanded = false, bool chinese = false, float? liquidVolume = null, bool showId = true)
     {
         string name = title;
         string description = entry?.Description ?? string.Empty;
         if (entry is { IsVirtual: false, Kind: CatalogItemKind.Item })
         {
             if (string.IsNullOrWhiteSpace(description)) description = entry.NativeItemInfo?.description ?? string.Empty;
-            if (ReadItem(entry, instance, expanded, chinese) is { } native)
+            if (ReadItem(entry, expanded, chinese) is { } native)
             {
                 // A recipe or generic requirement can have its own title; keep that context.
                 if (title == entry.DisplayName || PlainGameText(title).Length == 0) name = native.Name;
@@ -50,10 +50,8 @@ internal static class NativeTooltip
         return new Content(name, description.Trim(), note, id, idText, modText);
     }
 
-    private static (string Name, string Description)? ReadItem(CatalogItem entry, Item? instance, bool expanded, bool chinese)
+    private static (string Name, string Description)? ReadItem(CatalogItem entry, bool expanded, bool chinese)
     {
-        if (instance != null && instance && string.Equals(instance.id, entry.Id, StringComparison.OrdinalIgnoreCase) &&
-            TryDescribe(instance, expanded, chinese) is { } live) return live;
         if (entry.NativeItemInfo == null) return null;
         try
         {
