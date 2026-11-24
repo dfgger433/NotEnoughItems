@@ -20,9 +20,16 @@ internal static class RecipeListLayoutTests
         Check(panel.Bounds.Contains(panel.Back.center) && panel.Bounds.Contains(panel.Method.center) &&
             panel.Bounds.Contains(panel.Pages.center) && panel.Bounds.Contains(panel.Content.center));
         float frameEdge = panel.Frame.yMin + NeiAssets.RecipeBackgroundTransparentInset;
-        Check(panel.Tab(0).yMin < frameEdge && panel.Tab(0).yMax > frameEdge &&
+        var slot = panel.Tab(0);
+        var selected = RecipePanelLayout.TabFace(slot, selected: true);
+        var candidate = RecipePanelLayout.TabFace(slot, selected: false);
+        Check(selected.position == slot.position && candidate.position == slot.position &&
+            selected.width == slot.width && candidate.width == slot.width &&
+            selected.height == 23f && candidate.height == 21.5f,
+            "Both complete tab textures use the same half-scale factor without stretching their borders.");
+        Check(selected.yMin < frameEdge && selected.yMax > frameEdge && candidate.yMax < frameEdge &&
             panel.Method.yMin >= panel.Frame.yMin && panel.Method.yMax < panel.Pages.yMin && panel.Pages.yMax < panel.Content.yMin,
-            "The open-bottom tab overlaps the visible frame edge, not just the transparent inset.");
+            "The selected face meets the frame edge; the unselected face ends above it.");
         Check(panel.PreviousMethod.xMin == panel.Method.xMin && panel.NextMethod.xMax == panel.Method.xMax &&
             panel.PreviousMethod.xMax <= panel.MethodTitle.xMin && panel.MethodTitle.xMax <= panel.NextMethod.xMin &&
             panel.Search.xMin >= panel.PreviousPage.xMax && panel.Search.xMax < panel.PageTitle.xMin &&

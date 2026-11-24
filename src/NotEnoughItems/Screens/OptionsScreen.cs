@@ -6,7 +6,7 @@ namespace NotEnoughItems;
 
 internal sealed partial class NeiWindow
 {
-    private enum OptionsTab { Display, Layout, Items, Keys, Devbug }
+    private enum OptionsTab { Display, Layout, Items, Keys, Debug }
     private OptionsTab _optionsTab;
     private bool _languageMenuOpen;
     internal bool LanguageMenuOpen => _options && _languageMenuOpen;
@@ -38,7 +38,7 @@ internal sealed partial class NeiWindow
         DrawTab(OptionsTab.Layout, L("Layout", "布局"));
         DrawTab(OptionsTab.Items, L("Items", "物品"));
         DrawTab(OptionsTab.Keys, L("Keys", "按键"));
-        DrawTab(OptionsTab.Devbug, L("Devbug", "调试"));
+        DrawTab(OptionsTab.Debug, L("Debug", "调试"));
 
         var row = FirstOptionsRow(p);
         switch (_optionsTab)
@@ -47,7 +47,7 @@ internal sealed partial class NeiWindow
             case OptionsTab.Layout: DrawLayoutOptions(row); break;
             case OptionsTab.Items: DrawItemOptions(row); break;
             case OptionsTab.Keys: DrawKeyOptions(row); break;
-            case OptionsTab.Devbug: DrawDevbugOptions(row); break;
+            case OptionsTab.Debug: DrawDebugOptions(row); break;
         }
         if (NeiSkin.Button(new Rect(x, p.yMax - 35, w, 26), L("Done", "完成"))) Back();
 
@@ -213,7 +213,7 @@ internal sealed partial class NeiWindow
         }
     }
 
-    private void DrawDevbugOptions(Rect row)
+    private void DrawDebugOptions(Rect row)
     {
         NeiSkin.OptionsHeading(new Rect(row.x, row.y, row.width, 20), L("Developer diagnostics", "开发调试"));
         row.y += 28;
@@ -225,7 +225,20 @@ internal sealed partial class NeiWindow
                 ? L("Catalog refresh completed.", "目录刷新完成。")
                 : L("Catalog refresh failed; see the log.", "目录刷新失败；请查看日志。"));
         }
-        row.y += 42;
+        row.y += 30;
+        if (NeiSkin.Checkbox(row, L("Fill two pages of method tabs", "填充两页制作方式"), _previewMethodTabs))
+        {
+            _previewMethodTabs = !_previewMethodTabs;
+            _previewMethod = null;
+            _methodTabPage = _tabPageCapacity = 0;
+            _recipeTargets.Clear();
+        }
+        row.y += 30;
+        string hint = L("Open a recipe or usage lookup to test method switching. Preview tabs contain no real recipes.",
+            "打开配方或用途查询，测试制作方式切换。预览页签不含实际配方。");
+        row.height = NeiSkin.OptionsNoteHeight(hint, row.width);
+        NeiSkin.OptionsNote(row, hint);
+        row.y = row.yMax + 12;
         string detail;
         try
         {

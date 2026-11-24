@@ -52,7 +52,7 @@ Together 联机**刷取物品**时，房主须启用服务器作弊；客户端�
 - [语言下拉栏贴图](<Assets/NotEnoughItems/textures/gui/controls/drop_down_list.png>)使用提供的 256×256 图集。替换时保留画布和原有帧位置。
 - 翻页和制作方式切换使用按钮图集内置的 `<`／`>` 字符，保留原版回退，不读取容易残留的独立箭头 PNG；加减同样使用内置 `+`／`−`。[返回图标](<Assets/NotEnoughItems/textures/gui/icons/back.png>) 与 [关闭图标](<Assets/NotEnoughItems/textures/gui/icons/close.png>) 仍可分别替换（16×16）；[配方方向箭头](<Assets/NotEnoughItems/textures/gui/icons/recipe_arrow.png>) 为 33×36。
 - [设置开关与刷取模式贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用 64×64 图集。开关滑块为 22×12：常态与按下在 `x=0/22`，关闭与开启在 `y=28/40`；悬停但未按下仍显示常态帧。「刷取模式」使用右上角 26×26 区域中的四个 12×12 单选帧：未选中 `(29,1)`、未选中悬停 `(43,1)`、选中 `(29,15)`、选中悬停 `(43,15)`。点击方框或右侧文字均可选择，不绘制整行按钮背板。
-- 配方查看器顶部制作方式页签使用已有的 [48×46 选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>) 和 [48×43 未选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)，按 24×24 逻辑像素显示。方式名称独立绘制，页签图标无法绘制时回退为方式简称。无配方或仅查看性质时，两侧仍显示不可点击的方式箭头。配方页不提供独立搜索，目录搜索不变。
+- 配方查看器顶部制作方式页签直接绘制整张 [48×46 选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>) 或 [48×43 未选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)：以 24 逻辑像素为宽等比缩放，不裁切、不拼接。方式名称独立绘制，页签图标无法绘制时回退为方式简称。无配方或仅查看性质时，两侧仍显示不可点击的方式箭头。配方页不提供独立搜索，目录搜索不变。
 - [屏幕背景贴图](<Assets/NotEnoughItems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。配方查看器、选项及合成树共用 [Modernity 背景](<Assets/NotEnoughItems/textures/gui/modernity/recipebg.png>)，按 184×174 源区域及 9 px 九宫格边框绘制，不拉伸外框。[图集来源描述](<Assets/NotEnoughItems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
 
 换肤时在 DLL 旁创建 `resourcepacks/active/`，在其中按相同的 `assets/notenoughitems/textures/gui/…` 结构放置 PNG，保留图集尺寸和坐标。重启后先读取启用的材质包；缺失或尺寸不兼容的 NEI 图集回退到嵌入的原版，其余资源保留原有覆盖规则。爱心覆盖路径是 `gui/original/nei_sprites.png`。部署只补缺失资源；旧 `Textures` 背景仍兼容，但旧自绘控制和图标不再读取。悬停 NEI 目录、书签或配方中的物品格会显示其名称、描述及可用的附加信息。鼠标在可见 NEI 面板内时不重复显示原版悬浮框；移到原版物品上仍使用游戏原版提示。
@@ -105,6 +105,7 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe("example:press_plate", "examp
 - 原生游戏设置的「游戏」分类只留 `NEI · 显示侧栏`。按 `O` 隐藏后，仍能在此处重新开启。
 - 在背包或终端中点击 NEI 左下角的扳手，打开垂直居中的设置页，可设置两个目录的开关、浏览记录、缩放、语言、单机作弊和快捷键。右侧目录底栏的数量同时用于刷取、带数量收藏和调整步进，不会改写已保存的书签。
 - 「物品 → 刷取模式」并排显示「NEI（默认）」（尝试放入容器和空槽，不替换装备）和「原版刷给玩家」（在玩家脚下生成，按原版规则自动拾取或穿戴）。蓝框标出当前模式，切换立即保存。此选项只影响单机作弊下的实物；液体仍刷取满的临时瓶，Together 仍由服务器发放。
+- NEI 扳手 →「调试」→「填充两页制作方式」默认关闭，仅在本次游戏会话有效。打开配方或用途查询后，顶部会显示两页编号测试页签。用方式行的左右箭头逐个切换（可跨页），或用顶部箭头翻页后点击未选中的页签。预览不含真实配方，不写入目录或书签；关闭开关即可恢复正常查询。
 - 物品子集已移除，搜索只处理物品文本、来源、标签和 ID。背包和终端的侧栏锚点不随鼠标移动，可在布局页调整宽度和位置。
 
 ## 验证与范围

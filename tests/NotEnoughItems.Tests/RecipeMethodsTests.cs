@@ -50,6 +50,36 @@ internal static class RecipeMethodsTests
             "Switching methods updates their name and rows even when there is only one recipe page.");
     }
 
+    internal static void DebugPreviewFillsTwoMethodPages()
+    {
+        var window = typeof(Catalog).Assembly.GetType("NotEnoughItems.NeiWindow", throwOnError: true)!;
+        var toggle = window.GetField("_previewMethodTabs", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        Check(!(bool)toggle.GetValue(System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(window))!,
+            "The preview is disabled by default and is not loaded from config.");
+
+        foreach (int width in new[] { 104, 140, 180, 228 })
+        {
+            var panel = new RecipePanelLayout(new UnityEngine.Rect(0, 0, width, 400));
+            int perPage = panel.TabsPerPage;
+            var methods = RecipeMethods.PreviewTabs(perPage, chinese: true);
+            var english = RecipeMethods.PreviewTabs(perPage, chinese: false);
+            Check(methods.Length == perPage * 2 && panel.TabPageCount(methods.Length) == 2 &&
+                methods.All(method => method.Recipes.Count == 0 && method.MachineId.Length == 0),
+                "Fill both tab pages at this width without exposing fake recipe or machine actions.");
+            Check(methods.Select(method => method.TabLabel).Distinct().Count() == methods.Length &&
+                methods.Select(method => method.Id).SequenceEqual(english.Select(method => method.Id)) &&
+                methods[0].Name == "测试方式 01" && english[0].Name == "Test method 01",
+                "Every preview tab is distinguishable without changing the selection key when changing language.");
+            int next = RecipeMethods.Cycle(perPage - 1, 1, methods.Length);
+            int previous = RecipeMethods.Cycle(next, -1, methods.Length);
+            int last = RecipeMethods.Cycle(0, -1, methods.Length);
+            Check(next / perPage == 1 && previous / perPage == 0 && last == methods.Length - 1 &&
+                RecipeMethods.Cycle(last, 1, methods.Length) == 0 &&
+                RecipeMethods.SelectedIndex(methods, methods[next].Id) == next,
+                "Next/previous cross the page boundary in both directions, wrap and accept a clicked selection.");
+        }
+    }
+
     internal static void NativeAndMachineMethods()
     {
         var tools = NativeRow("hammer", "Tools");

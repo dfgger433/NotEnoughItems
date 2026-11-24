@@ -6,16 +6,17 @@ using UnityEngine;
 
 namespace NotEnoughItems;
 
-/// <summary>A method that has at least one recipe in the current lookup.</summary>
+/// <summary>A crafting method displayed in the recipe inspector.</summary>
 internal sealed class RecipeMethod
 {
-    internal RecipeMethod(string id, string name, IReadOnlyList<Recipe> recipes, string machineId, Sprite? icon)
+    internal RecipeMethod(string id, string name, IReadOnlyList<Recipe> recipes, string machineId, Sprite? icon, string? tabLabel = null)
     {
         Id = id;
         Name = name;
         Recipes = recipes;
         MachineId = machineId;
         Icon = icon;
+        TabLabel = tabLabel ?? name.Substring(0, Math.Min(2, name.Length));
     }
 
     /// <summary>Opaque, locale-independent selection key; compare using OrdinalIgnoreCase.</summary>
@@ -26,12 +27,26 @@ internal sealed class RecipeMethod
     internal IReadOnlyList<Recipe> Recipes { get; }
     internal string MachineId { get; }
     internal Sprite? Icon { get; }
+    internal string TabLabel { get; }
 }
 
 internal static class RecipeMethods
 {
     internal const string CookingRecipeId = "native.process.cook-meat";
     internal const string CraftingId = "crafting";
+
+    // Preview methods have no recipe rows and never enter the catalog, bookmarks or crafting actions.
+    internal static RecipeMethod[] PreviewTabs(int tabsPerPage, bool chinese)
+    {
+        var methods = new RecipeMethod[tabsPerPage * 2];
+        for (int i = 0; i < methods.Length; i++)
+        {
+            string number = (i + 1).ToString("00", CultureInfo.InvariantCulture);
+            methods[i] = new RecipeMethod("debug:method-tab:" + number,
+                chinese ? $"测试方式 {number}" : $"Test method {number}", Array.Empty<Recipe>(), string.Empty, null, number);
+        }
+        return methods;
+    }
 
     internal static int SelectedIndex(RecipeMethod[] methods, string? id) =>
         Math.Max(0, Array.FindIndex(methods, method => StringComparer.OrdinalIgnoreCase.Equals(method.Id, id)));
