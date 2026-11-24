@@ -334,7 +334,7 @@ internal sealed partial class NeiWindow
         bool wide = content.width > viewport.width - 18;
         _treeScroll.x = Mathf.Clamp(_treeScroll.x, 0, Mathf.Max(0, content.width - viewport.width + 18));
         _treeScroll.y = Mathf.Clamp(_treeScroll.y, 0, Mathf.Max(0, content.height - viewport.height + (wide ? 18 : 0)));
-        _treeScroll = GUI.BeginScrollView(viewport, _treeScroll, content, wide, true);
+        _treeScroll = NeiSkin.BeginScrollView(viewport, _treeScroll, content, wide, vertical: true);
         int jump = -1;
         (string Id, bool Usage, BookmarkBook.Entry? Entry, int Ingredient)? lookup = null;
         try

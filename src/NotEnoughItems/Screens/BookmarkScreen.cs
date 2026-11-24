@@ -91,8 +91,10 @@ internal sealed partial class NeiWindow
                 if (_book.EnsurePage(page)) SaveBookmarks();
                 SelectBookmarkGroup(page); _editGroup = string.Empty; _groups = false; _skipFocusFrame = true;
             }
-            if (NeiSkin.Button(new Rect(first + editorButton + gap, y, editorButton, size), "↑")) CopyBookmark(_book.CopyPage(_group));
-            if (NeiSkin.Button(new Rect(x + w - editorButton, y, editorButton, size), "↓")) PasteBookmarks();
+            if (NeiSkin.IconButton(new Rect(first + editorButton + gap, y, editorButton, size), "copy",
+                L("Copy bookmark page", "复制书签页"), backed: true)) CopyBookmark(_book.CopyPage(_group));
+            if (NeiSkin.IconButton(new Rect(x + w - editorButton, y, editorButton, size), "paste",
+                L("Paste bookmarks", "粘贴书签"), backed: true)) PasteBookmarks();
             y += size + 4f;
         }
         var footer = new Rect(x, panel.yMax - size - 4f, w, size);

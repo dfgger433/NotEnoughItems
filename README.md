@@ -1,6 +1,6 @@
 # Not Enough Items — Casualties: Unknown
 
-NEI 的本地 BepInEx 移植版。书签与物品目录在原版背包和 Unknown Inventory Terminal 中显示；打开原版制作菜单时只保留左侧书签。打开原版容器、交易、物品自定义、液体转移或医疗面板时隐藏。原版背包和终端的右侧物品目录默认都开启，可在 NEI 扳手设置的「显示」页分别关闭；升级时保留已保存的开关。背包和终端共用以 2560×1440 为基准的默认布局：横纵坐标分别随窗口宽高换算；扳手 → 布局可开启「拖动面板调整布局」，拖动各栏标题移动整栏，拖动边缘把手调整宽度，完成后点「完成」；宽度、位置、上下偏移和物品图标大小都会保存。背包侧栏默认透明，配方查询使用有底色的独立面板。默认爱心使用 [GTNH NEI 原版图集](<Assets/NotEnoughItems/textures/gui/original/SOURCES.md>)，其他已有按钮、书签和扳手继续使用 [Modernity-GTNH-UI 原贴图](<Assets/NotEnoughItems/textures/gui/modernity/SOURCES.md>)，不再读取自绘控件图集。
+NEI 的本地 BepInEx 移植版。书签与物品目录在原版背包和 Unknown Inventory Terminal 中显示；打开原版制作菜单时只保留左侧书签。打开原版容器、交易、物品自定义、液体转移或医疗面板时隐藏。原版背包和终端的右侧物品目录默认都开启，可在 NEI 扳手设置的「显示」页分别关闭；升级时保留已保存的开关。背包和终端共用以 2560×1440 为基准的默认布局：横纵坐标分别随窗口宽高换算；扳手 → 布局可开启「拖动面板调整布局」，拖动各栏标题移动整栏，拖动边缘把手调整宽度，完成后点「完成」；宽度、位置、上下偏移和物品图标大小都会保存。背包侧栏默认透明，配方查询使用有底色的独立面板。爱心、书签、扳手、配方页签等使用 [states.png](<Assets/NotEnoughItems/textures/guis/states.png>) 的对应切片。
 
 ## 编译与部署
 
@@ -47,15 +47,11 @@ Together 联机**刷取物品**时，房主须启用服务器作弊；客户端�
 
 本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。布局代码在 [Screens](<src/NotEnoughItems/Screens>)，动态物品图标仍由游戏或内容 Mod 提供。
 
-- [Modernity 原贴图](<Assets/NotEnoughItems/textures/gui/modernity>)保持上游 PNG 原样，用 [ModernityFrames.cs](<src/NotEnoughItems/ModernityFrames.cs>) 中的坐标读取子区域。主材质包没有 NEI 贴图，使用它在 README 中链接的官方 UI 包同分支。此素材随本地包保留[来源和署名](<Assets/NotEnoughItems/textures/gui/modernity/SOURCES.md>)、[原始许可](<Assets/NotEnoughItems/textures/gui/modernity/LICENSE.txt>)；请按许可处理，不视为可用于商业分发。
-- [搜索框与悬浮提示框贴图](<Assets/NotEnoughItems/textures/gui/controls/text_field.png>)是单独的资源。替换时保留 128×128 画布：搜索框使用从顶部算起的第 13–24 行作为常态，第 1–12 行作为聚焦态；悬浮提示框（包括按钮提示）使用第 1–12 行（`0,0–128,12`）并按边缘九宫切片拉伸。数量框和书签页名不使用这张图。
-- [语言下拉栏贴图](<Assets/NotEnoughItems/textures/gui/controls/drop_down_list.png>)使用提供的 256×256 图集。替换时保留画布和原有帧位置。
-- 翻页和制作方式切换使用按钮图集内置的 `<`／`>` 字符，保留原版回退，不读取容易残留的独立箭头 PNG；加减同样使用内置 `+`／`−`。[返回图标](<Assets/NotEnoughItems/textures/gui/icons/back.png>) 与 [关闭图标](<Assets/NotEnoughItems/textures/gui/icons/close.png>) 仍可分别替换（16×16）；[配方方向箭头](<Assets/NotEnoughItems/textures/gui/icons/recipe_arrow.png>) 为 33×36。
-- [设置开关与刷取模式贴图](<Assets/NotEnoughItems/textures/gui/controls/checkbox.png>)使用 64×64 图集。开关滑块为 22×12：常态与按下在 `x=0/22`，关闭与开启在 `y=28/40`；悬停但未按下仍显示常态帧。「刷取模式」使用右上角 26×26 区域中的四个 12×12 单选帧：未选中 `(29,1)`、未选中悬停 `(43,1)`、选中 `(29,15)`、选中悬停 `(43,15)`。点击方框或右侧文字均可选择，不绘制整行按钮背板。
-- 配方查看器顶部制作方式页签直接绘制整张 [48×46 选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg.png>) 或 [48×43 未选中态贴图](<Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_bg_candidate.png>)：以 24 逻辑像素为宽等比缩放，不裁切、不拼接。方式名称独立绘制，页签图标无法绘制时回退为方式简称。无配方或仅查看性质时，两侧仍显示不可点击的方式箭头。配方页不提供独立搜索，目录搜索不变。
-- [屏幕背景贴图](<Assets/NotEnoughItems/textures/gui/backgrounds>)默认全透明，仍可单独覆盖，用于背包、制作栏和终端旁的书签／目录侧栏。配方查看器、选项及合成树共用 [Modernity 背景](<Assets/NotEnoughItems/textures/gui/modernity/recipebg.png>)，按 184×174 源区域及 9 px 九宫格边框绘制，不拉伸外框。[图集来源描述](<Assets/NotEnoughItems/atlases/nei_gui.json>)保留 Minecraft/NeoForge 目录形式；实际绘制由 Unity 完成。
+- [states.png](<Assets/NotEnoughItems/textures/guis/states.png>) 是 256×256 图集。书签开关、扳手、收藏爱心、放大镜、翻页箭头、复制与粘贴、加号、返回、关闭、制作方式页签、滚动条和配方槽位按 [帧坐标](<src/NotEnoughItems/ModernityFrames.cs>) 裁切，不会绘制粉色占位区。减量继续使用 `−`，因为图集没有减号。制作方式页签的选中态保留底部接缝，未选中态不含这条底边；方式图标无法绘制时仍显示简称。
+- [通用按钮](<Assets/NotEnoughItems/textures/gui/sprites/widgets.png>)、[搜索框与悬浮提示框](<Assets/NotEnoughItems/textures/gui/sprites/text_field.png>)、[语言下拉栏](<Assets/NotEnoughItems/textures/gui/sprites/drop_down_list.png>)、[设置开关与刷取模式](<Assets/NotEnoughItems/textures/gui/sprites/checkbox.png>) 仍需各自的图集；其中的状态在 `states.png` 中没有对应的完整贴图。
+- 配方查看器、选项及合成树仍共用 [配方面板背景](<Assets/NotEnoughItems/textures/guis/recipebg.png>)，以 184×174 源区域及 9 px 九宫格边框绘制。侧栏不再随包提供全透明背景文件；未提供覆盖时保持透明。[来源及署名](<Assets/NotEnoughItems/textures/guis/SOURCES.md>)、[上游许可](<Assets/NotEnoughItems/textures/guis/LICENSE.txt>) 仍随本地包保留。
 
-换肤时在 DLL 旁创建 `resourcepacks/active/`，在其中按相同的 `assets/notenoughitems/textures/gui/…` 结构放置 PNG，保留图集尺寸和坐标。重启后先读取启用的材质包；缺失或尺寸不兼容的 NEI 图集回退到嵌入的原版，其余资源保留原有覆盖规则。爱心覆盖路径是 `gui/original/nei_sprites.png`。部署只补缺失资源；旧 `Textures` 背景仍兼容，但旧自绘控制和图标不再读取。悬停 NEI 目录、书签或配方中的物品格会显示其名称、描述及可用的附加信息。鼠标在可见 NEI 面板内时不重复显示原版悬浮框；移到原版物品上仍使用游戏原版提示。
+换肤时在 DLL 旁创建 `resourcepacks/active/`，按 `assets/notenoughitems/textures/` 下相同的目录结构放置 PNG，并保留尺寸和帧坐标。读取顺序为启用的材质包、DLL 旁的贴图、DLL 内嵌贴图；旧版材质包中未改变帧布局的按钮、搜索框、下拉栏、开关和配方面板背景仍可读取。侧栏可以继续通过 `gui/backgrounds/default.png`、`catalog.png`、`bookmarks.png` 或旧 `Textures` 背景路径覆盖。
 
 ## 机器扩展接口
 

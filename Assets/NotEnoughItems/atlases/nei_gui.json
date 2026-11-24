@@ -2,18 +2,13 @@
   "sources": [
     {
       "type": "minecraft:directory",
-      "source": "gui/modernity",
-      "prefix": "modernity/"
+      "source": "guis",
+      "prefix": "guis/"
     },
     {
       "type": "minecraft:directory",
-      "source": "gui/controls",
-      "prefix": "controls/"
-    },
-    {
-      "type": "minecraft:directory",
-      "source": "gui/icons",
-      "prefix": "icons/"
+      "source": "gui/sprites",
+      "prefix": "sprites/"
     }
   ]
 }

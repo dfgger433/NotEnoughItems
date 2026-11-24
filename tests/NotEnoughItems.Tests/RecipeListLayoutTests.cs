@@ -25,9 +25,9 @@ internal static class RecipeListLayoutTests
         var candidate = RecipePanelLayout.TabFace(slot, selected: false);
         Check(selected.position == slot.position && candidate.position == slot.position &&
             selected.width == slot.width && candidate.width == slot.width &&
-            selected.height == 23f && candidate.height == 21.5f,
-            "Both complete tab textures use the same half-scale factor without stretching their borders.");
-        Check(selected.yMin < frameEdge && selected.yMax > frameEdge && candidate.yMax < frameEdge &&
+            selected.height == 24f && candidate.height == 22f,
+            "The selected tab includes the atlas seam while the candidate ends above it.");
+        Check(selected.yMin < frameEdge && selected.yMax > frameEdge && candidate.yMax <= frameEdge &&
             panel.Method.yMin >= panel.Frame.yMin && panel.Method.yMax < panel.Pages.yMin && panel.Pages.yMax < panel.Content.yMin,
             "The selected face meets the frame edge; the unselected face ends above it.");
         Check(panel.PreviousMethod.xMin == panel.Method.xMin && panel.NextMethod.xMax == panel.Method.xMax &&
