@@ -109,7 +109,7 @@ internal sealed partial class NeiWindow
         }
         else if (_treeView == TreeView.Steps && plan.Diagnostics.Count != 0)
         {
-            if (NeiSkin.Button(new Rect(x, y, w, 21), L($"Plan notes ({plan.Diagnostics.Count})  ›", $"配平提示（{plan.Diagnostics.Count}） ›"))) SelectTreeView(TreeView.Bill);
+            if (NeiSkin.Button(new Rect(x, y, w, 21), L($"Plan notes ({plan.Diagnostics.Count})", $"配平提示（{plan.Diagnostics.Count}）"))) SelectTreeView(TreeView.Bill);
             y += 24;
         }
 
@@ -402,7 +402,7 @@ internal sealed partial class NeiWindow
                 NeiSkin.Label(new Rect(start, rect.y + 17, width, 18), row.Note, muted: true);
                 if (row.Step >= 0)
                 {
-                    NeiSkin.Label(new Rect(rect.xMax - 15, rect.y, 14, rect.height), "›", TextAnchor.MiddleCenter);
+                    NeiSkin.Icon(new Rect(rect.xMax - 12, rect.center.y - 4, 6, 8), "next");
                     if (GUI.Button(rect, GUIContent.none, GUIStyle.none)) jump = row.Step;
                 }
             }
