@@ -9,18 +9,18 @@
 
 [center]
 [b]Requirements: [color=#35d6e8]BepInEx 5 (Mono)[/color] | [color=#35d6e8]CUCoreLib (1.1+)[/color][/b]
-[i]Optional: Unknown Inventory Terminal (0.4.4+) | Just-Unknown-Characters (1.0.1+) | Together (5.5.4+)[/i]
+[i]Optional: Unknown Inventory Terminal (0.4.4+) | Just Unknown Characters (1.0.1) | Together (crafting receipt API checked against 5.5.4)[/i]
 [/center]
 
 [line]
 
 [size=5][b][color=#35d6e8]◆ 模组简介 / OVERVIEW[/color][/b][/size]
 
-[b][English][/b]
-[b]Not Enough Items (NEI)[/b] brings the beloved inventory catalog and recipe discovery experience to [i]Casualties: Unknown[/i]. Built specifically for the Mono runtime with native BepInEx integration, NEI allows you to seamlessly explore every item, discover crafting recipes and usages, plan deep industrial production chains with bookmarks, and balance complex dependencies right inside your inventory or storage terminal.
+[b]English[/b]
+[b]Not Enough Items (NEI)[/b] adds a searchable item catalog, recipe and usage lookup, and bookmark-based crafting chains to the vanilla inventory and the optional Unknown Inventory Terminal in [i]Casualties: Unknown[/i]. It runs on BepInEx 5 for Mono and supports batch crafting through compatible versions of the optional Together mod.
 
-[b][中文][/b]
-[b]Not Enough Items (NEI)[/b] 是为《Casualties: Unknown》打造的本地 BepInEx 物品目录与配方查询移植模组。它为原版背包及扩展终端（如 Unknown Inventory Terminal）提供了全方位无死角的物品检索、配方正反查、GTNH 级书签编组与多层合成链规划能力，同时深度适配游戏原生容器、拖拽交互及 Together 多人联机协作。
+[b]中文[/b]
+[b]Not Enough Items (NEI)[/b] 为《Casualties: Unknown》的原版背包和可选的 Unknown Inventory Terminal 提供物品搜索、配方与用途查询、书签分组和多层合成链规划。
 
 [line]
 
@@ -31,28 +31,28 @@
 [*] [b]有序网格布局[/b]：右侧目录保持稳定索引排列，拾取、丢弃或刷取均不会打乱目录顺序。
 [*] [b]高级前缀过滤[/b]：支持 [color=#ffb454]@模组名[/color]（如 [i]@CasualtiesUnknown[/i]）、[color=#ffb454]$标签[/color]、[color=#ffb454]#描述文字[/color]、[color=#ffb454]&内部ID[/color]、[color=#ffb454]-排除项[/color] 及 [color=#ffb454]|[/color] 备选词。
 [*] [b]拼音检索互操作[/b]：配合可选的 [i]Just-Unknown-Characters[/i] 模组，支持全拼与拼音首字母检索（如 [i]st[/i] 查石头）。
-[*] [b]Shift 快捷复制[/b]：按住 [kbd]Shift[/kbd] 悬停任意物品，点击 ID 或模组名称行即可直接复制到剪贴板。
+[*] [b]Shift 快捷复制[/b]：按住 [b]Shift[/b] 悬停任意物品，点击 ID 或模组名称行即可直接复制到剪贴板。
 [/list]
 
 [b]2. 配方与用途正反查 (Bi-directional Recipe Viewer)[/b]
 [list]
-[*] [b]快捷键快速查询[/b]：鼠标悬停按 [kbd]R[/kbd] 查合成配方，按 [kbd]U[/kbd] 反查所有用途（含原料、机器催化、工具与性质载体）。
+[*] [b]快捷键快速查询[/b]：鼠标悬停按 [b]R[/b] 查合成配方，按 [b]U[/b] 反查所有用途（含原料、机器催化、工具与性质载体）。
 [*] [b]动态候选轮播与流体单位[/b]：矿物标签与替代原料在格内平滑轮播；液体精确显示 mL 容量（[i]1k = 1000mL[/i]）。
 [*] [b]爱心配方样板[/b]：在配方旁点击爱心将该产出方式标为首选样板，支持设置无配方基础原料。
 [/list]
 
 [b]3. 书签管理与合成链平衡 (Bookmarks & Crafting Chains)[/b]
 [list]
-[*] [b]一键收藏[/b]：按 [kbd]A[/kbd] 或中键收藏条目；在配方页按 [kbd]Shift + A[/kbd] 收藏当前配方。
+[*] [b]一键收藏[/b]：按 [b]A[/b] 或中键收藏条目；在配方页按 [b]Shift + A[/b] 收藏当前配方。
 [*] [b]自由划选编组[/b]：在书签栏左侧空白处拖拽即可快速编组，拖拉括号两端轻松调节范围。
-[*] [b]智能合成链（灰括号变绿）[/b]：右键点击分组括号开启合成链，悬停查看净产物、原料缺口、所需工具及副产物；[kbd]Shift[/kbd] 固定悬浮窗逐级溯源。
-[*] [b]自动制作与补齐[/b]：在原生制作面板中对绿色合成链按 [kbd]Shift + C[/kbd] 自动制作，按 [kbd]Ctrl + Shift + C[/kbd] 自动根据随身库存补齐差额！
+[*] [b]智能合成链（灰括号变绿）[/b]：右键点击分组括号开启合成链，悬停查看净产物、原料缺口、所需工具及副产物；[b]Shift[/b] 固定悬浮窗逐级溯源。
+[*] [b]自动制作与补齐[/b]：在原生制作面板中对绿色合成链按 [b]Shift + C[/b] 自动制作，按 [b]Ctrl + Shift + C[/b] 自动根据随身库存补齐差额！
 [/list]
 
 [b]4. 深度游戏适配与联机保护 (Native Integration & Multiplayer)[/b]
 [list]
 [*] [b]智能避让[/b]：打开宝箱、交易、医疗、液体转移或自定义面板时 NEI 自动收起，关闭后立即恢复。
-[*] [b]Together 联机适配[/b]：联机模式下自动制作采用严格的服务器回执机制，逐批校验确认，保证材料与进度绝对同步。
+[*] [b]Together 联机适配[/b]：每批制作等服务器确认后再提交下一批。联机自动制作不支持手动锁定材料的订单；超时停止后，重试前请检查背包。
 [*] [b]自由排版与材质包[/b]：支持在扳手设置中拖动调整面板尺寸与位置；支持通过 [i]resourcepacks/active/[/i] 替换全套贴图。
 [/list]
 
@@ -60,89 +60,19 @@
 
 [size=5][b][color=#35d6e8]◆ 快捷键一览 / CONTROLS & SHORTCUTS[/color][/b][/size]
 
-[spoiler=点击展开快捷键与操作速查表 / Click to expand Keybindings Table]
-[table]
-[tr]
-[th]操作名称[/th]
-[th]按键 / 鼠标操作[/th]
-[th]详细说明[/th]
-[/tr]
-[tr]
-[td][b]开关 NEI 侧栏[/b][/td]
-[td][kbd]O[/kbd][/td]
-[td]打开背包或终端后按 O 切换显隐；亦可在游戏原生设置中恢复[/td]
-[/tr]
-[tr]
-[td][b]查配方 (Recipe)[/b][/td]
-[td]悬停 [kbd]R[/kbd] 或 左键点击[/td]
-[td]查询该物品的所有产出途径（工作台/加热器/机器/烹饪等）[/td]
-[/tr]
-[tr]
-[td][b]查用途 (Usage)[/b][/td]
-[td]悬停 [kbd]U[/kbd] 或 右键点击[/td]
-[td]反查该物品能用来制作什么、充当什么工具或原料[/td]
-[/tr]
-[tr]
-[td][b]聚焦搜索栏[/b][/td]
-[td][kbd]Ctrl + F[/kbd] 或 点击框体[/td]
-[td]右侧过滤栏获取焦点；右键输入框可一键清空[/td]
-[/tr]
-[tr]
-[td][b]添加/移除书签[/b][/td]
-[td]悬停 [kbd]A[/kbd] 或 鼠标中键[/td]
-[td]加入左侧书签；配方页按 [kbd]Shift + A[/kbd] 收藏整条配方[/td]
-[/tr]
-[tr]
-[td][b]复制物品 ID[/b][/td]
-[td]按住 [kbd]Shift[/kbd] + 左键点击 ID 行[/td]
-[td]接管光标，快速复制内部 ID 或所属模组标识[/td]
-[/tr]
-[tr]
-[td][b]调整批次数量[/b][/td]
-[td]底栏输入框 / [kbd]+[/kbd] [kbd]−[/kbd][/td]
-[td]设定 1–64 批次，作弊刷取与带量收藏共用此数值[/td]
-[/tr]
-[tr]
-[td][b]书签编组/解组[/b][/td]
-[td]左侧拖拽 / [kbd]Alt + 左键[/kbd][/td]
-[td]框选建组；拖动括号边缘缩放；Alt+左键解组或移出单项[/td]
-[/tr]
-[tr]
-[td][b]开启合成链[/b][/td]
-[td]右键点击灰色括号[/td]
-[td]括号变绿，激活物料平衡、工序追踪与缺料统计[/td]
-[/tr]
-[tr]
-[td][b]浏览依赖树[/b][/td]
-[td]悬停绿括号 + [kbd]Shift[/kbd][/td]
-[td]固定提示框并可滚轮浏览工序；按住 [kbd]Ctrl[/kbd] 展开物品原生属性[/td]
-[/tr]
-[tr]
-[td][b]执行链式制作[/b][/td]
-[td]制作菜单中 [kbd]Shift + C[/kbd][/td]
-[td]按合成链自动执行各层级合成（支持单机与 Together）[/td]
-[/tr]
-[tr]
-[td][b]一键补齐差额[/b][/td]
-[td]制作菜单中 [kbd]Ctrl + Shift + C[/kbd][/td]
-[td]智能对比背包现有存量，仅制作补满目标所需的数量[/td]
-[/tr]
-[tr]
-[td][b]切换作弊模式[/b][/td]
-[td][kbd]Ctrl + 左键[/kbd] 点击扳手[/td]
-[td]在配方查询与作弊刷取之间切换（单机需在设置开启作弊许可）[/td]
-[/tr]
-[tr]
-[td][b]作弊刷取物品[/b][/td]
-[td]作弊模式下 左键 / 右键[/td]
-[td]左键刷取指定数量（1–64），右键刷取 1 个；单机刷液体生成临时瓶[/td]
-[/tr]
-[tr]
-[td][b]返回上一级[/b][/td]
-[td][kbd]Backspace[/kbd] 或 点击箭头[/td]
-[td]配方详情界面返回上一层浏览历史[/td]
-[/tr]
-[/table]
+[spoiler]
+[list]
+[*] [b]O[/b] — 开关侧栏 / Toggle the NEI overlay with the inventory or terminal open.
+[*] [b]R / U[/b] — 悬停查询配方／用途 / Hover an item to look up its recipes or uses.
+[*] [b]Ctrl + F[/b] — 聚焦搜索栏 / Focus search; right-click the field to clear it.
+[*] [b]A or middle-click / Shift + A[/b] — 收藏物品／配方 / Toggle an item bookmark or save the current recipe.
+[*] [b]Shift + click tooltip ID[/b] — 复制物品 ID 或来源 / Copy the item ID or mod name from its tooltip.
+[*] [b]Drag the left margin / Alt + left-click[/b] — 建组／解组 / Group bookmarks by dragging; Alt-click a bracket to ungroup.
+[*] [b]Right-click a bracket[/b] — 开启合成链 / Toggle crafting-chain planning for the group. Hold Shift over a green bracket to pin the tooltip and see the steps.
+[*] [b]Shift + C / Ctrl + Shift + C[/b] — 在原生制作菜单制作书签链／补齐差额 / In the native crafting menu, craft the bookmarked target or top it up.
+[*] [b]Ctrl + click wrench[/b] — 切换配方和作弊模式 / Toggle recipe and cheat modes. Single-player cheats require opt-in; multiplayer permissions come from the host.
+[*] [b]Backspace[/b] — 返回配方历史 / Go back in recipe history.
+[/list]
 [/spoiler]
 
 [line]
@@ -155,13 +85,13 @@
 3. 必备前置库：[b]CUCoreLib (1.1 或更高版本)[/b]。
 
 [b]手动安装步骤：[/b]
-[olist]
+[list=1]
 [*] 确保彻底关闭游戏；
 [*] 下载发布压缩包 [i]NotEnoughItems-<版本号>.zip[/i]；
 [*] 解压压缩包，将包内顶层的 [b]NotEnoughItems[/b] 文件夹整个复制并拖入游戏的 [b]BepInEx/plugins/[/b] 目录中；
 [*] 确保安装后的路径为：[i]Casualties Unknown/BepInEx/plugins/NotEnoughItems/NotEnoughItems.dll[/i]；
 [*] 启动游戏即可自动挂载生效。
-[/olist]
+[/list]
 
 [line]
 
@@ -170,7 +100,7 @@
 本项目严格贯彻开源合规准则，代码与艺术素材采用独立授权协议：
 [list]
 [*] [b]代码许可 (Code)[/b]：自有独立代码采用与 GTNH NEI 相同的 [b]LGPL-3.0-or-later[/b] 许可证（详见随包的 [i]LICENSE[/i] 与 [i]COPYING[/i]）。
-[*] [b]Modernity-GTNH-UI[/b]：感谢 Modernity 团队，面板底纹遵循 [b]CC BY-NC-SA 4.0 International[/b]（参见 [i]docs/modernity-ui/[/i]）。
+[*] [b]Modernity-GTNH-UI[/b]：感谢项目及贡献者。随包的上游许可正文标为 [b]CC BY-NC-SA 4.0 International[/b]，但同一提交的 README 徽章指向 3.0；该版本差异及混合图集的授权仍待核实。参见包内 [i]docs/modernity-ui/[/i] 和 [i]docs/THIRD_PARTY_NOTICES.md[/i]。
 [*] [b]Applied Energistics 2 (AE2)[/b]：感谢 AE2 项目组，部分界面切片遵循 [b]CC BY-NC-SA 3.0 Unported[/b]（参见 [i]docs/ae2/[/i]）。
 [*] [b]GTNewHorizons NEI[/b]：感谢 GTNH 团队在书签编组算法与经典设计上的杰出贡献。
 [*] [b]CUCoreLib & BepInEx[/b]：感谢底层库创作者为 Casualties: Unknown 模组生态搭建的基石。

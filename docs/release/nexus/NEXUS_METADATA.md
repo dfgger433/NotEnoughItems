@@ -1,89 +1,61 @@
-# Nexus Mods 页面创建与元数据速查表 / Nexus Mod Page Metadata
+# Nexus Mods 页面字段 / Nexus Mod Page Metadata
 
-在 [Nexus Mods](https://www.nexusmods.com/) 创建新模组页面（Add a Mod）或编辑模组信息时，可直接参考并复制本表中的各项内容。
+适用于在 [Casualties: Unknown（原 Scav Prototype）](https://www.nexusmods.com/scavprototype) 游戏板块创建或编辑 NEI 页面。以下是投稿草稿，不代表 ZIP 或配图已获公开分发许可。
 
----
+## 1. 页面信息 / Mod Details
 
-## 1. 基础信息 / Basic Information
+| Nexus 字段 | 建议填写 |
+|---|---|
+| **Mod Name** | `Not Enough Items (NEI)` |
+| **Game** | `Casualties: Unknown (Former Scav Prototype)` |
+| **Summary / Short Description** | `Search items, look up recipes and their uses, and plan crafting chains with bookmarks in Casualties: Unknown.` |
+| **Category** | 优先选择 `User Interface`；如果该板块没有此分类，选最接近的 `Utilities` 或界面／易用性类别。以表单中的实际选项为准。 |
+| **Version** | `0.1.32`，以 [版本配置](<../../../src/Directory.Build.props>)（仅源码树有此文件）和本次上传 ZIP 的版本为准。 |
+| **Languages** | `English`, `Simplified Chinese`（NEI 界面）。 |
+| **Full Description** | 在 BBCode 模式粘贴 [NEXUS_DESCRIPTION_BBCODE.txt](<NEXUS_DESCRIPTION_BBCODE.txt>)，预览后保存；[NEXUS_DESCRIPTION.md](<NEXUS_DESCRIPTION.md>) 是便于维护的 Markdown 版。 |
 
-| 表单字段 / Field | 建议填入内容 (中文 / English) | 字符限制与说明 |
-|---|---|---|
-| **Mod Name** (模组名称) | `Not Enough Items (NEI)` 或 `Not Enough Items (NEI) - Casualties Unknown` | 简洁、易于搜索的主名称 |
-| **Short Description** (一句话简述) | `In-game item catalog, bi-directional recipe & usage viewer, bookmark crafting chains, and inventory utility for Casualties: Unknown.` | 必须在 255 字符以内；显示在搜索列表与卡片流中 |
-| **Category** (分类) | `User Interface` / `Utilities` (根据 Casualties: Unknown 游戏板块开放的分类选择，优先 UI 或 工具类) | 确保玩家在 UI 或实用工具中快速检索 |
-| **Version** (初始发布版本) | `0.1.32` | 对应工程当前构建版本 `Directory.Build.props` |
-| **Language** (语言支持) | `English`, `Chinese - Simplified` | 模组原生内建双语支持 |
-
----
+如果需要中文短简介，可用「在《Casualties: Unknown》背包中搜索物品、查询配方和用途，并用书签规划合成链。」英文短简介单独填写即可，不必把两段一起粘贴。
 
 ## 2. 标签 / Tags
 
-在 Nexus 标签选择器中勾选或添加：
-- `User Interface` (界面)
-- `Quality of Life` (易用性/便利性)
-- `Crafting` (制作/合成)
-- `Cheats` (作弊工具，可选)
-- `Multiplayer Compatible` (联机兼容)
-- `Utilities` (实用工具)
+按标签选择器的实际选项，优先选择与核心功能匹配的 `User Interface`、`Quality of Life`、`Crafting`；如有 `Utilities` 或 `Cheats`，也符合工具功能和可选作弊模式。只有能说明适用范围时才选择联机标签：**支持带制作回执的 Together，不代表兼容所有联机模组**。
 
----
+页面说明应保留 AI 使用披露。按 Nexus 当前的 [AI 披露与标签规则](https://help.nexusmods.com/article/180-ai-policy-changes-2026)，根据实际使用范围选择标签（例如使用 AI 生成页面描述时核对 `AI Media`）；不要将离线重建的 UI 配图标为实机截图。
 
-## 3. 依赖项配置 / Requirements (Nexus Requirements Tab)
+## 3. 依赖 / Requirements
 
-在模组发布页面的 **Requirements** 区域，配置以下依赖信息：
+下列依赖均不包含在 NEI ZIP 中。只把前两项标为必需；后三项可在 Requirements 中标为可选，或列在 Description 的兼容性部分。
 
-### 必需前置依赖 (Nexus Requirements)
-1. **BepInEx 5 (Mono)**
-   - 链接/来源：GitHub / BepInEx 官方分发
-   - 说明：`Requires BepInEx 5.4.x (Mono x64). IL2CPP versions are not supported.`
-2. **CUCoreLib**
-   - 版本要求：`1.1+`
-   - 说明：`Core foundational library for Casualties: Unknown modding.`
+| 类型 | 名称和版本 | 下载来源 | 可粘贴的英文说明 |
+|---|---|---|---|
+| 必需（外部依赖） | **BepInEx 5.4.x (Mono, Windows x64)** | [BepInEx 官方发布页](https://github.com/BepInEx/BepInEx/releases) | `Install the BepInEx 5 Windows x64 build for the Mono version of Casualties: Unknown. IL2CPP is not supported.` |
+| 必需（Nexus 站内依赖） | **CUCoreLib 1.1+** | [CUCoreLib](https://www.nexusmods.com/scavprototype/mods/341) | `Required. Install CUCoreLib 1.1 or newer before starting the game.` |
+| 可选 | **Unknown Inventory Terminal 0.4.4+** | [Unknown Inventory Terminal](https://www.nexusmods.com/scavprototype/mods/1096) | `Optional. Shows NEI alongside the terminal; the vanilla inventory works without it.` |
+| 可选 | **Just Unknown Characters 1.0.1** | [Just Unknown Characters](https://www.nexusmods.com/scavprototype/mods/402) | `Optional. Adds Pinyin and initial-letter search in the Simplified Chinese NEI catalog.` |
+| 可选 | **Together（已核对 5.5.4 的制作回执接口）** | [Together](https://www.nexusmods.com/scavprototype/mods/67) | `Optional. Co-op batch crafting requires a compatible Together crafting receipt API (checked against 5.5.4). Orders with manually locked ingredients are not supported in multiplayer.` |
 
-### 可选协同模组 (Optional Compatibility)
-1. **Unknown Inventory Terminal**
-   - 版本要求：`0.4.4+`
-   - 说明：`NEI automatically anchors to terminal panels alongside vanilla inventory.`
-2. **Just-Unknown-Characters**
-   - 版本要求：`1.0.1+`
-   - 说明：`Enables Chinese Pinyin and initial-letter search in NEI search field.`
-3. **Together**
-   - 版本要求：`5.5.4+`
-   - 说明：`Multiplayer mod; enables receipt-verified co-op bookmark batch crafting.`
+## 4. 权限、许可与鸣谢 / Permissions, Licenses & Credits
 
----
+- **自有代码**：`LGPL-3.0-or-later`。随包保留 [LICENSE](<../../../LICENSE>) 与 [COPYING](<../../../COPYING>)。若页面只能填一种许可，应明确它仅适用于自有代码，不覆盖贴图（包括 DLL 内嵌贴图）或配图。
+- **第三方 GUI 贴图**：Modernity-GTNH-UI 随附许可正文为 `CC BY-NC-SA 4.0 International`，但上游 README 徽章指向 `3.0`；AE2 GUI 贴图为 `CC BY-NC-SA 3.0 Unported`。保留来源、署名和许可，标明修改，并遵守适用的非商业及相同方式共享条款。
+- **Nexus 权限选项**：不要对整包勾选无条件的修改、移植、素材复用或重新上传许可，也不要将页面选项写成对开源代码既有权利的额外限制。包含非商业素材的版本先关闭 Donation Points；免费发布或关闭积分本身不等于满足非商业条款。
+- **公开发布前**：按[第三方鸣谢与许可](<../../THIRD_PARTY_NOTICES.md>)和[配图素材来源](<NEXUS_ASSET_CREDITS.md>)确认或替换有疑问的素材，尤其是混合图集，检查拟发布源码与构建包，并按适用的代码许可提供与二进制对应的源码和构建脚本。相关条款未核清前，不公开 ZIP 或使用相关宣传图。
 
-## 4. 权限与版权声明设置 / Permissions and Credits
+**Credits 文本框：**
 
-在 Nexus Mods 的 **Permissions** 设置步骤中：
-
-| 权限项 / Permission Item | 建议设置 | 说明理由 / Basis |
-|---|---|---|
-| **Modification approval** (修改权限) | Yes with credit / As per license | 自有代码遵循 LGPL-3.0-or-later 许可协议 |
-| **Conversion approval** (跨游戏移植) | Yes with credit | 遵循开源协议，保留署名 |
-| **Asset use approval** (素材使用权限) | No / Conditional | **重要**：因包含 CC BY-NC-SA 4.0 (Modernity) 及 CC BY-NC-SA 3.0 (AE2) 第三方素材，不能无条件开放商业使用 |
-| **Asset upload permission** (重新上传) | No / Check upstream | 建议只允许链接或引用原模组页面 |
-| **Donation Points** (赞赏积分) | Opt-out (建议关闭或仅限自有代码部分) | 包含 CC BY-NC-SA（非商业）素材，避免产生商业收益争议 |
-| **Credits** (鸣谢文本框) | 见下方复制框 | 填入上游开源项目与素材贡献者名单 |
-
-### Credits 文本框粘贴内容：
 ```text
-- GTNewHorizons Team: For NotEnoughItems (GTNH fork) inspiration, bookmark algorithms, and classic workflow design.
-- Modernity-GTNH-UI Team: For beautiful open-source UI panel artwork (CC BY-NC-SA 4.0).
-- Applied Energistics 2 Team (AlgorithmX2, Ridanisaurus Rid et al.): For GUI textures and assets (CC BY-NC-SA 3.0).
-- jimmyking9999999: For CUCoreLib framework and Casualties: Unknown modding utilities.
-- BepInEx & HarmonyX teams: For robust Unity/Mono plugin injection libraries.
+Thanks to the GTNewHorizons NotEnoughItems contributors for the bookmark and recipe-viewer workflow references. GUI artwork uses material from Modernity-GTNH-UI contributors (CC BY-NC-SA 4.0 in the upstream license text; the upstream badge links to 3.0) and Applied Energistics 2 contributors (CC BY-NC-SA 3.0; © 2020 Ridanisaurus Rid, © 2013–2020 AlgorithmX2 et al.). Some GUI atlas regions were adapted. See the bundled docs/THIRD_PARTY_NOTICES.md, docs/modernity-ui/ and docs/ae2/ for sources, attributions and license texts. Thanks to Jimmyking for CUCoreLib and to the BepInEx and HarmonyX contributors.
 ```
 
----
+## 5. 主文件上传 / Main File Upload
 
-## 5. 文件上传配置 / Main File Upload Form
-
-| 表单字段 / Field | 填入内容 |
+| Nexus 字段 | 建议填写 |
 |---|---|
-| **File Name** (文件名称) | `NotEnoughItems-0.1.32.zip` |
-| **Display Name** (展示名称) | `Not Enough Items 0.1.32 (Mono)` |
-| **Version** (版本) | `0.1.32` |
-| **Category** (文件类别) | `Main Files` |
-| **Brief Overview** (文件简述) | `Main release. Extract and place the 'NotEnoughItems' folder directly into 'BepInEx/plugins/'. Requires BepInEx 5 (Mono) and CUCoreLib 1.1+.` |
-| **Changelog** (更新记录) | 复制 `docs/release/nexus/CHANGELOG_NEXUS.md` 中的对应版本内容 |
+| **Archive** | `dist/NotEnoughItems-0.1.32.zip`（从源码树构建后生成） |
+| **Display Name** | `Not Enough Items 0.1.32 (Mono)` |
+| **Version** | `0.1.32` |
+| **File Category** | `Main Files` |
+| **File Description** | `Extract the NotEnoughItems folder into BepInEx/plugins/. Requires BepInEx 5 (Mono) and CUCoreLib 1.1 or newer.` |
+| **Changelog** | 粘贴 [CHANGELOG_NEXUS.md](<CHANGELOG_NEXUS.md>) 中与 ZIP 版本一致的条目。 |
+
+归档顶层只有 `NotEnoughItems/`；[本表和其余投稿文档](<README.md>)在归档内的 `NotEnoughItems/docs/release/nexus/`。上传步骤和核对项见[发布指引](<README.md#发布步骤建议--recommended-release-workflow>)。

@@ -24,6 +24,10 @@ pwsh -File ./scripts/Install.ps1
 
 [Build.ps1](<scripts/Build.ps1>) 和 [Install.ps1](<scripts/Install.ps1>) 默认使用项目目录上两级作为游戏根；也可通过 `-GameRoot` 指定。构建生成 `dist/NotEnoughItems/` 和 `dist/NotEnoughItems-<版本>.zip`。未压缩的 `NotEnoughItems` 文件夹也可直接拖入 `BepInEx/plugins/`。
 
+## Nexus Mods 发布资料
+
+从 [Nexus 发布指引](<docs/release/nexus/README.md>)进入，或直接打开 [页面字段与发布前检查](<docs/release/nexus/NEXUS_METADATA.md>)。当前构建的 ZIP 将这套文案放在 `NotEnoughItems/docs/release/nexus/`；配图单独保留在源码树，不在安装 ZIP 中。公开上传前请先核对素材许可与署名。
+
 书签分组的交互以项目随附的 [GTNH 中文维基](https://gtnh.huijiwiki.com/wiki/Not_Enough_Items#分组与合成链) 和 [GTNH NEI 2.9.0 的书签面板](https://github.com/GTNewHorizons/NotEnoughItems/blob/8e1541eab1935a2a261afcabaeb822089a94d86b/src/main/java/codechicken/nei/BookmarkPanel.java) 为参照。书签仍使用本插件的 BepInEx 配置；不直接导入 Minecraft 的物品 ID 或 NBT。
 
 ## AI 使用与早期版本声明 / AI Use and Early Development Notice

@@ -1,6 +1,6 @@
 # 发布配图素材来源与许可 / Release Artwork Asset Credits
 
-本目录的发布配图由项目现有界面贴图合成，不新增手绘图标、纹理或外部图片。配图文件为：
+发布配图由项目现有界面贴图合成，不新增手绘图标、纹理或外部图片。下面的配图、生成脚本和源贴图链接供在源码树中查看；安装 ZIP 不附带宣传图或生成脚本。
 
 - [`nexus_assets/nexus_header_1300x372.png`](../../../nexus_assets/nexus_header_1300x372.png) — Nexus Header Image
 - [`nexus_assets/nexus_showcase_1920x1080.png`](../../../nexus_assets/nexus_showcase_1920x1080.png) — Nexus Showcase Image

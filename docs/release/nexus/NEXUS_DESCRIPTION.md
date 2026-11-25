@@ -66,7 +66,7 @@
 
 ### 4. 自由布局与可调界面 (Customizable Layout & Themes)
 - **自由拖拽排版**：点击左下角扳手图标进入设置，在「布局」页开启「拖动面板调整布局」，可任意拖动左右栏标题位置，拖拽边缘把手调整宽度，支持缩放比例调节，配置自动持久化保存。
-- **原生层级保障**：NEI 采用安全的 IMGUI 深度租约（VisualLease），不使用危险的全局截屏相机，绝不引起游戏黑屏，确保原版 UGUI 悬浮窗正常交互。
+- **原版悬浮提示**：NEI 不使用捕获相机，并在与原版背包槽重叠时保留原版物品悬浮提示。
 - **独立外置本地化**：所有界面文字采用外置 `Lang/zh_cn.json` 与 `Lang/en_us.json`，无需重新编译即可自行修改汉化或润色。
 
 ---
@@ -80,8 +80,8 @@
 
 ### 可选推荐依赖 (Optional Dependencies)
 - **Unknown Inventory Terminal (0.4.4+)**：扩展物品终端模组；NEI 会自动适配终端侧栏与分类。
-- **Just-Unknown-Characters (1.0.1+)**：提供拼音与首字母搜索拼音支持。
-- **Together (5.5.4+)**：联机模组；NEI 深度适配其联机制作回执协议。
+- **Just Unknown Characters (1.0.1)**：为简体中文目录提供拼音和拼音首字母搜索。
+- **Together（已核对 5.5.4 的制作回执接口）**：支持联机批量制作；含手动锁定材料的订单不支持联机自动制作。
 
 ### 安装步骤 (Installation Guide)
 1. 彻底退出《Casualties: Unknown》游戏；
@@ -128,7 +128,7 @@
 - **拖拽保护**：拖动游戏内实物或液体容器时，NEI 控件不会拦截鼠标释放事件，彻底防止物品意外丢失或卡死。
 
 ### Together 联机模组支持
-- **联机制作**：在 Together 联机环境中，玩家使用 `Shift+C` 制作时，NEI 严格遵循网络回执机制，按批次与服务器通信，杜绝刷物漏洞。材料不足、连接超时或服务器拒绝时会自动平稳停止。
+- **联机制作**：在兼容的 Together 联机环境中，NEI 等待服务器确认当前批次后才提交下一批。缺料、连接超时或服务器拒绝会停止后续批次；已提交的一批可能仍会完成，重试前先检查背包。
 - **联机物品发放**：联机作弊功能由房主/服务器权限统一管控。仅在房主开启作弊且授权管理员权限时，客户端可通过已注册的 `give` 命令自发基础物品；多人模式不支持向新瓶灌装液体作弊。
 
 ---
@@ -180,7 +180,7 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe(
 - 本模组的独立开发代码、测试用例与构建自动化脚本采用 **GNU Lesser General Public License v3.0 or later (LGPL-3.0-or-later)**，与 [GTNewHorizons NotEnoughItems](https://github.com/GTNewHorizons/NotEnoughItems) 的 GTNH 修改部分开源协议保持一致。详见随包附带的 `LICENSE` (LGPL v3) 与 `COPYING` (GPL v3)。
 
 ### 2. 界面视觉素材与鸣谢 (Assets & Credits)
-- **Modernity-GTNH-UI**：感谢 Modernity 项目组。模组面板底板源自其开源 UI 资源，许可证遵循 **CC BY-NC-SA 4.0 International**（详见 `docs/modernity-ui/`）。
+- **Modernity-GTNH-UI**：感谢项目及贡献者。随包的上游许可正文标为 **CC BY-NC-SA 4.0 International**，但同一提交的 README 徽章指向 3.0；该版本差异及混合图集的授权仍待核实。详见[来源记录](<../../modernity-ui/SOURCES.md>)与[第三方许可说明](<../../THIRD_PARTY_NOTICES.md>)。
 - **Applied Energistics 2 (AE2)**：感谢 AE2 团队及其贡献者（AlgorithmX2、Ridanisaurus Rid 等）。部分 GUI 质感遵循 **CC BY-NC-SA 3.0 Unported**（详见 `docs/ae2/`）。
 - **GTNewHorizons NEI**：感谢 GTNH 团队在书签编组、状态链算法及经典布局上带来的深厚启发。
 
