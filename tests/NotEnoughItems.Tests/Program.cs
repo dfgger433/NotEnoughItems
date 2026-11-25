@@ -11,6 +11,8 @@ static int RunTests()
 {
     (string Name, Action Check)[] tests =
     [
+        ("both shipped language files use the same keys and valid placeholders", LocalizationTests.ShippedFiles),
+        ("loose language files override defaults and fall back per key or file", LocalizationTests.LooseFiles),
         ("optional pinyin search falls back without disrupting literal search", PinyinSearchTests.OptionalProvider),
         ("pinyin search preserves query operators and field isolation", PinyinSearchTests.SearchSyntax),
         ("plain search combines case-insensitive terms", PlainSearch),
@@ -81,6 +83,10 @@ static int RunTests()
             Check(rows.Length == 36 && rows[0] == (0, 0, 0) && rows[^2] == (1, 99, 1) && rows[^1] == (2, 0, 1), "A clipped step or note is not dropped.");
         }),
         ("GUI texture locations use a namespace and preserve legacy mappings", TextureLocations),
+        ("ordinary buttons capture, release and cancel without a stray click", ButtonVisualTests.Input),
+        ("mouse capture and release keep the same hover artwork", ButtonVisualTests.ClickKeepsHoverArtwork),
+        ("sprites and built-in plus/minus share idle, hover and disabled artwork", ButtonVisualTests.Artwork),
+        ("button bevel texels mirror at fractional device scales", ButtonBevelPixels),
         ("full-width hosts retain both side grids and a separate inspector", FullWidthHostLayout),
         ("native drag releases over NEI cancel only without a real drop target", DragReleaseOwnership),
         ("closing the inventory cancels a drag without cancelling ordinary radial transitions", DragInventoryClose),
@@ -98,8 +104,10 @@ static int RunTests()
         }),
         ("NEI resolves inventory, terminal and bookmark-only crafting with native blockers first", SurfaceSmoke.Run),
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
-        ("catalog search preserves all matches and updates favorite and carried priorities", CatalogListingTests.Run),
-        ("the installed assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
+        ("catalog search preserves definition order and keeps all matching types", CatalogListingTests.Run),
+        ("catalog tooltip previews start dry without using a live item", TooltipSmoke.DryPreview),
+        ("the built assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
+        ("embedded Back keeps its two-tone art and crafting tabs use states atlas frames", GuiArtworkTests.BackAndRectangularTabs),
         ("native tooltip suppression is bounded by visible NEI regions", TooltipSmoke.Run),
         ("item and liquid tooltips keep native data separate from IDs and mod origins", TooltipSmoke.ItemContent),
         ("tooltip IDs default on, persist, and copy only on Shift-left-click", TooltipSmoke.IdSettingAndInput),
@@ -117,6 +125,7 @@ static int RunTests()
         ("chain tooltip and dependency tree follow explicit language changes", BookmarkParityTests.ChainNotesFollowInterfaceLanguage),
         ("production and usage methods retain alternative rows in index order", RecipeMethodsTests.AlternateRows),
         ("method navigation is independent of recipe pagination", RecipeMethodsTests.MethodNavigationIsIndependentOfRecipePages),
+        ("debug preview pages overflowing crafting methods", RecipeMethodsTests.DebugPreviewNavigatesOnePageAtATime),
         ("native crafting, cooking and provider machines are distinct lookup methods", RecipeMethodsTests.NativeAndMachineMethods),
         ("built-in cooker labels are bilingual without changing recipe identity", RecipeMethodsTests.BuiltInCookingLocalization),
         ("method groups handle empty lookups and missing process metadata", RecipeMethodsTests.MissingMetadataAndEmptyMatches),
@@ -396,15 +405,19 @@ static void InspectorLayout()
         float inset = NeiAssets.RecipeBackgroundSlice;
         var inner = Rect.MinMaxRect(recipe.Frame.xMin + inset, recipe.Frame.yMin + inset,
             recipe.Frame.xMax - inset, recipe.Frame.yMax - inset);
-        Check(new[] { recipe.Method, recipe.Pages, recipe.Content }.All(row => ContainsRect(inner, row) &&
-            row.xMin == inner.xMin && row.xMax == inner.xMax) &&
+        Check(ContainsRect(inner, recipe.Method) && ContainsRect(inner, recipe.Pages) && ContainsRect(inner, recipe.Content) &&
+            recipe.Method.xMin == inner.xMin && recipe.Method.xMax == inner.xMax &&
+            recipe.Pages.xMin == inner.xMin && recipe.Pages.xMax == inner.xMax &&
+            recipe.Content.xMin == inner.xMin && recipe.Content.xMax == inner.xMax &&
             recipe.Method.yMax < recipe.Pages.yMin && recipe.Pages.yMax < recipe.Content.yMin,
-            "Method, page controls and diagrams stay inside the frame in order.");
-        Check(ContainsRect(recipe.NavigationBounds, recipe.Back) && ContainsRect(recipe.NavigationBounds, recipe.Tab(0)) &&
-            ContainsRect(recipe.Frame, recipe.Method) &&
-            !recipe.Back.Overlaps(recipe.Method) && recipe.PreviousMethod.xMin == recipe.Pages.xMin &&
-            recipe.NextMethod.xMax == recipe.Pages.xMax,
-            "Method switching is inside the recipe frame and shares page arrow columns.");
+            "The inset method and page controls align with the diagram area below them.");
+        var firstTab = recipe.Tab(0);
+        var lastTab = recipe.Tab(recipe.TabsPerPage - 1);
+        Check(ContainsRect(recipe.NavigationBounds, recipe.Back) && ContainsRect(recipe.NavigationBounds, firstTab) &&
+            ContainsRect(recipe.NavigationBounds, lastTab) && ContainsRect(recipe.Frame, recipe.Method) &&
+            !recipe.Back.Overlaps(firstTab) && !recipe.Back.Overlaps(recipe.Method) &&
+            recipe.PreviousMethod.xMin == recipe.Pages.xMin && recipe.NextMethod.xMax == recipe.Pages.xMax,
+            "The lower arrows share inset edges; the tabs and Back stay in the protected header.");
         var diagram = RecipePanelLayout.DiagramArea(recipe.Content, 0);
         Check(Mathf.Abs(recipe.Content.x + diagram.center.x - inner.center.x) < .01f &&
             recipe.Content.x + diagram.xMin > recipe.Catalyst.xMax &&
@@ -513,52 +526,94 @@ static void BookmarkShortcutHelp()
 
 static void TextureLocations()
 {
-    Check(NeiAssets.RelativePath(NeiAssets.Modernity("nei_sprites.png")) == "assets/notenoughitems/textures/gui/modernity/nei_sprites.png",
-        "Modernity uses lowercase paths below the namespace.");
-    Check(NeiAssets.ResourceName(NeiAssets.Background("")) == "assets/notenoughitems/textures/gui/backgrounds/default.png",
-        "The embedded fallback uses the same resource path as the disk override.");
-    Check(NeiAssets.LegacyPath(NeiAssets.Background("recipe")) == "Textures/background-recipe.png" &&
-        NeiAssets.LegacyPath(NeiAssets.Modernity("widgets.png")) == null, "Legacy backgrounds stay readable, not obsolete control art.");
-    Check(ModernityFrames.Caption("previous") == string.Empty && ModernityFrames.Caption("next") == string.Empty &&
-        ModernityFrames.Find("previous") is { ResourcePath: NeiAssets.IconsDirectory + "previous.png", Width: 16, Height: 16 } &&
-        ModernityFrames.Find("next") is { ResourcePath: NeiAssets.IconsDirectory + "next.png", Width: 16, Height: 16 } &&
-        ModernityFrames.Find("back") is { ResourcePath: NeiAssets.IconsDirectory + "back.png", Width: 16, Height: 16 } &&
-        ModernityFrames.Find("add") is { ResourcePath: NeiAssets.IconsDirectory + "add.png", Width: 16, Height: 16 } &&
-        ModernityFrames.Find("remove") is { ResourcePath: NeiAssets.IconsDirectory + "remove.png", Width: 16, Height: 16 } &&
-        ModernityFrames.Find("close") is { ResourcePath: NeiAssets.IconsDirectory + "close.png", Width: 16, Height: 16 } &&
-        ModernityFrames.Find("options_cheat") is { X: 64, Y: 0, File: "nei_tabbed_sprites.png" },
-        "Navigation and quantity controls use replaceable icon assets.");
-    string original = NeiAssets.ResourceName(NeiAssets.OriginalDirectory + "nei_sprites.png");
-    Check(NeiAssets.TextureSources(NeiAssets.Modernity("nei_sprites.png"), true).Take(2).SequenceEqual(new[]
+    Check(NeiAssets.ResourceName(NeiAssets.StatesAtlas) == "assets/notenoughitems/textures/gui/sprites/interface_states.png" &&
+        NeiAssets.ExpectedSize(NeiAssets.StatesAtlas) == (256, 256), "Use the supplied 256×256 sheet under textures/gui/sprites.");
+    Check(NeiAssets.ResourceName(NeiAssets.RecipeBackgroundTexture) == "assets/notenoughitems/textures/gui/panels/recipe_background.png",
+        "Use the canonical background under textures/gui/panels.");
+    Check(NeiAssets.RelativePath(NeiAssets.Background("")) == "assets/notenoughitems/textures/gui/backgrounds/default.png" &&
+        NeiAssets.LegacyPath(NeiAssets.Background("recipe")) == "Textures/background-recipe.png", "Optional background overrides remain readable.");
+    foreach (var (name, x, y, width, height) in new[]
     {
-        (NeiAssets.ActivePackDirectory + "/" + NeiAssets.RelativePath(NeiAssets.Modernity("nei_sprites.png")), false), (original, true)
-    }), "An active material pack takes precedence, then the pinned original atlas is used.");
+        ("bookmark", 0, 0, 32, 32), ("bookmark_selected", 32, 0, 32, 32),
+        ("options", 64, 0, 32, 32), ("options_cheat", 128, 0, 32, 32),
+        ("favorite", 32, 32, 16, 16), ("favorite_selected", 48, 32, 16, 16),
+        ("copy", 0, 64, 16, 16), ("paste", 16, 64, 16, 16), ("close", 16, 80, 16, 16),
+        ("previous", 48, 64, 16, 16), ("next", 32, 64, 16, 16),
+        ("recipe_arrow", 32, 64, 16, 16), ("back", 0, 80, 16, 16),
+        ("recipe_slot", 161, 209, 18, 18), ("scroll_horizontal_track", 161, 161, 22, 16),
+        ("scroll_vertical_track", 192, 161, 16, 22), ("scroll_recipe_track", 209, 161, 26, 42),
+        ("scroll_horizontal_thumb", 161, 193, 18, 12), ("scroll_vertical_thumb", 192, 192, 12, 18)
+    })
+    {
+        Check(ModernityFrames.Find(name) is { ResourcePath: NeiAssets.StatesAtlas } frame &&
+            (frame.X, frame.Y, frame.Width, frame.Height) == (x, y, width, height), "Incorrect atlas frame: " + name);
+    }
+    Check(new[] { "add", "remove" }.All(name => BuiltInControlArt.IsQuantitySymbol(name) && ModernityFrames.Find(name) == null) &&
+        !BuiltInControlArt.IsQuantitySymbol("back") && ModernityFrames.Find("small_button") == null &&
+        new[] { "back", "previous", "next", "close" }.All(ModernityFrames.HasWidgetBackplate),
+        "Plus/minus are built in; Back is the original sprite on a normal widget button.");
+    Check(ModernityFrames.IconGraphic("bookmark", false) == "bookmark" &&
+        ModernityFrames.IconGraphic("bookmark", true) == "bookmark_selected" &&
+        ModernityFrames.IconGraphic("options", true) == "options" &&
+        ModernityFrames.IconGraphic("options_cheat", true) == "options_cheat",
+        "Keep the semantic bookmark and wrench sprites independent of transient button styling.");
+    Color[] grid = [(Color)new Color32(255, 0, 170, 255), (Color)new Color32(255, 190, 170, 255)];
+    Check(!ModernityFrames.HasBackArtwork(grid) && !ModernityFrames.HasBackArtwork(new Color[4]) &&
+        ModernityFrames.HasBackArtwork([grid[0], Color.white, default]),
+        "The new Back frame alone falls back to bundled artwork if missing from an older atlas.");
+
+    RectEqual(new Rect(12, 27, 6, 8), ModernityFrames.FitButtonSprite(new Rect(10, 20, 10, 22), 6, 8, float.PositiveInfinity, false),
+        "The narrow tab rail centers the non-square arrow without stretching it");
+    RectEqual(new Rect(1, 8, 4, 2), ModernityFrames.FitButtonSprite(new Rect(0, 0, 6, 18), 8, 4, float.PositiveInfinity, false),
+        "A compact control scales both sprite axes by the same factor");
+    Check(ModernityFrames.FitsButtonBorders(new Rect(0, 0, 10, 22), 2, 2, 2, 2) &&
+        !ModernityFrames.FitsButtonBorders(new Rect(0, 0, 3, 22), 2, 2, 2, 2),
+        "Only use fixed-corner slicing when the full borders and center fit.");
+    Check(ModernityFrames.Find("recipe_search") == null && ModernityFrames.Find("search") == null,
+        "The inspector no longer exposes the recipe-search icon.");
     var ink = new Color[18 * 20];
     for (int y = 4; y <= 17; y++)
         for (int x = 3; x <= 16; x++) ink[y * 18 + x] = new Color(1, 1, 1, 1);
     Check(ModernityFrames.InkBounds(18, 20, ink) == (3, 4, 14, 14) &&
         ModernityFrames.InkBounds(18, 20, new Color[18 * 20]) == (0, 0, 18, 20),
         "The favorite button centers visible ink despite asymmetric transparency.");
-    Check(ModernityFrames.Find("favorite") is { X: 20, Y: 152, Width: 18, Height: 20 } heart &&
-        NeiAssets.TextureSources(heart.ResourcePath, false).First() == (original, true), "The default favorite icon uses the original NEI atlas.");
-    Check(ModernityFrames.Find("search_field") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 12, Width: 128, Height: 12 } &&
-        ModernityFrames.Find("search_field_focused") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 0, Width: 128, Height: 12 } &&
-        ModernityFrames.Find("tooltip_background") is { ResourcePath: "gui/controls/text_field.png", X: 0, Y: 0, Width: 128, Height: 12 },
+    Check(ModernityFrames.Find("search_field") is { ResourcePath: NeiAssets.TextFieldAtlas, X: 0, Y: 12, Width: 128, Height: 12 } &&
+        ModernityFrames.Find("search_field_focused") is { ResourcePath: NeiAssets.TextFieldAtlas, X: 0, Y: 0, Width: 128, Height: 12 } &&
+        ModernityFrames.Find("tooltip_background") is { ResourcePath: NeiAssets.TextFieldAtlas, X: 0, Y: 0, Width: 128, Height: 12 },
         "Search and tooltip surfaces use individual rows of the supplied atlas, not the transparent 128×128 canvas.");
-    Check(NeiAssets.ExpectedSize(NeiAssets.DropDownAtlas) == (256, 256) &&
-        ModernityFrames.Find("dropdown_closed") is { ResourcePath: NeiAssets.DropDownAtlas, X: 0, Y: 0, Width: 112, Height: 20 } &&
-        ModernityFrames.Find("dropdown_open_hover") is { ResourcePath: NeiAssets.DropDownAtlas, X: 112, Y: 64, Width: 112, Height: 19 } &&
-        ModernityFrames.Find("dropdown_option_hover") is { ResourcePath: NeiAssets.DropDownAtlas, X: 0, Y: 192, Width: 112, Height: 18 },
-        "The trigger and rows use the supplied frames without the transparent gutters.");
+    Check(ModernityFrames.Find("recipe_method_title") == null,
+        "The method title is a label, not a beveled atlas button.");
+    Check(NeiAssets.ExpectedSize(NeiAssets.DropDownAtlas) == (256, 256), "Keep the supplied dropdown atlas canvas.");
+    foreach (var (inside, enabled, triggerY, triggerHeight, optionY, optionHeight, offset) in new[]
+    {
+        (false, true,   0, 20, 128, 19, 0),
+        (true,  true,  64, 19, 192, 18, 1),
+        (true,  false, 32, 18, 160, 17, 2)
+    })
+    {
+        var state = ModernityFrames.DropDownState(ButtonVisual.Resolve(enabled, inside));
+        Check(state.Offset == offset, "Shorter dropdown faces move the face without moving the row's hit target.");
+        CheckDropDownFrame("dropdown_closed" + state.Suffix, 0, triggerY, triggerHeight);
+        CheckDropDownFrame("dropdown_open" + state.Suffix, 112, triggerY, triggerHeight);
+        CheckDropDownFrame("dropdown_option" + state.Suffix, 0, optionY, optionHeight);
+    }
+    Check(ModernityFrames.DropDownState(ButtonVisual.Resolve(true, false), selected: true) == ("_hover", 0) &&
+        ModernityFrames.DropDownState(ButtonVisual.Resolve(true, true), selected: true) == ("_hover", 1),
+        "A selected option keeps its highlight at rest and the normal hover geometry under the pointer.");
+
+    static void CheckDropDownFrame(string name, int x, int y, int height) =>
+        Check(ModernityFrames.Find(name) is { ResourcePath: NeiAssets.DropDownAtlas, Width: 112 } frame &&
+            (frame.X, frame.Y, frame.Height) == (x, y, height), "Incorrect dropdown atlas crop: " + name);
     Check(NeiAssets.ExpectedSize(NeiAssets.CheckboxAtlas) == (64, 64) &&
         NeiAssets.TextureSources(NeiAssets.CheckboxAtlas, true).Last() == (NeiAssets.ResourceName(NeiAssets.CheckboxAtlas), true),
         "Checkbox replacements require the original atlas dimensions and have an embedded fallback.");
-    foreach (var (on, hovered, x, y) in new[] { (false, false, 0, 28), (false, true, 22, 28), (true, false, 0, 40), (true, true, 22, 40) })
-    {
-        Check(ModernityFrames.Find(ModernityFrames.CheckboxFace(on, hovered)) is
-            { ResourcePath: NeiAssets.CheckboxAtlas, Width: 22, Height: 12 } frame && frame.X == x && frame.Y == y,
-            "Each on/off and idle/hovered combination uses its own complete switch frame.");
-    }
+    foreach (var (name, x, y) in new[] { ("checkbox_off", 0, 28), ("checkbox_off_hover", 22, 28),
+        ("checkbox_on", 0, 40), ("checkbox_on_hover", 22, 40) })
+        Check(ModernityFrames.Find(name) is { ResourcePath: NeiAssets.CheckboxAtlas, Width: 22, Height: 12 } frame &&
+            (frame.X, frame.Y) == (x, y), "Incorrect NEI switch atlas crop: " + name);
+    Check(ModernityFrames.CheckboxFace(on: false, hovered: true) == "checkbox_off_hover" &&
+        ModernityFrames.CheckboxFace(on: true, hovered: false) == "checkbox_on",
+        "Use the supplied idle and hover frames for regular NEI switches.");
     Check(ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(false, false)) is
         { ResourcePath: NeiAssets.CheckboxAtlas, X: 29, Y: 1, Width: 12, Height: 12 } &&
         ModernityFrames.Find(ModernityFrames.SquareCheckboxFace(false, true)) is
@@ -570,18 +625,62 @@ static void TextureLocations()
         "Spawn mode uses all four supplied square checkbox states.");
     Check(NeiAssets.ExpectedSize(NeiAssets.RecipeBackgroundTexture) == (256, 256) &&
         ModernityFrames.Find("recipe_background") is { ResourcePath: NeiAssets.RecipeBackgroundTexture, X: 0, Y: 0, Width: 184, Height: 174 } &&
-        NeiAssets.RecipeBackgroundSlice == 9,
-        "The recipe inspector shares the Modernity 184x174 frame with nine-pixel borders.");
-    Check(ModernityFrames.Find("inspector_background") == null &&
-        ModernityFrames.Find("button") is { ResourcePath: "gui/modernity/widgets.png", Y: 66 } &&
-        ModernityFrames.Find("button_disabled") is { ResourcePath: "gui/modernity/widgets.png", Y: 46 },
-        "Use the existing Modernity frame and visible enabled/disabled widget faces, not the reference skin.");
-    foreach (string path in new[] { NeiAssets.RecipeBackgroundTexture, NeiAssets.RecipeTabSelected, NeiAssets.RecipeTabCandidate })
+        NeiAssets.RecipeBackgroundSlice == 9 &&
+        ModernityFrames.Find(NeiAssets.RecipeTabSelected) is { ResourcePath: NeiAssets.StatesAtlas, X: 160, Y: 112, Width: 48, Height: 47 } &&
+        ModernityFrames.Find(NeiAssets.RecipeTabCandidate) is { ResourcePath: NeiAssets.StatesAtlas, X: 208, Y: 112, Width: 48, Height: 47 } &&
+        NeiAssets.RecipeTabStripWidth == 96 && NeiAssets.ExpectedSize(NeiAssets.StatesAtlas) == (256, 256),
+        "The recipe inspector crops the adjacent method-tab frames to their 48x47 painted bounds.");
+    Check(ModernityFrames.Find("button") is { ResourcePath: NeiAssets.WidgetsAtlas, Y: 66 } &&
+        ModernityFrames.Find("button_disabled") is { ResourcePath: NeiAssets.WidgetsAtlas, Y: 46 } &&
+        ModernityFrames.Find("button_hover") is { ResourcePath: NeiAssets.WidgetsAtlas, Y: 86 },
+        "Use the relocated widget backplates without changing state coordinates.");
+    foreach (var (texture, previousPaths) in new (string, string[])[]
     {
-        string canonical = NeiAssets.RelativePath(path);
-        var expected = new[] { (NeiAssets.ActivePackDirectory + "/" + canonical, false), (canonical, false), (canonical, true) };
-        Check(NeiAssets.TextureSources(path, true).SequenceEqual(expected), "Recipe artwork falls back from the active pack to the supplied file and then to the same embedded PNG: " + path);
+        (NeiAssets.StatesAtlas, ["guis/states.png"]),
+        (NeiAssets.RecipeBackgroundTexture, ["guis/recipebg.png", "gui/modernity/recipebg.png"]),
+        (NeiAssets.WidgetsAtlas, ["gui/sprites/widgets.png", "gui/modernity/widgets.png"]),
+        (NeiAssets.TextFieldAtlas, ["gui/sprites/text_field.png", "gui/controls/text_field.png"]),
+        (NeiAssets.DropDownAtlas, ["gui/sprites/drop_down_list.png", "gui/controls/drop_down_list.png"]),
+        (NeiAssets.CheckboxAtlas, ["gui/sprites/checkbox.png", "gui/controls/checkbox.png"])
+    })
+    {
+        string canonical = NeiAssets.RelativePath(texture);
+        var defaults = new[] { (canonical, false), (canonical, true) };
+        var pack = new[] { texture }.Concat(previousPaths)
+            .Select(path => (NeiAssets.ActivePackDirectory + "/" + NeiAssets.RelativePath(path), false));
+        Check(NeiAssets.TextureSources(texture, true).SequenceEqual(pack.Concat(defaults)) &&
+            NeiAssets.TextureSources(texture, false).SequenceEqual(defaults),
+            "Prefer the new active-pack path, then older pack paths, then the canonical loose and embedded assets: " + texture);
     }
+}
+
+static void ButtonBevelPixels()
+{
+    // At 1.25× the two side texels cover three pixels. The extra pixel belongs to
+    // the inner texel on both sides, not to opposite colors at a sampling tie.
+    Check(ButtonSlicePixels.Column(0, 29, 200, 2, 1.25f) == (0, 1, 0, 1) &&
+        ButtonSlicePixels.Column(1, 29, 200, 2, 1.25f) == (1, 3, 1, 2) &&
+        ButtonSlicePixels.Column(4, 29, 200, 2, 1.25f) == (28, 29, 199, 200),
+        "A fractional bevel repeats the same corresponding texels on either side.");
+
+    const int sourceWidth = 200, side = ModernityFrames.ButtonSlice;
+    foreach (float scale in new[] { .45f, .9f, 1f, 1.25f, 1.5f, 1.8f, 2f, 2.4f })
+        foreach (int width in new[] { 11, 12, 23, 24, 29, 120, 161 })
+        {
+            int end = 0, sourceEnd = 0;
+            for (int i = 0; i <= 2 * side; i++)
+            {
+                var band = ButtonSlicePixels.Column(i, width, sourceWidth, side, scale);
+                var opposite = ButtonSlicePixels.Column(2 * side - i, width, sourceWidth, side, scale);
+                Check(band.Start == end && band.SourceStart == sourceEnd && band.End >= band.Start &&
+                    band.SourceEnd > band.SourceStart, "Slices must meet without gaps, overlaps or inverted UVs.");
+                Check(band.Start == width - opposite.End && band.End == width - opposite.Start &&
+                    band.SourceStart == sourceWidth - opposite.SourceEnd && band.SourceEnd == sourceWidth - opposite.SourceStart,
+                    $"Mismatched source or device pixels at width {width}, scale {scale}, band {i}.");
+                (end, sourceEnd) = (band.End, band.SourceEnd);
+            }
+            Check(end == width && sourceEnd == sourceWidth, "The slices must cover the whole face.");
+        }
 }
 
 static void DragReleaseOwnership()
@@ -722,47 +821,17 @@ static void Check(bool passed, string message)
 static void EmbeddedGuiTextures()
 {
     var assembly = typeof(Catalog).Assembly;
-    Check(!assembly.GetManifestResourceNames().Contains(NeiAssets.ResourceName(NeiAssets.OriginalDirectory + "recipebg.png")),
-        "Only the layout comes from the reference; do not ship its gray recipe background.");
     Span<byte> header = stackalloc byte[24];
-    foreach (string path in new[] { NeiAssets.Modernity("widgets.png"), NeiAssets.Modernity("nei_tabbed_sprites.png"),
-        NeiAssets.Background("recipe"), NeiAssets.Modernity("nei_sprites.png"), "gui/controls/text_field.png", NeiAssets.DropDownAtlas,
-        NeiAssets.RecipeBackgroundTexture, NeiAssets.CheckboxAtlas,
-        NeiAssets.Icon("back"), NeiAssets.Icon("previous"), NeiAssets.Icon("next"), NeiAssets.Icon("add"),
-        NeiAssets.Icon("remove"), NeiAssets.Icon("close") })
+    foreach (string path in new[] { NeiAssets.StatesAtlas, NeiAssets.WidgetsAtlas, NeiAssets.TextFieldAtlas,
+        NeiAssets.DropDownAtlas, NeiAssets.RecipeBackgroundTexture, NeiAssets.CheckboxAtlas })
     {
         using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
         Check(png != null, "Missing namespaced resource: " + path);
         png!.ReadExactly(header);
         Check(header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }), "Fallback is not PNG: " + path);
-        uint width = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[16..]);
-        uint height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[20..]);
-        Check(width > 0 && (width & (width - 1)) == 0 && height > 0 && (height & (height - 1)) == 0,
-            "Texture canvas dimensions must be powers of two: " + path);
-        if (path == NeiAssets.RecipeBackgroundTexture)
-            Check(width == 256 && height == 256, "The recipe panel atlas must retain its 256x256 canvas.");
-        if (path == NeiAssets.CheckboxAtlas)
-            Check(width == 64 && height == 64, "The checkbox atlas must retain its 64x64 canvas.");
-    }
-    using (var arrow = assembly.GetManifestResourceStream(NeiAssets.ResourceName(NeiAssets.Icon("recipe_arrow"))))
-    {
-        Check(arrow != null, "Missing recipe arrow resource.");
-        arrow!.ReadExactly(header);
-        Check(header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) &&
-            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[16..]) == 33 &&
-            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[20..]) == 36,
-            "Recipe arrow keeps its explicit 33x36 canvas.");
-    }
-    foreach (var (path, height) in new[] { (NeiAssets.RecipeTabSelected, NeiAssets.RecipeTabSelectedHeight),
-        (NeiAssets.RecipeTabCandidate, NeiAssets.RecipeTabCandidateHeight) })
-    {
-        using var png = assembly.GetManifestResourceStream(NeiAssets.ResourceName(path));
-        Check(png != null, "Missing crafting method tab resource: " + path);
-        png!.ReadExactly(header);
-        Check(header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) &&
-            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[16..]) == NeiAssets.RecipeTabWidth &&
-            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(header[20..]) == height,
-            "Crafting method tab keeps the provided PNG pixel dimensions: " + path);
+        int width = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[16..]);
+        int height = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[20..]);
+        Check(NeiAssets.ExpectedSize(path) == (width, height), "Bundled sheet has incorrect size: " + path);
     }
 }
 

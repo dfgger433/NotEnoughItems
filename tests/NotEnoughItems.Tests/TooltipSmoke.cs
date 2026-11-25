@@ -63,6 +63,23 @@ internal static class TooltipSmoke
             throw new InvalidOperationException("Zero and one eligible matches must not gain phantom alternatives.");
     }
 
+    internal static void DryPreview()
+    {
+        var assembly = typeof(CatalogItem).Assembly;
+        var previewFactory = assembly.GetType("NotEnoughItems.NativeTooltipPreview", true)!;
+        var initialize = previewFactory.GetMethod("InitializeWetness", NonPublic)!;
+        var preview = (Item)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Item));
+        preview.wetTime = 0f; // Serialized state of e.g. the bread and lantern prefabs.
+        preview.condition = .75f;
+        initialize.Invoke(null, [preview]);
+        if (preview.wetTime != -1000f || preview.condition != .75f)
+            throw new InvalidOperationException("Inactive previews should use the game's dry initial timestamp without modifying condition.");
+
+        var forItem = assembly.GetType("NotEnoughItems.NativeTooltip", true)!.GetMethod("ForItem", NonPublic)!;
+        if (forItem.GetParameters().Any(parameter => parameter.ParameterType == typeof(Item)))
+            throw new InvalidOperationException("A lookup on a live item must not supply that item's state to NEI tooltips.");
+    }
+
     internal static void ItemContent()
     {
         var native = typeof(CatalogItem).Assembly.GetType("NotEnoughItems.NativeTooltip", true)!;
@@ -70,7 +87,7 @@ internal static class TooltipSmoke
         (string? Name, string? Description, string? Note, string? Id, string? IdText, string? ModText) Read(CatalogItem item, string? note = null,
             bool expanded = false, bool chinese = false, float? volume = null, bool showId = true)
         {
-            var result = forItem.Invoke(null, [item.DisplayName, item, note, null, expanded, chinese, volume, showId])!;
+            var result = forItem.Invoke(null, [item.DisplayName, item, note, expanded, chinese, volume, showId])!;
             string? Get(string name) => (string?)result.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(result);
             return (Get("Name"), Get("Description"), Get("Note"), Get("Id"), Get("IdText"), Get("ModText"));
         }
@@ -127,10 +144,12 @@ internal static class TooltipSmoke
         finally { File.Delete(path); }
 
         var canInteract = window.GetMethod("TooltipCanInteract", NonPublic)!;
-        bool CanInteract(bool shift, bool available) => (bool)canInteract.Invoke(null, [shift, available])!;
+        bool CanInteract(bool shift, bool available, bool nested = false) => (bool)canInteract.Invoke(null, [shift, available, nested])!;
         if (CanInteract(shift: false, available: true) || CanInteract(shift: true, available: false) ||
             !CanInteract(shift: true, available: true))
             throw new InvalidOperationException("The item tooltip must only interact with the pointer while Shift is held and tooltip interaction is available.");
+        if (CanInteract(shift: true, available: true, nested: true))
+            throw new InvalidOperationException("The Shift that pins a chain or candidate list must never pin its child preview, even when it overlaps another slot.");
 
         var copy = window.GetMethod("CopyTooltipValueAt", NonPublic)!;
         var idRow = new Rect(100, 110, 200, 14);
@@ -170,9 +189,10 @@ internal static class TooltipSmoke
         var assembly = typeof(CatalogItem).Assembly;
         var native = assembly.GetType("NotEnoughItems.NativeTooltip", throwOnError: true)!;
         var suppress = native.GetMethod("Suppress", NonPublic)!;
-        bool Suppress(bool overlay, bool hit) => (bool)suppress.Invoke(null, [overlay, hit])!;
-        if (!Suppress(true, true) || Suppress(true, false) || Suppress(false, true))
-            throw new InvalidOperationException("Only a region hit on an active overlay may hide the stock tooltip.");
+        bool Suppress(bool overlay, bool hit, bool nativeUiTooltip = false) => (bool)suppress.Invoke(null, [overlay, hit, nativeUiTooltip])!;
+        if (!Suppress(true, true) || Suppress(true, false) || Suppress(false, true) ||
+            Suppress(true, true, nativeUiTooltip: true))
+            throw new InvalidOperationException("Only a hit on an active NEI region without a native UI tooltip may hide the stock tooltip.");
 
         // Captured pointer state or native dragging must never be part of the decision:
         // a hit outside every drawn NEI rectangle keeps the vanilla tooltip unchanged.

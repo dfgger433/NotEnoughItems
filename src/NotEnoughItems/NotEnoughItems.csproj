@@ -18,6 +18,11 @@
   <ItemGroup>
     <Reference Include="$(BepInExDir)\core\BepInEx.dll;$(BepInExDir)\core\0Harmony.dll;$(CUCoreLibPath)" Private="false" />
     <Reference Include="$(ManagedDir)\Assembly-CSharp.dll;$(ManagedDir)\UnityEngine.dll;$(ManagedDir)\UnityEngine.CoreModule.dll;$(ManagedDir)\UnityEngine.ImageConversionModule.dll;$(ManagedDir)\UnityEngine.Physics2DModule.dll;$(ManagedDir)\UnityEngine.IMGUIModule.dll;$(ManagedDir)\UnityEngine.InputLegacyModule.dll;$(ManagedDir)\UnityEngine.TextRenderingModule.dll;$(ManagedDir)\UnityEngine.UIModule.dll;$(ManagedDir)\UnityEngine.UI.dll;$(ManagedDir)\Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="$(ManagedDir)\Newtonsoft.Json.dll" Private="false" />
+    <Content Include="../../Lang/en_us.json;../../Lang/zh_cn.json" Link="Lang/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="../../Lang/en_us.json" LogicalName="Lang/en_us.json" />
+    <Content Include="../../LICENSE;../../COPYING" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../docs/**/*" Link="docs/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="$(NeiAssetDir)**/*" Link="assets/notenoughitems/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- An exported or restored spritesheet can have an older timestamp than the stale loose copy. -->
     <Content Update="$(NeiAssetDir)textures/gui/sprites/toggle_and_radio.png" CopyToOutputDirectory="Always" />
@@ -35,7 +40,7 @@
     </ItemGroup>
   </Target>
   <Target Name="CheckGameReferences" BeforeTargets="ResolveAssemblyReferences">
-    <Error Condition="!Exists('$(ManagedDir)\Assembly-CSharp.dll')" Text="Casualties: Unknown assemblies not found. Set -p:GameRoot=..." />
+    <Error Condition="!Exists('$(ManagedDir)\Assembly-CSharp.dll') Or !Exists('$(ManagedDir)\Newtonsoft.Json.dll')" Text="Casualties: Unknown assemblies not found. Set -p:GameRoot=..." />
     <Error Condition="!Exists('$(CUCoreLibPath)')" Text="CUCoreLib.dll not found. Install CUCoreLib or set -p:CUCoreLibPath=..." />
     <Error Condition="!Exists('$(BepInExDir)\core\BepInEx.dll')" Text="BepInEx not found in GameRoot." />
   </Target>

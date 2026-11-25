@@ -1,5 +1,6 @@
 using System.Reflection;
 using NotEnoughItems;
+using UnityEngine;
 using Category = NotEnoughItems.RecipeCategory;
 using Row = NotEnoughItems.Recipe;
 
@@ -50,7 +51,7 @@ internal static class RecipeMethodsTests
             "Switching methods updates their name and rows even when there is only one recipe page.");
     }
 
-    internal static void DebugPreviewFillsTwoMethodPages()
+    internal static void DebugPreviewNavigatesOnePageAtATime()
     {
         var window = typeof(Catalog).Assembly.GetType("NotEnoughItems.NeiWindow", throwOnError: true)!;
         var toggle = window.GetField("_previewMethodTabs", BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -60,23 +61,69 @@ internal static class RecipeMethodsTests
         foreach (int width in new[] { 104, 140, 180, 228 })
         {
             var panel = new RecipePanelLayout(new UnityEngine.Rect(0, 0, width, 400));
-            int perPage = panel.TabsPerPage;
-            var methods = RecipeMethods.PreviewTabs(perPage, chinese: true);
-            var english = RecipeMethods.PreviewTabs(perPage, chinese: false);
-            Check(methods.Length == perPage * 2 && panel.TabPageCount(methods.Length) == 2 &&
+            int capacity = panel.TabsPerPage;
+            var methods = RecipeMethods.PreviewTabs(capacity, chinese: true);
+            var english = RecipeMethods.PreviewTabs(capacity, chinese: false);
+            int pageCount = panel.TabPageCount(methods.Length);
+            Check(methods.Length == capacity * 2 && pageCount == 2 &&
                 methods.All(method => method.Recipes.Count == 0 && method.MachineId.Length == 0),
-                "Fill both tab pages at this width without exposing fake recipe or machine actions.");
+                "Provide exactly two pages of preview tabs without exposing fake recipe or machine actions.");
             Check(methods.Select(method => method.TabLabel).Distinct().Count() == methods.Length &&
                 methods.Select(method => method.Id).SequenceEqual(english.Select(method => method.Id)) &&
                 methods[0].Name == "测试方式 01" && english[0].Name == "Test method 01",
                 "Every preview tab is distinguishable without changing the selection key when changing language.");
-            int next = RecipeMethods.Cycle(perPage - 1, 1, methods.Length);
-            int previous = RecipeMethods.Cycle(next, -1, methods.Length);
-            int last = RecipeMethods.Cycle(0, -1, methods.Length);
-            Check(next / perPage == 1 && previous / perPage == 0 && last == methods.Length - 1 &&
-                RecipeMethods.Cycle(last, 1, methods.Length) == 0 &&
-                RecipeMethods.SelectedIndex(methods, methods[next].Id) == next,
-                "Next/previous cross the page boundary in both directions, wrap and accept a clicked selection.");
+            Check(panel.TabPageStart(0) == 0 && panel.TabPageEnd(0, methods.Length) == capacity &&
+                panel.TabPageStart(1) == capacity && panel.TabPageEnd(1, methods.Length) == methods.Length &&
+                RecipeMethods.Cycle(0, 1, methods.Length) == 1 && RecipeMethods.Cycle(0, -1, methods.Length) == methods.Length - 1,
+                "Tab arrows change the visible page, while method arrows remain a distinct one-method selection.");
+            var pager = new RecipeMethodTabPager();
+            int selected = RecipeMethods.SelectedIndex(methods, id: null);
+            pager.Show(panel, methods, selected);
+            var (left, right) = panel.TabArrows(pager.Page, methods.Length);
+            var next = right.center;
+            var previous = left.center;
+            Check(!pager.TurnOnPress(panel, methods.Length, EventType.MouseDown, 1, next) &&
+                !pager.TurnOnPress(panel, methods.Length, EventType.MouseDown, 0, panel.NextMethod.center) &&
+                !pager.TurnOnPress(panel, methods.Length, EventType.MouseDown, 0, new Vector2(next.x, right.yMax)) &&
+                pager.Page == 0, "Right-click, the lower method arrow and the panel seam are not tab-page hits.");
+            Check(pager.TurnOnPress(panel, methods.Length, EventType.MouseDown, 0, next) && pager.Page == 1,
+                "Next must display the next page immediately, even when no MouseUp reaches the inspector.");
+            Check(!pager.TurnOnPress(panel, methods.Length, EventType.MouseUp, 0, next) &&
+                !pager.TurnOnPress(panel, methods.Length, EventType.Repaint, 0, next), "Release and repaint do not turn the page again.");
+            pager.Show(panel, methods, selected);
+            pager.Show(panel, english, selected); // A language change preserves the browsing position.
+            Check(pager.Page == 1 && panel.TabPageStart(pager.Page) == capacity && selected == 0,
+                "Next holds the second page across redraws without switching the current method.");
+            Check(pager.TurnOnPress(panel, methods.Length, EventType.MouseDown, 0, previous), "Previous accepts a left press.");
+            pager.Show(panel, methods, selected);
+            Check(pager.Page == 0, "Previous holds the first page on redraw.");
+            Check(pager.TurnOnPress(panel, methods.Length, EventType.MouseDown, 0, previous) && pager.Page == 1,
+                "Previous wraps from the first page to the last.");
+            Check(pager.TurnOnPress(panel, methods.Length, EventType.MouseDown, 0, next) && pager.Page == 0,
+                "Next wraps from the last page to the first.");
+            pager.TurnOnPress(panel, methods.Length, EventType.MouseDown, 0, next);
+            pager.Show(panel, methods, RecipeMethods.Cycle(selected, 1, methods.Length), reveal: true);
+            Check(pager.Page == 0, "Changing the method with the lower arrow reveals its tab.");
+            pager.Show(panel, methods, capacity);
+            Check(pager.Page == 1, "Selecting an off-page method reveals its page.");
+            pager.Show(panel, [methods[0]], 0);
+            Check(pager.Page == 0 && panel.TabPageCount(1) == 1, "A shrinking result set cannot leave an empty page visible.");
+            Check(!pager.TurnOnPress(panel, methodCount: 1, EventType.MouseDown, 0, next) && pager.Page == 0,
+                "A single page cannot turn or consume the press.");
+            pager.Show(panel, [], 0);
+            Check(pager.Page == 0, "An empty lookup resets tab paging.");
+
+            var partialThirdPage = methods.Append(new RecipeMethod("third", "Third page", [], string.Empty, null)).ToArray();
+            pager.Show(panel, partialThirdPage, selected);
+            Check(pager.TurnOnPress(panel, partialThirdPage.Length, EventType.MouseDown, 0, previous) && pager.Page == 2 &&
+                panel.TabPageEnd(pager.Page, partialThirdPage.Length) - panel.TabPageStart(pager.Page) == 1,
+                "Previous from the first page wraps backward to a partial third page, not forward to the second.");
+            var (_, partialNext) = panel.TabArrows(pager.Page, partialThirdPage.Length);
+            Check(!pager.TurnOnPress(panel, partialThirdPage.Length, EventType.MouseDown, 0, next) &&
+                !pager.TurnOnPress(panel, partialThirdPage.Length, EventType.MouseDown, 0, panel.Tab(0).center) && pager.Page == 2,
+                "The old full-page button position and the adjacent tab are not hits on a partial page.");
+            Check(pager.TurnOnPress(panel, partialThirdPage.Length, EventType.MouseDown, 0, partialNext.center) && pager.Page == 0,
+                "The relocated next button beside the last visible tab wraps to the first page.");
         }
     }
 
