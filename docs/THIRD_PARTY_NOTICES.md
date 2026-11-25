@@ -28,7 +28,7 @@
 
 ### GTNewHorizons NotEnoughItems（GTNH NEI）
 
-感谢 [GTNH NEI 项目及贡献者](https://github.com/GTNewHorizons/NotEnoughItems)，其书签交互、方法行为及图集坐标是实现时的参考。项目随附 [NEI 行为说明](<../README.md#L19>) 和 [界面素材来源记录](<modernity-ui/SOURCES.md>) 记有具体参考位置。源码 [BookmarkPull.cs](<../src/NotEnoughItems/UI/Screens/BookmarkPull.cs#L21>) 还注明相关操作“Mirrors GTNH NEI 2.8.171-GTNH”；发布前需逐段区分算法/行为参考与对受版权保护实现表达的翻译或移植，当前尚不能断言不存在实质性复用。
+感谢 [GTNH NEI 项目及贡献者](https://github.com/GTNewHorizons/NotEnoughItems)，其书签交互、方法行为及图集坐标是实现时的参考。项目随附 [NEI 行为说明](<../README.md>) 和 [界面素材来源记录](<modernity-ui/SOURCES.md>) 记有具体参考位置。源码 [BookmarkPull.cs](<../src/NotEnoughItems/UI/Screens/BookmarkPull.cs#L21>) 还注明相关操作“Mirrors GTNH NEI 2.8.171-GTNH”；发布前需逐段区分算法/行为参考与对受版权保护实现表达的翻译或移植，当前尚不能断言不存在实质性复用。
 
 GTNH NEI 固定提交 [`6b7e465306810ad11d2413214077237798be13a7`](https://github.com/GTNewHorizons/NotEnoughItems/tree/6b7e465306810ad11d2413214077237798be13a7) 的[许可声明](https://github.com/GTNewHorizons/NotEnoughItems/blob/6b7e465306810ad11d2413214077237798be13a7/README.md#L85-L93)注明 GTNH 修改部分采用 **LGPL-3.0-or-later**，版权归 **© 2019–2024 mitchej123 与 GTNH Team**。本项目采用的 LGPL 文本原样取自该提交的[许可证文件](https://github.com/GTNewHorizons/NotEnoughItems/blob/6b7e465306810ad11d2413214077237798be13a7/LICENSE.txt)。上游另注明部分内容参考、借用或回移自 JEI，JEI 原始代码采用 MIT、© 2014–2015 mezz。本项目采用相同的 LGPL 不代表已完成第三方代码来源审查；如果确认复用了受保护的代码，应保留受影响部分的原有版权与许可通知，并履行相应分发义务。
 

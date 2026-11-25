@@ -2,19 +2,27 @@
 
 NEI 的本地 BepInEx 移植版。书签与物品目录在原版背包和 Unknown Inventory Terminal 中显示；打开原版制作菜单时只保留左侧书签。打开原版容器、交易、物品自定义、液体转移或医疗面板时隐藏。原版背包和终端的右侧物品目录默认都开启，可在 NEI 扳手设置的「显示」页分别关闭；升级时保留已保存的开关。背包和终端共用以 2560×1440 为基准的默认布局：横纵坐标分别随窗口宽高换算；扳手 → 布局可开启「拖动面板调整布局」，拖动各栏标题移动整栏，拖动边缘把手调整宽度，完成后点「完成」；宽度、位置、上下偏移和物品图标大小都会保存。背包侧栏默认透明，配方查询使用有底色的独立面板。爱心、书签、扳手、配方页签等使用 [interface_states.png](<assets/notenoughitems/textures/gui/sprites/interface_states.png>) 的对应切片。
 
+## 安装
+
+游戏需为 Mono 版，并已安装 BepInEx 5 和 CUCoreLib 1.1+。Unknown Inventory Terminal 0.4.4+ 为可选依赖，ZIP 不包含这些依赖。
+
+1. 退出游戏，打开 `NotEnoughItems-<版本>.zip`。包内顶层只有一个 `NotEnoughItems` 文件夹。
+2. 将整个 `NotEnoughItems` 文件夹拖入游戏目录的 `BepInEx/plugins/`。安装好的 DLL 应位于 `BepInEx/plugins/NotEnoughItems/NotEnoughItems.dll`；不用自己建目录，也不要拖入已有的 `NotEnoughItems` 文件夹内。
+3. 升级时先备份配置、自定义语言和材质包。若手动合并目录，注意不要覆盖想保留的语言文件，也不要在 `plugins/` 的其他位置保留旧版 DLL。
+
 ## 编译与部署
 
-需要 PowerShell 7、.NET SDK 8 或更高、Mono 版游戏、BepInEx 5 和 CUCoreLib 1.1+。Unknown Inventory Terminal 0.4.4+ 为可选依赖。
+源码构建另需 PowerShell 7 和 .NET SDK 8 或更高。
 
 ```powershell
-# 编译并运行回归测试
+# 编译、运行回归测试，并生成拖入 plugins 即可安装的目录和 ZIP
 pwsh -File ./scripts/Build.ps1
 
-# 退出游戏后，将 dist 中的插件和资源安装到游戏目录
+# 退出游戏后，安装 dist/NotEnoughItems（已有语言文件不覆盖）
 pwsh -File ./scripts/Install.ps1
 ```
 
-[Build.ps1](<scripts/Build.ps1>) 和 [Install.ps1](<scripts/Install.ps1>) 默认使用项目目录上三级作为游戏根；也可将游戏目录作为唯一参数传入。构建产物位于 `dist/`，安装目录为游戏根下的 `BepInEx/plugins/NotEnoughItems/`。安装前需关闭游戏。
+[Build.ps1](<scripts/Build.ps1>) 和 [Install.ps1](<scripts/Install.ps1>) 默认使用项目目录上两级作为游戏根；也可通过 `-GameRoot` 指定。构建生成 `dist/NotEnoughItems/` 和 `dist/NotEnoughItems-<版本>.zip`。未压缩的 `NotEnoughItems` 文件夹也可直接拖入 `BepInEx/plugins/`。
 
 书签分组的交互以项目随附的 [GTNH 中文维基](https://gtnh.huijiwiki.com/wiki/Not_Enough_Items#分组与合成链) 和 [GTNH NEI 2.9.0 的书签面板](https://github.com/GTNewHorizons/NotEnoughItems/blob/8e1541eab1935a2a261afcabaeb822089a94d86b/src/main/java/codechicken/nei/BookmarkPanel.java) 为参照。书签仍使用本插件的 BepInEx 配置；不直接导入 Minecraft 的物品 ID 或 NBT。
 
