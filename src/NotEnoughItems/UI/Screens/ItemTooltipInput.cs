@@ -103,7 +103,7 @@ internal sealed partial class NeiWindow
         // Nested previews follow the current mouse position and are not pushed
         // outside their paint-only parent frame.
         Vector2 anchor = pointer;
-        var (box, idRow, modRow) = NeiSkin.ItemTooltip(anchor, new Vector2(_width, _height), content, RecipeNavigationBounds,
+        var (box, idRow, modRow) = NeiSkin.ItemTooltip(anchor, new Vector2(_width, _height), content,
             copyIdEnabled: copyEnabled && _showTooltipId.Value, copyModEnabled: copyEnabled);
         if (parentPopup == null && box.width > 0f) _drawnItemTip = (content, anchor, source, box, idRow, modRow);
     }

@@ -177,10 +177,6 @@ internal sealed partial class NeiWindow
         bool pinned = _pinnedItems != null;
         Rect box = pinned ? TooltipPlacement.AtSlot(items.Source, size, viewport) : TooltipPlacement.AtPointer(pointer, size, viewport);
         bool chainPreview = items.Origin == CandidateSource.Chain;
-        // A chain candidate list is the second-level hover menu: keep it under the
-        // pointer instead of pushing it outside the first-level chain frame. It is
-        // paint-only, so the parent remains the input owner.
-        box = TooltipPlacement.Avoid(box, viewport, RecipeNavigationBounds);
         if (chainPreview) _queuedItemTip = null; // Replaces the chain slot's plain fallback.
         var tray = new Rect(box.x + pad, box.y + header, box.width - 2 * pad, (page.End - page.Start) * cell + 4);
         var grid = new Rect(tray.x + 2, tray.y + 2, columns * cell, tray.height - 4);

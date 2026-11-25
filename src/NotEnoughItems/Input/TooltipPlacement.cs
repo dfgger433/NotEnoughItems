@@ -1,12 +1,12 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace NotEnoughItems;
 
 internal static class TooltipPlacement
 {
-    // All values, including the viewport, are already in top-left logical GUI units.
+    // Only the viewport can displace a hover preview from its normal pointer offset.
+    // All values are in top-left logical GUI units.
     internal static Rect AtPointer(Vector2 pointer, Vector2 size, Rect viewport)
     {
         float width = Math.Min(size.x, viewport.width);
@@ -17,14 +17,6 @@ internal static class TooltipPlacement
         if (y + height > viewport.yMax) y = pointer.y - height - 8f;
         return new Rect(Mathf.Clamp(x, viewport.xMin, viewport.xMax - width),
             Mathf.Clamp(y, viewport.yMin, viewport.yMax - height), width, height);
-    }
-
-    // Leave normal placement alone unless the popup covers controls or its parent.
-    internal static Rect Avoid(Rect tooltip, Rect viewport, Rect protectedControls, Rect? parentPopup = null)
-    {
-        bool coversControls = protectedControls.width > 0 && protectedControls.height > 0 && tooltip.Overlaps(protectedControls);
-        if (parentPopup is not { } parent) return coversControls ? Place(tooltip, viewport, new[] { protectedControls }) : tooltip;
-        return coversControls || tooltip.Overlaps(parent) ? Place(tooltip, viewport, new[] { protectedControls, parent }) : tooltip;
     }
 
     // Only Shift can hold the tooltip across the gap between its source and its box.
@@ -84,42 +76,5 @@ internal static class TooltipPlacement
         int row = (int)((pointer.y - grid.yMin) / cell);
         int index = start + row * columns + column;
         return index < end ? index : -1;
-    }
-
-    // Use top-left screen pixels, including the space occupied by the vanilla/terminal UI.
-    internal static Rect Place(Rect tooltip, Rect screen, IReadOnlyList<Rect> obstacles)
-    {
-        float maxX = Math.Max(screen.xMin, screen.xMax - tooltip.width);
-        float maxY = Math.Max(screen.yMin, screen.yMax - tooltip.height);
-        float x = Mathf.Clamp(tooltip.xMin, screen.xMin, maxX);
-        float y = Mathf.Clamp(tooltip.yMin, screen.yMin, maxY);
-        var xs = new List<float> { x, screen.xMin, maxX };
-        var ys = new List<float> { y, screen.yMin, maxY };
-        foreach (var rect in obstacles)
-        {
-            xs.Add(Mathf.Clamp(rect.xMin - tooltip.width - 4, screen.xMin, maxX));
-            xs.Add(Mathf.Clamp(rect.xMax + 4, screen.xMin, maxX));
-            ys.Add(Mathf.Clamp(rect.yMin - tooltip.height - 4, screen.yMin, maxY));
-            ys.Add(Mathf.Clamp(rect.yMax + 4, screen.yMin, maxY));
-        }
-        var best = new Rect(x, y, tooltip.width, tooltip.height);
-        float bestOverlap = float.PositiveInfinity, bestDistance = float.PositiveInfinity;
-        foreach (float left in xs)
-        foreach (float top in ys)
-        {
-            var test = new Rect(left, top, tooltip.width, tooltip.height);
-            float overlap = 0;
-            foreach (var rect in obstacles)
-                overlap += Math.Max(0, Math.Min(test.xMax, rect.xMax) - Math.Max(test.xMin, rect.xMin)) *
-                    Math.Max(0, Math.Min(test.yMax, rect.yMax) - Math.Max(test.yMin, rect.yMin));
-            float distance = (left - x) * (left - x) + (top - y) * (top - y);
-            if (overlap < bestOverlap || overlap == bestOverlap && distance < bestDistance)
-            {
-                best = test;
-                bestOverlap = overlap;
-                bestDistance = distance;
-            }
-        }
-        return best;
     }
 }

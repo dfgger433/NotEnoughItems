@@ -576,7 +576,7 @@ internal sealed partial class NeiWindow
                     // Hidden popups must not intercept clicks while the shortcut help is displayed.
                     _chainTipBox = _supportedItemsBox = default;
                     _chainTipItems.Clear();
-                    NeiSkin.Tooltip(e.mousePosition, guiSize, help.Title, help.Rows, boxed: true, protectedControls: RecipeNavigationBounds);
+                    NeiSkin.Tooltip(e.mousePosition, guiSize, help.Title, help.Rows, boxed: true);
                 }
                 else
                 {
@@ -585,9 +585,9 @@ internal sealed partial class NeiWindow
                     {
                         if (_itemTip is { } itemTip) QueueItemTip(e.mousePosition, _itemTipSource, itemTip);
                         else if (_drawnItemTip == null && _tipTitle != null)
-                            NeiSkin.Tooltip(e.mousePosition, guiSize, _tipTitle, _tipBody, boxed: _boxedTip, protectedControls: RecipeNavigationBounds);
+                            NeiSkin.Tooltip(e.mousePosition, guiSize, _tipTitle, _tipBody, boxed: _boxedTip);
                         else if (_drawnItemTip == null && Hit(screenMouse) && !string.IsNullOrEmpty(GUI.tooltip))
-                            NeiSkin.Tooltip(e.mousePosition, guiSize, GUI.tooltip, boxed: true, protectedControls: RecipeNavigationBounds);
+                            NeiSkin.Tooltip(e.mousePosition, guiSize, GUI.tooltip, boxed: true);
                     }
                 }
                 DrawQueuedItemTip();

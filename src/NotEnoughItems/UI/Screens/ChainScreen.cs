@@ -469,7 +469,6 @@ internal sealed partial class NeiWindow
         bool pinned = _pinnedChainTip != null;
         var size = new Vector2(width, height);
         var box = pinned ? TooltipPlacement.AtSlot(_chainTipSource, size, viewport) : TooltipPlacement.AtPointer(mouse, size, viewport);
-        box = TooltipPlacement.Avoid(box, viewport, RecipeNavigationBounds);
         _chainTipDrawnSource = _chainTipSource;
         _chainTipBox = pinned ? box : default;
         _chainTipItems.Clear();

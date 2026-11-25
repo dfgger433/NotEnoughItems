@@ -69,7 +69,7 @@ internal readonly struct RecipePanelLayout
     internal int TabPageStart(int page) => page * TabsPerPage;
     internal int TabPageEnd(int page, int methodCount) => Math.Min(TabPageStart(page) + TabsPerPage, methodCount);
 
-    // Include the icon tabs and both navigation rows in tooltip avoidance and input ownership.
+    // Include the icon tabs and both navigation rows in input hit testing.
     internal Rect NavigationBounds => Rect.MinMaxRect(Bounds.xMin, Bounds.yMin, Bounds.xMax, Pages.yMax + 1);
 
     // Both edge lanes have the same width: the machine and the possible scrollbar
