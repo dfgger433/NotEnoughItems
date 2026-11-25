@@ -22,6 +22,7 @@
 - 顶部横幅 Banner：[nexus_assets/nexus_header_1300x372.png](<nexus_assets/nexus_header_1300x372.png>) (1300×372)
 - 详细展示图 Showcase：[nexus_assets/nexus_showcase_1920x1080.png](<nexus_assets/nexus_showcase_1920x1080.png>) (1920×1080)
 - 视觉设计说明：[nexus_visual_philosophy.md](<nexus_visual_philosophy.md>)
+- 素材来源与许可约束：[NEXUS_ASSET_CREDITS.md](<NEXUS_ASSET_CREDITS.md>)（含 CC BY-NC-SA 署名、非商业、相同方式共享与混合图集说明）
 
 ---
 
