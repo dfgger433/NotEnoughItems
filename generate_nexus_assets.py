@@ -98,6 +98,18 @@ def grid(draw, size, step, inset=0, alpha=22):
         draw.line((inset, y, w - inset, y), fill=line, width=1)
 
 
+def mask_atlas_placeholder(image: Image.Image) -> Image.Image:
+    """Make the atlas' two documented placeholder colors transparent for display."""
+    masked = image.copy().convert("RGBA")
+    pixels = masked.load()
+    for y in range(masked.height):
+        for x in range(masked.width):
+            r, g, b, a = pixels[x, y]
+            if (r, g, b) in {(255, 0, 170), (255, 190, 170)}:
+                pixels[x, y] = (r, g, b, 0)
+    return masked
+
+
 def crop_frame(image: Image.Image, box: tuple[int, int, int, int], size: tuple[int, int], tint=None) -> Image.Image:
     """Scale a source crop into a framed, readable evidence card."""
     crop = image.crop(box).resize(size, Image.Resampling.NEAREST)
@@ -115,15 +127,26 @@ def ui_artwork(size=(896, 640)) -> Image.Image:
     art = Image.new("RGBA", size, (8, 15, 23, 255))
     panels = asset("panels", "inventory.png")
     recipe = asset("panels", "recipe_background.png")
-    states = asset("sprites", "interface_states.png")
+    states = mask_atlas_placeholder(asset("sprites", "interface_states.png"))
     buttons = asset("sprites", "button_backgrounds.png")
     search = asset("sprites", "search_and_tooltip.png")
     toggle = asset("sprites", "toggle_and_radio.png")
     potion = asset("panels", "potion_editor.png")
+    recipe_slot = asset("panels", "recipe_slot.png")
+    catalyst = asset("panels", "catalyst_tab.png")
+    repair = asset("panels", "repair_recipe.png")
 
     # Source texture crops arranged as a quiet, functional specimen wall.
     art.alpha_composite(crop_frame(panels, (0, 0, 199, 204), (250, 254)), (24, 22))
-    art.alpha_composite(crop_frame(recipe, (0, 0, 184, 174), (300, 283)), (292, 22))
+    recipe_card = crop_frame(recipe, (0, 0, 184, 174), (300, 283))
+    # Populate the otherwise open recipe field with existing slot/tab/repair
+    # textures. Every visible mark here comes from a tracked source PNG.
+    recipe_card.alpha_composite(catalyst.resize((48, 48), Image.Resampling.NEAREST), (22, 28))
+    for x in (82, 132, 182):
+        recipe_card.alpha_composite(recipe_slot.resize((42, 42), Image.Resampling.NEAREST), (x, 132))
+    recipe_card.alpha_composite(recipe_slot.resize((42, 42), Image.Resampling.NEAREST), (238, 132))
+    recipe_card.alpha_composite(repair.resize((168, 36), Image.Resampling.NEAREST), (64, 216))
+    art.alpha_composite(recipe_card, (292, 22))
     art.alpha_composite(crop_frame(potion, (0, 0, 176, 207), (238, 280)), (616, 22))
     art.alpha_composite(crop_frame(states, (0, 0, 256, 160), (292, 182), tint=(13, 35, 48)), (44, 324))
     art.alpha_composite(crop_frame(buttons, (0, 0, 200, 146), (250, 182), tint=(13, 35, 48)), (352, 324))
@@ -227,6 +250,8 @@ def draw_showcase():
     ]
     for label, path, box, pos, wh, color in source_rows:
         src = asset(*path.split("/"))
+        if path == "sprites/interface_states.png":
+            src = mask_atlas_placeholder(src)
         thumb = src.crop(box).resize(wh, Image.Resampling.NEAREST)
         frame = Image.new("RGBA", (wh[0] + 8, wh[1] + 32), (8, 15, 23, 220))
         frame.alpha_composite(thumb, (4, 22))

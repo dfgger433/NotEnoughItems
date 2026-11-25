@@ -19,9 +19,9 @@
 ## 配套发布资源 / Associated Assets
 
 模组根目录中已生成专用的高品质视觉宣传图集，可直接上传至 Nexus 页面媒体库：
-- 顶部横幅 Banner：[nexus_assets/nexus_header_1300x372.png](<nexus_assets/nexus_header_1300x372.png>) (1300×372)
-- 详细展示图 Showcase：[nexus_assets/nexus_showcase_1920x1080.png](<nexus_assets/nexus_showcase_1920x1080.png>) (1920×1080)
-- 视觉设计说明：[nexus_visual_philosophy.md](<nexus_visual_philosophy.md>)
+- 顶部横幅 Banner：[nexus_header_1300x372.png](<../../../nexus_assets/nexus_header_1300x372.png>) (1300×372)
+- 详细展示图 Showcase：[nexus_showcase_1920x1080.png](<../../../nexus_assets/nexus_showcase_1920x1080.png>) (1920×1080)
+- 视觉设计说明：[nexus_visual_philosophy.md](<../../../nexus_visual_philosophy.md>)
 - 素材来源与许可约束：[NEXUS_ASSET_CREDITS.md](<NEXUS_ASSET_CREDITS.md>)（含 CC BY-NC-SA 署名、非商业、相同方式共享与混合图集说明）
 
 ---
@@ -38,5 +38,5 @@
    - 上传由构建脚本 `pwsh -File ./scripts/Build.ps1` 生成的 `dist/NotEnoughItems-0.1.32.zip`。
    - 将 [CHANGELOG_NEXUS.md](<docs/release/nexus/CHANGELOG_NEXUS.md>) 对应版本的说明粘贴至文件的 Changelog 输入框中。
 4. **上传宣传图片 (Media / Images)**：
-   - 上传 `nexus_assets/nexus_header_1300x372.png` 并设置为 Header Image。
-   - 上传 `nexus_assets/nexus_showcase_1920x1080.png` 作为首选展示图。
+   - 上传 根目录 [`nexus_assets/nexus_header_1300x372.png`](<../../../nexus_assets/nexus_header_1300x372.png>) 并设置为 Header Image。
+   - 上传 根目录 [`nexus_assets/nexus_showcase_1920x1080.png`](<../../../nexus_assets/nexus_showcase_1920x1080.png>) 作为首选展示图。
