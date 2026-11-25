@@ -13,14 +13,14 @@
     <ManagedDir>$(GameRoot)\CasualtiesUnknown_Data\Managed</ManagedDir>
     <BepInExDir>$(GameRoot)\BepInEx</BepInExDir>
     <CUCoreLibPath Condition="'$(CUCoreLibPath)' == ''">$(BepInExDir)\plugins\CUCoreLib.dll</CUCoreLibPath>
-    <NeiAssetDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'Assets', 'NotEnoughItems'))</NeiAssetDir>
+    <NeiAssetDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'assets', 'notenoughitems'))</NeiAssetDir>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="$(BepInExDir)\core\BepInEx.dll;$(BepInExDir)\core\0Harmony.dll;$(CUCoreLibPath)" Private="false" />
     <Reference Include="$(ManagedDir)\Assembly-CSharp.dll;$(ManagedDir)\UnityEngine.dll;$(ManagedDir)\UnityEngine.CoreModule.dll;$(ManagedDir)\UnityEngine.ImageConversionModule.dll;$(ManagedDir)\UnityEngine.Physics2DModule.dll;$(ManagedDir)\UnityEngine.IMGUIModule.dll;$(ManagedDir)\UnityEngine.InputLegacyModule.dll;$(ManagedDir)\UnityEngine.TextRenderingModule.dll;$(ManagedDir)\UnityEngine.UIModule.dll;$(ManagedDir)\UnityEngine.UI.dll;$(ManagedDir)\Unity.TextMeshPro.dll" Private="false" />
     <Content Include="$(NeiAssetDir)**/*" Link="assets/notenoughitems/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- An exported or restored spritesheet can have an older timestamp than the stale loose copy. -->
-    <Content Update="$(NeiAssetDir)textures/gui/sprites/checkbox.png" CopyToOutputDirectory="Always" />
+    <Content Update="$(NeiAssetDir)textures/gui/sprites/toggle_and_radio.png" CopyToOutputDirectory="Always" />
     <EmbeddedResource Include="$(NeiAssetDir)**/*.png"
       LogicalName="assets/notenoughitems/$([System.String]::Copy('%(RecursiveDir)').Replace('\', '/'))%(Filename)%(Extension)" />
   </ItemGroup>
