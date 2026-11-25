@@ -52,7 +52,6 @@ internal sealed partial class NeiWindow
     private string? _tipTitle, _tipBody, _status;
     private NativeTooltip.Content? _itemTip;
     private Rect _itemTipSource;
-    private bool _boxedTip;
     private float _statusUntil;
     private RecipePanelLayout _recipePanel;
     private Rect ActiveInspectorBounds => _options ? _optionsBounds : !_treeOpen && _open ? _recipePanel.Bounds : _inspector;
@@ -521,7 +520,6 @@ internal sealed partial class NeiWindow
         _tipTitle = _tipBody = null;
         _itemTip = null;
         _itemTipSource = default;
-        _boxedTip = false;
         _supportedItemsHover = null;
         _bookmarkTip = null;
         _bookmarkHelp = null;
@@ -576,7 +574,7 @@ internal sealed partial class NeiWindow
                     // Hidden popups must not intercept clicks while the shortcut help is displayed.
                     _chainTipBox = _supportedItemsBox = default;
                     _chainTipItems.Clear();
-                    NeiSkin.Tooltip(e.mousePosition, guiSize, help.Title, help.Rows, boxed: true);
+                    NeiSkin.Tooltip(e.mousePosition, guiSize, help.Title, help.Rows);
                 }
                 else
                 {
@@ -585,9 +583,9 @@ internal sealed partial class NeiWindow
                     {
                         if (_itemTip is { } itemTip) QueueItemTip(e.mousePosition, _itemTipSource, itemTip);
                         else if (_drawnItemTip == null && _tipTitle != null)
-                            NeiSkin.Tooltip(e.mousePosition, guiSize, _tipTitle, _tipBody, boxed: _boxedTip);
+                            NeiSkin.Tooltip(e.mousePosition, guiSize, _tipTitle, _tipBody);
                         else if (_drawnItemTip == null && Hit(screenMouse) && !string.IsNullOrEmpty(GUI.tooltip))
-                            NeiSkin.Tooltip(e.mousePosition, guiSize, GUI.tooltip, boxed: true);
+                            NeiSkin.Tooltip(e.mousePosition, guiSize, GUI.tooltip);
                     }
                 }
                 DrawQueuedItemTip();
@@ -598,12 +596,11 @@ internal sealed partial class NeiWindow
         finally { GUI.matrix = savedMatrix; }
     }
 
-    private void Tip(string title, string? text, bool boxed = false)
+    private void Tip(string title, string? text = null)
     {
         _itemTip = null;
         _tipTitle = title;
         _tipBody = text;
-        _boxedTip = boxed;
     }
     private void Status(string text) { _status = text; _statusUntil = Time.unscaledTime + 3.5f; }
     private static int Wrap(int value, int count) => (value % count + count) % count;

@@ -223,8 +223,8 @@ internal sealed partial class NeiWindow
     private void ShowArrowTip(Rect left, Rect right, string previousTip, string nextTip)
     {
         var pointer = Event.current.mousePosition;
-        if (left.Contains(pointer)) Tip(previousTip, null, boxed: true);
-        else if (right.Contains(pointer)) Tip(nextTip, null, boxed: true);
+        if (left.Contains(pointer)) Tip(previousTip);
+        else if (right.Contains(pointer)) Tip(nextTip);
     }
 
     private void DrawMethodPreview(RecipePanelLayout panel)

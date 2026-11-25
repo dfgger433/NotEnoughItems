@@ -296,7 +296,7 @@ internal sealed partial class NeiWindow
         string title = chain ? L("chain.group_title") : L("bookmark.group.title");
         if (ShowBookmarkHelp(title, page: false, hasEntries: true, chain)) return;
         if (chain) BookmarkChainTip(title, new[] { group }, details, source);
-        else Tip(title, BookmarkHelpPrompt, boxed: true);
+        else Tip(title, BookmarkHelpPrompt);
     }
 
     private bool ShowBookmarkHelp(string title, bool page, bool hasEntries, bool chain)
@@ -336,7 +336,7 @@ internal sealed partial class NeiWindow
         _chainTipSource = source;
         if (tip.Blocks.Count == 0)
         {
-            Tip(tip.Title, WithBookmarkHelpPrompt(tip.Hint), boxed: true);
+            Tip(tip.Title, WithBookmarkHelpPrompt(tip.Hint));
             return;
         }
         _bookmarkTip = tip;
@@ -454,7 +454,7 @@ internal sealed partial class NeiWindow
         if (viewport.width < slot + 2 * pad || viewport.height < rowsTop + heading + slot + pad)
         {
             ClearChainTip();
-            Tip(tip.Title, WithBookmarkHelpPrompt(tip.Hint), boxed: true);
+            Tip(tip.Title, WithBookmarkHelpPrompt(tip.Hint));
             return false;
         }
         int columns = Math.Min(11, (int)((viewport.width - 2 * pad) / slot));

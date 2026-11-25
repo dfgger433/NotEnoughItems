@@ -644,15 +644,15 @@ internal static class NeiSkin
     {
         var title = FormatItemText(content.Name);
         var body = FormatItemBody(content);
-        return Tooltip(anchor, guiSize, title.Rich, body.Rich, boxed: true, title.Shadow, body.Shadow, content,
+        return DrawTooltip(anchor, guiSize, title.Rich, body.Rich, title.Shadow, body.Shadow, content,
             copyIdEnabled, copyModEnabled);
     }
 
-    /// <summary>Draws a non-interactive tooltip; call last, outside any clipping groups.</summary>
-    internal static void Tooltip(Vector2 mousePosition, Vector2 guiSize, string text, string? subtitle = null, bool boxed = false) =>
-        Tooltip(mousePosition, guiSize, text, subtitle, boxed, null, null, null);
+    /// <summary>Draws a non-interactive tooltip with a background; call outside any clipping groups.</summary>
+    internal static void Tooltip(Vector2 mousePosition, Vector2 guiSize, string text, string? subtitle = null) =>
+        DrawTooltip(mousePosition, guiSize, text, subtitle, null, null, null);
 
-    private static (Rect Box, Rect IdRow, Rect ModRow) Tooltip(Vector2 mousePosition, Vector2 guiSize, string text, string? subtitle, bool boxed,
+    private static (Rect Box, Rect IdRow, Rect ModRow) DrawTooltip(Vector2 mousePosition, Vector2 guiSize, string text, string? subtitle,
         string? titleShadow, string? bodyShadow, NativeTooltip.Content? item, bool copyIdEnabled = false, bool copyModEnabled = false)
     {
         if (Event.current.type != EventType.Repaint || string.IsNullOrEmpty(text))
@@ -690,7 +690,7 @@ internal static class NeiSkin
         const float footerGap = 6f;
         float footerSpace = footerHeight > 0f ? footerHeight + footerGap : 0f;
         var box = TooltipPlacement.AtPointer(mousePosition, new Vector2(width, titleHeight + detailHeight + 2 * pad + footerSpace), viewport);
-        if (boxed) TooltipBox(box);
+        TooltipBox(box);
 
         float titleY = box.y + pad;
         float textBottom = box.yMax - pad - footerSpace;

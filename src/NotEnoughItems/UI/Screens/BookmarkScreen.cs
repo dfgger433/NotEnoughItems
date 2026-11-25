@@ -474,7 +474,7 @@ internal sealed partial class NeiWindow
         if (hasEntries && e.control && PageChainEnabled()) BookmarkPageChainTip(SelectionShiftHeld, middle);
         else if (hasEntries && chain)
             BookmarkChainTip(L("bookmark.ungrouped"), new[] { "" }, SelectionShiftHeld, middle);
-        else Tip(title, BookmarkHelpPrompt, boxed: true);
+        else Tip(title, BookmarkHelpPrompt);
     }
 
     private bool AdjustBookmarkGroup(string group, int delta)

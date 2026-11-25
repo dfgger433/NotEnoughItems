@@ -48,6 +48,16 @@ internal static class GuiArtworkTests
             "Selected and candidate bodies still use their own artwork.");
     }
 
+    internal static void TooltipBackground()
+    {
+        var frame = ModernityFrames.Find("tooltip_background")!.Value;
+        var pixel = ReadRgba(frame.ResourcePath);
+        for (int y = frame.Y; y < frame.Y + frame.Height; y++)
+            for (int x = frame.X; x < frame.X + frame.Width; x++)
+                Check((pixel(x, y) & 0xFFu) == 0xFFu,
+                    "The bundled tooltip backplate must hide the underlying panel across its entire frame.");
+    }
+
     // Read these noninterlaced 8-bit RGBA or indexed PNGs without native Unity calls.
     private static Func<int, int, uint> ReadRgba(string path)
     {
