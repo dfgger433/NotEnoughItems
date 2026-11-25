@@ -1,5 +1,6 @@
 **/bin/
 **/obj/
+/.agents/worktrees/
 /dist/
 TestResults/
 .vs/
