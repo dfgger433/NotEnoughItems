@@ -24,7 +24,7 @@
 
 ### 混合及来源待确认的贴图
 
-[interface_states.png](<../assets/notenoughitems/textures/gui/sprites/interface_states.png>) 同时使用 Modernity 与 AE2 图案，也有本地修改。分别标示来源和许可不等于为整张混合图集解决了授权；公开前应逐区域核实来源及适用条款，或拆分、替换相关素材。两个垂直按钮控件[原图](<../assets/notenoughitems/textures/gui/controls/vertical_buttons_background.png>)与[变体](<../assets/notenoughitems/textures/gui/controls/vertical_buttons_background_variant.png>)的来源和授权尚未确认；核实或替换前，不应发布包含它们的包。
+[interface_states.png](<../assets/notenoughitems/textures/gui/sprites/interface_states.png>) 同时使用 Modernity 与 AE2 图案，也有本地修改。分别标示来源和许可不等于为整张混合图集解决了授权；公开前应逐区域核实来源及适用条款，或拆分、替换相关素材。两张垂直按钮控件样图 `vertical_buttons_background.png` 和 `vertical_buttons_background_variant.png` 的来源和授权尚未确认，仅留作源码工作区参考，不复制到构建输出，也不内嵌到 DLL。核实或替换前，不应发布包含它们的包。
 
 ### GTNewHorizons NotEnoughItems（GTNH NEI）
 

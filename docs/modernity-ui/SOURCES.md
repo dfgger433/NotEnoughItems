@@ -5,7 +5,7 @@
 - 归属：**Modernity-GTNH-UI 项目及其贡献者**（见[项目贡献者](https://github.com/ModernityGTNH/Modernity-GTNH-UI/graphs/contributors)）。下方清单记录过往使用的 PNG 原件，来自 [ModernityGTNH/Modernity-GTNH-UI 的 `29x` 分支](https://github.com/ModernityGTNH/Modernity-GTNH-UI/tree/29x)在提交 [`10b9e676c2cb45ac5cee2c1df3285bf085ad53f6`](https://github.com/ModernityGTNH/Modernity-GTNH-UI/tree/10b9e676c2cb45ac5cee2c1df3285bf085ad53f6)的原件。保留下来的上游原件只调整目录和文件名，没有裁剪、重绘、调色、压缩或转换；逐文件比对上游 Git blob ID。
 - 已检查本地 Modernity-GTNH 主包 `29x`（`213c5c10734673fc9a9d072dbc349eb7032d18fc`），没有 `assets/nei`。其 [README 的 UI resourcepacks 一节](https://github.com/ModernityGTNH/Modernity-GTNH/blob/213c5c10734673fc9a9d072dbc349eb7032d18fc/README.md#ui-resourcepacks)链接上述独立 UI。检查了本地已知候选目录，未发现独立 UI 包，因此从官方同分支取得原件。不是从 Dark UI 或 NEI 的默认美术提取。
 - 已随附该提交发行的[原始许可证全文](LICENSE.txt)（[上游同文件](https://github.com/ModernityGTNH/Modernity-GTNH-UI/blob/10b9e676c2cb45ac5cee2c1df3285bf085ad53f6/LICENSE.txt)），明示 **[CC BY-NC-SA 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/)**。[同提交 README](https://github.com/ModernityGTNH/Modernity-GTNH-UI/blob/10b9e676c2cb45ac5cee2c1df3285bf085ad53f6/README.md#licensing)的旧徽章仍链到 3.0；此处按明确的许可证全文记录，并保留这一不一致。未发现 UI 仓库为下列文件提供单独许可证声明；这不代表对第三方权利、商标、商业使用或再分发有额外授权。
-- **当前插件构建会把 `textures/` 下的 PNG 复制到输出并嵌入 DLL。** Modernity 原图与其改编图案不因内嵌而改用代码的 LGPL。分享这些素材时应遵守非商业、署名、标示修改及改编材料相同方式共享的条件。原始许可证明示 4.0，但同提交 README 徽章指向 3.0；在厘清这一冲突及素材权利链之前，不应将本包视为已取得无争议的再发布许可。详见随包的[第三方鸣谢与许可说明](<../THIRD_PARTY_NOTICES.md>)。
+- **当前插件构建会把随包分发的 `textures/` PNG 复制到输出并嵌入 DLL。** Modernity 原图与其改编图案不因内嵌而改用代码的 LGPL。分享这些素材时应遵守非商业、署名、标示修改及改编材料相同方式共享的条件。原始许可证明示 4.0，但同提交 README 徽章指向 3.0；在厘清这一冲突及素材权利链之前，不应将本包视为已取得无争议的再发布许可。详见随包的[第三方鸣谢与许可说明](<../THIRD_PARTY_NOTICES.md>)。
 
 ## 现用图集
 

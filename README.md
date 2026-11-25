@@ -53,7 +53,7 @@ Together 联机**刷取物品**时，房主须启用服务器作弊；客户端�
 
 ## 替换界面资源
 
-本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。[界面贴图](<assets/notenoughitems/textures/gui>)按用途分为 `sprites/`（图集）、`panels/`（面板及部件）和 `controls/`（未启用的控件素材）。[图集配置](<assets/notenoughitems/atlases/nei_gui.json>)收录 `sprites/` 和 `panels/`，Unity 仍按原像素坐标读取切片。动态物品图标仍由游戏或内容 Mod 提供。
+本项目采用 [NeoForge 资源位置](https://docs.neoforged.net/docs/1.21.10/misc/resourcelocation/)和 [客户端贴图](https://docs.neoforged.net/docs/1.21.10/resources/client/textures/)的命名与目录约定，不依赖 Java、Gradle 或 NeoForge 运行时。[界面贴图](<assets/notenoughitems/textures/gui>)按用途分为 `sprites/`（图集）、`panels/`（面板及部件）和 `controls/`（不随构建分发的参考图）。[图集配置](<assets/notenoughitems/atlases/nei_gui.json>)收录 `sprites/` 和 `panels/`，Unity 仍按原像素坐标读取切片。动态物品图标仍由游戏或内容 Mod 提供。
 
 - [interface_states.png](<assets/notenoughitems/textures/gui/sprites/interface_states.png>) 是 256×256 图集。返回使用原有双色精灵 `(0,80,16,16)`，返回、翻页、书签、扳手等图标按钮的图案和通用底板同步响应悬停，按下时保持悬停外观。禁用样式和点击功能不变。加号、减号由程序绘制，不读取图集帧；按钮底板仍可随材质包替换。
 - 制作方式页签使用 [interface_states.png](<assets/notenoughitems/textures/gui/sprites/interface_states.png>) 中的选中 `(160,112,48,47)` 和未选中 `(208,112,48,47)` 背景；底部高光与配方面板顶边对齐。顶部翻页按钮仍贴住当前页最外侧的页签，即使最后一页未满也不留空隙。制作方式名称和配方页码继续使用 `#A5A6AC` 平面背景，方式图标无法绘制时仍显示简称。

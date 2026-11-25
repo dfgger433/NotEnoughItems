@@ -7,13 +7,17 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <OutputPath>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'dist'))</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Keep the assembly identity stable for existing recipe API consumers. -->
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>$(Version).0</FileVersion>
     <Description>Not Enough Items for Casualties: Unknown</Description>
     <GameRoot Condition="'$(GameRoot)' == ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '..', '..', '..', '..'))</GameRoot>
     <ManagedDir>$(GameRoot)\CasualtiesUnknown_Data\Managed</ManagedDir>
     <BepInExDir>$(GameRoot)\BepInEx</BepInExDir>
     <CUCoreLibPath Condition="'$(CUCoreLibPath)' == ''">$(BepInExDir)\plugins\CUCoreLib.dll</CUCoreLibPath>
     <NeiAssetDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', 'assets', 'notenoughitems'))</NeiAssetDir>
+    <!-- The two unused control backgrounds are reference-only until their licenses are confirmed. -->
+    <NeiExcludedAssets>$(NeiAssetDir)textures/gui/controls/vertical_buttons_background.png;$(NeiAssetDir)textures/gui/controls/vertical_buttons_background_variant.png</NeiExcludedAssets>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="$(BepInExDir)\core\BepInEx.dll;$(BepInExDir)\core\0Harmony.dll;$(CUCoreLibPath)" Private="false" />
@@ -23,10 +27,10 @@
     <EmbeddedResource Include="../../Lang/en_us.json" LogicalName="Lang/en_us.json" />
     <Content Include="../../LICENSE;../../COPYING" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../docs/**/*" Link="docs/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="$(NeiAssetDir)**/*" Link="assets/notenoughitems/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(NeiAssetDir)**/*" Exclude="$(NeiExcludedAssets)" Link="assets/notenoughitems/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- An exported or restored spritesheet can have an older timestamp than the stale loose copy. -->
     <Content Update="$(NeiAssetDir)textures/gui/sprites/toggle_and_radio.png" CopyToOutputDirectory="Always" />
-    <EmbeddedResource Include="$(NeiAssetDir)**/*.png"
+    <EmbeddedResource Include="$(NeiAssetDir)**/*.png" Exclude="$(NeiExcludedAssets)"
       LogicalName="assets/notenoughitems/$([System.String]::Copy('%(RecursiveDir)').Replace('\', '/'))%(Filename)%(Extension)" />
   </ItemGroup>
   <Target Name="GeneratePluginVersion" BeforeTargets="CoreCompile">
