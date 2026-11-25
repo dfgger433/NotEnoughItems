@@ -9,7 +9,7 @@
 
 ## 合成所用的现有素材
 
-生成脚本从 [`Assets/NotEnoughItems/textures/gui/`](../../../Assets/NotEnoughItems/textures/gui/) 读取并以像素保持的方式裁切、缩放、叠放下列素材：
+生成脚本按 `src/NotEnoughItems/UI/Styling/ModernityFrames.cs` 中模组自身使用的帧坐标，从 [`Assets/NotEnoughItems/textures/gui/`](../../../Assets/NotEnoughItems/textures/gui/) 切出各控件帧，在 GUI 缩放 1 下拼成一幅模拟的 NEI 游戏界面（物品栏面板、配方查看器、物品目录栏、搜索框、工具条、提示框），再以整数倍最近邻放大；九宫格拉伸只复制源像素，不重绘任何图标。所用素材：
 
 - `panels/inventory.png`
 - `panels/recipe_background.png`
@@ -37,7 +37,7 @@
 
 1. **非商业**：含有上述第三方贴图的配图按 CC BY-NC-SA 约束，仅作非商业分享；不可因项目代码采用 LGPL 就将整包或配图宣称为可商业使用。
 2. **署名**：发布页面应保留 Modernity-GTNH-UI、Applied Energistics 2 及其贡献者的归属，链接对应来源记录和许可证文本。
-3. **标示修改**：应说明图片是由本项目现有 UI 贴图裁切、缩放、编排合成，且 `interface_states.png` 为混合/本地修改图集。
+3. **标示修改**：应说明图片是由本项目现有 UI 贴图裁切、缩放、编排合成的界面模拟图（非游戏内实际截图，物品格为空、不含任何物品图标），且 `interface_states.png` 为混合/本地修改图集。
 4. **相同方式共享**：若将配图作为改编素材再分发，应遵守适用的 ShareAlike 条件，并保留本说明与上游许可证信息。
 5. **权利链待确认**：`docs/THIRD_PARTY_NOTICES.md` 记录 Modernity 许可版本冲突和混合图集核查事项；在上游确认前，不应把配图作为无条件、清权利的商业宣传素材。
 6. **避免未确认控件**：本次配图没有使用 `Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_background*.png` 或 `贴图/vertical_buttons_bg*`，因为其来源与授权尚未确认。

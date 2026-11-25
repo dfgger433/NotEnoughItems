@@ -18,7 +18,7 @@
 
 ## 配套发布资源 / Associated Assets
 
-模组根目录中已生成专用的高品质视觉宣传图集，可直接上传至 Nexus 页面媒体库：
+模组根目录中已由 `generate_nexus_assets.py` 生成宣传图（用模组自身 GUI 贴图拼成的界面模拟图，可用 `python generate_nexus_assets.py` 重新生成），可直接上传至 Nexus 页面媒体库：
 - 顶部横幅 Banner：[nexus_header_1300x372.png](<../../../nexus_assets/nexus_header_1300x372.png>) (1300×372)
 - 详细展示图 Showcase：[nexus_showcase_1920x1080.png](<../../../nexus_assets/nexus_showcase_1920x1080.png>) (1920×1080)
 - 视觉设计说明：[nexus_visual_philosophy.md](<../../../nexus_visual_philosophy.md>)
