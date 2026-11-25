@@ -99,6 +99,13 @@ internal static class ModernityFrames
 
     private static Frame DropDown(int x, int y, int height) => new(NeiAssets.DropDownAtlas, x, y, 112, height);
 
+    internal const int DropDownArrowRight = 21, DropDownArrowTop = 6, DropDownArrowBottom = 11;
+
+    // Option rows omit the trigger's top outline. Their bottom highlight begins
+    // one row sooner, and the thickness of the shadow below it varies by state.
+    internal static (int Left, int Right, int Top, int Bottom) DropDownBorders(bool arrow, int height) =>
+        (2, arrow ? DropDownArrowRight : 2, arrow ? 2 : 1, height - (arrow ? 15 : 14));
+
     // Shorter faces sink without moving the hit target. A selected option keeps its highlight at rest.
     internal static (string Suffix, int Offset) DropDownState(ButtonVisual visual, bool selected = false) =>
         !visual.Enabled ? ("_disabled", 2) : visual.Hovered ? ("_hover", 1) :

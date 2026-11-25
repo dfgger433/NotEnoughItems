@@ -109,6 +109,7 @@ static int RunTests()
         ("the built assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
         ("embedded Back keeps its two-tone art and crafting tabs use states atlas frames", GuiArtworkTests.BackAndRectangularTabs),
         ("the embedded tooltip backplate is opaque across its entire frame", GuiArtworkTests.TooltipBackground),
+        ("language dropdown crops preserve every bevel and both original chevrons", GuiArtworkTests.LanguageDropDown),
         ("native tooltip suppression is bounded by visible NEI regions", TooltipSmoke.Run),
         ("item and liquid tooltips keep native data separate from IDs and mod origins", TooltipSmoke.ItemContent),
         ("tooltip IDs default on, persist, and copy only on Shift-left-click", TooltipSmoke.IdSettingAndInput),

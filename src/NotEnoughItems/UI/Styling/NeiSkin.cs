@@ -205,13 +205,6 @@ internal static class NeiSkin
     {
         var border = style.border;
         bool fits = ModernityFrames.FitsButtonBorders(rect, border.left, border.right, border.top, border.bottom);
-        // The language selector intentionally has a wider right slice to carry its arrow.
-        if (fits && border.left != border.right)
-        {
-            style.Draw(rect, caption ?? GUIContent.none, hovered, false, false, false);
-            return;
-        }
-
         var state = hovered ? style.hover : style.normal;
         if (state.background is { } texture && texture &&
             (!fits || !DrawPixelAlignedButton(rect, texture, border.left, border.top, border.bottom)))
@@ -347,12 +340,67 @@ internal static class NeiSkin
         if (!CanPaint(rect)) return clicked;
 
         var (suffix, offset) = ModernityFrames.DropDownState(state, selected);
+        var visual = new Rect(rect.x, rect.y + offset, rect.width, rect.height - offset);
+        if (visual.height <= 0f) return clicked;
+
         var styles = Styles;
         styles.LabelContent.text = text;
-        var visual = new Rect(rect.x, rect.y + offset, rect.width, rect.height - offset);
-        if (visual.height > 0f)
-            DrawButtonFrame(visual, styles.DropDownFace(frame + suffix, arrow, selected || state.Hovered), styles.LabelContent);
+        if (CropFrame(frame + suffix) is { } texture)
+        {
+            DrawDropDownFrame(visual, texture, arrow);
+            Paint(arrow ? styles.DropDownTriggerLabel : styles.DropDownOptionLabel, visual, styles.LabelContent);
+        }
+        else
+        {
+            var fallback = !state.Enabled ? styles.ButtonDisabled : selected || state.Hovered ? styles.ButtonSelected : styles.Button;
+            DrawButtonFrame(visual, fallback, styles.LabelContent);
+        }
         return clicked;
+    }
+
+    private static void DrawDropDownFrame(Rect rect, Texture2D texture, bool arrow)
+    {
+        var (left, right, top, bottom) = ModernityFrames.DropDownBorders(arrow, texture.height);
+        if (!ModernityFrames.FitsButtonBorders(rect, left, right, top, bottom) ||
+            (arrow && rect.height < texture.height))
+        {
+            DrawTexture(rect, texture, ScaleMode.ScaleToFit, Color.white);
+            return;
+        }
+
+        // Stretch only the flat areas of the frame, keeping the source bevel and chevron intact.
+        int midX = texture.width - right, midY = texture.height - bottom;
+        float cx = rect.xMax - right, cy = rect.yMax - bottom;
+        DrawRow(rect.y, rect.y + top, 0, top);
+        DrawRow(cy, rect.yMax, midY, texture.height);
+        DrawPatch(rect.x, rect.x + left, rect.y + top, cy, 0, left, top, midY);
+        DrawPatch(rect.x + left, cx, rect.y + top, cy, left, midX, top, midY);
+        if (arrow)
+        {
+            const int a = ModernityFrames.DropDownArrowTop, b = ModernityFrames.DropDownArrowBottom;
+            // Move the glyph by half the extra fill height; do not stretch it or pin it to the top.
+            float y = rect.y + a + Mathf.Floor((rect.height - texture.height) * .5f);
+            DrawPatch(cx, rect.xMax, rect.y + top, y, midX, texture.width, top, a);
+            DrawPatch(cx, rect.xMax, y, y + b - a, midX, texture.width, a, b);
+            DrawPatch(cx, rect.xMax, y + b - a, cy, midX, texture.width, b, midY);
+        }
+        else
+            DrawPatch(cx, rect.xMax, rect.y + top, cy, midX, texture.width, top, midY);
+
+        void DrawRow(float y0, float y1, int srcY0, int srcY1)
+        {
+            DrawPatch(rect.x, rect.x + left, y0, y1, 0, left, srcY0, srcY1);
+            DrawPatch(rect.x + left, cx, y0, y1, left, midX, srcY0, srcY1);
+            DrawPatch(cx, rect.xMax, y0, y1, midX, texture.width, srcY0, srcY1);
+        }
+
+        void DrawPatch(float x0, float x1, float y0, float y1, int sx0, int sx1, int sy0, int sy1)
+        {
+            var dst = Rect.MinMaxRect(x0, y0, x1, y1);
+            var uv = Rect.MinMaxRect((float)sx0 / texture.width, 1f - (float)sy1 / texture.height,
+                (float)sx1 / texture.width, 1f - (float)sy0 / texture.height);
+            GUI.DrawTextureWithTexCoords(dst, texture, uv);
+        }
     }
 
     // Match NEI's dimmed output with the heart centered over the hovered choice.
@@ -979,7 +1027,7 @@ internal static class NeiSkin
         internal readonly GUIStyle ButtonDisabled;
         internal readonly GUIStyle Widget, WidgetSelected, WidgetDisabled;
         internal readonly GUIStyle CheckboxLabel, OptionsHeading, OptionsNote;
-        private readonly Dictionary<string, GUIStyle?> _dropDownFaces = new(StringComparer.Ordinal);
+        internal readonly GUIStyle DropDownTriggerLabel, DropDownOptionLabel;
         private readonly Dictionary<GUIStyle, GUIStyle> _buttonCaptions = new();
         internal readonly GUIStyle RecipeMethodTitle, RecipeTabLabel;
         internal readonly GUIStyle TextField;
@@ -1015,6 +1063,12 @@ internal static class NeiSkin
             ApplyStates(CheckboxLabel, null, null, darkInk, darkInk);
             OptionsHeading = new GUIStyle(TextStyle(TextAnchor.MiddleLeft, darkInk, 13)) { fontStyle = FontStyle.Bold };
             OptionsNote = TextStyle(TextAnchor.UpperLeft, Rgb(0x404459), 12, wrap: true);
+
+            DropDownOptionLabel = ContentStyle(TextAnchor.MiddleLeft, 8);
+            DropDownOptionLabel.padding.right = 7;
+            DropDownOptionLabel.normal.textColor = darkInk;
+            DropDownTriggerLabel = new GUIStyle(DropDownOptionLabel);
+            DropDownTriggerLabel.padding.right = ModernityFrames.DropDownArrowRight;
 
             RecipeTabLabel = TextStyle(TextAnchor.MiddleCenter, darkInk, 13);
             RecipeMethodTitle = ContentStyle(TextAnchor.MiddleCenter, 2);
@@ -1081,26 +1135,6 @@ internal static class NeiSkin
             ApplyStates(caption, null, null, style.normal.textColor, style.focused.textColor);
             _buttonCaptions.Add(style, caption);
             return caption;
-        }
-
-        internal GUIStyle DropDownFace(string name, bool arrow, bool highlighted)
-        {
-            if (!_dropDownFaces.TryGetValue(name, out var style))
-            {
-                if (CropFrame(name) is { } face)
-                {
-                    // Trigger glyphs occupy x=94–102, y=6–10 in every source frame.
-                    // Keep them entirely in the fixed top-right corner, not a stretched edge strip.
-                    int right = arrow ? 21 : 7;
-                    style = ContentStyle(TextAnchor.MiddleLeft, 8);
-                    style.padding.right = right;
-                    style.border = new RectOffset(2, right, arrow ? 11 : 2, 5);
-                    style.normal.background = face;
-                    style.normal.textColor = Rgb(0x232538);
-                }
-                _dropDownFaces.Add(name, style);
-            }
-            return style ?? (!GUI.enabled ? ButtonDisabled : highlighted ? ButtonSelected : Button);
         }
 
         private static GUIStyle? SearchStyle(Texture2D? frame, Color ink)

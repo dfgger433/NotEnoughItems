@@ -58,6 +58,55 @@ internal static class GuiArtworkTests
                     "The bundled tooltip backplate must hide the underlying panel across its entire frame.");
     }
 
+    internal static void LanguageDropDown()
+    {
+        var pixel = ReadRgba(NeiAssets.DropDownAtlas);
+        foreach (var (suffix, highlight) in new[] { ("", 0xADB0C4FFu), ("_hover", 0xDAFFFFFFu), ("_disabled", 0x878FA5FFu) })
+        {
+            foreach (string name in new[] { "dropdown_closed", "dropdown_open", "dropdown_option" })
+            {
+                var frame = ModernityFrames.Find(name + suffix)!.Value;
+                bool arrow = name != "dropdown_option";
+                var (left, right, top, bottom) = ModernityFrames.DropDownBorders(arrow, frame.Height);
+                uint At(int x, int y) => pixel(frame.X + x, frame.Y + y);
+
+                Check(frame.ResourcePath == NeiAssets.DropDownAtlas && frame.Width == 112,
+                    "Both trigger directions and every option state use the language atlas.");
+                for (int x = 0; x < frame.Width; x++)
+                {
+                    for (int y = 0; y < frame.Height; y++)
+                        Check((At(x, y) & 255u) == 255u, "A dropdown crop must not include the transparent gutter.");
+                    Check((At(x, frame.Height) & 255u) == 0, "A dropdown crop must not cut off the painted bottom row.");
+                }
+
+                const int middle = 56;
+                int lowerEdge = frame.Height - bottom;
+                Check(At(middle, top - 1) == highlight && At(middle, top) != highlight &&
+                    At(middle, lowerEdge - 1) == At(middle, top) && At(middle, lowerEdge) == highlight,
+                    "The fixed bands must include both highlight rows without stretching the lower bevel.");
+
+                int arrowStart = ModernityFrames.DropDownArrowTop, arrowEnd = ModernityFrames.DropDownArrowBottom;
+                int marks = 0;
+                for (int y = top; y < lowerEdge; y++)
+                    for (int x = left; x < frame.Width - 2; x++)
+                    {
+                        if (At(x, y) == At(middle, y)) continue;
+                        marks++;
+                        Check(arrow && x >= frame.Width - right && y >= arrowStart && y < arrowEnd,
+                            "Only the trigger's right fixed-size band may contain a glyph.");
+                    }
+                Check(marks == (arrow ? 9 : 0), "The original nine-pixel chevron must be preserved in both trigger directions.");
+                if (arrow)
+                {
+                    int tip = name == "dropdown_open" ? arrowStart : arrowEnd - 1;
+                    int baseLine = name == "dropdown_open" ? arrowEnd - 1 : arrowStart;
+                    Check(At(98, tip) != At(middle, tip) && At(94, baseLine) != At(middle, baseLine),
+                        "The closed trigger points down; the open trigger points up.");
+                }
+            }
+        }
+    }
+
     // Read these noninterlaced 8-bit RGBA or indexed PNGs without native Unity calls.
     private static Func<int, int, uint> ReadRgba(string path)
     {
