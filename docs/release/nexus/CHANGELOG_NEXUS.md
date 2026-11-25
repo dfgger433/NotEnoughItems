@@ -4,6 +4,16 @@
 
 ---
 
+## 0.1.33
+
+### English
+- **Crafting chain fix:** Bookmark chains now use intermediate items already in your inventory before scheduling prerequisite crafts. When stock covers the requirement, the chain skips that step and its raw materials. When stock is short, it schedules only the batches needed to cover the shortfall. The chain tooltip and dependency tree update their material and shortage lists accordingly.
+- **Installation:** Extract the ZIP’s single `NotEnoughItems` folder into `BepInEx/plugins/`. If you have customized translations, back them up before replacing files; the install script preserves existing language files.
+
+### 中文
+- **合成链修复：** 书签合成链优先使用背包已有的中间产物。库存足够时跳过对应前置步骤，不再计入其原料；库存不足时只为缺口安排所需批次。合成链提示与依赖树会显示重新计算的用料和缺料。
+- **安装：** 将 ZIP 中唯一的 `NotEnoughItems` 文件夹解压至 `BepInEx/plugins/`。手动覆盖前请备份自定义翻译；安装脚本会保留已有语言文件。
+
 ## 0.1.32
 
 ### English

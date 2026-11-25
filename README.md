@@ -2,6 +2,8 @@
 
 NEI 的本地 BepInEx 移植版。书签与物品目录在原版背包和 Unknown Inventory Terminal 中显示；打开原版制作菜单时只保留左侧书签。打开原版容器、交易、物品自定义、液体转移或医疗面板时隐藏。原版背包和终端的右侧物品目录默认都开启，可在 NEI 扳手设置的「显示」页分别关闭；升级时保留已保存的开关。背包和终端共用以 2560×1440 为基准的默认布局：横纵坐标分别随窗口宽高换算；扳手 → 布局可开启「拖动面板调整布局」，拖动各栏标题移动整栏，拖动边缘把手调整宽度，完成后点「完成」；宽度、位置、上下偏移和物品图标大小都会保存。背包侧栏默认透明，配方查询使用有底色的独立面板。爱心、书签、扳手、配方页签等使用 [interface_states.png](<assets/notenoughitems/textures/gui/sprites/interface_states.png>) 的对应切片。
 
+完整版本历史见[更新记录](<docs/CHANGELOG.md>)。
+
 ## 安装
 
 游戏需为 Mono 版，并已安装 BepInEx 5 和 CUCoreLib 1.1+。Unknown Inventory Terminal 0.4.4+ 为可选依赖，ZIP 不包含这些依赖。

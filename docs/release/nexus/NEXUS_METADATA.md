@@ -10,7 +10,7 @@
 | **Game** | `Casualties: Unknown (Former Scav Prototype)` |
 | **Summary / Short Description** | `Search items, look up recipes and their uses, and plan crafting chains with bookmarks in Casualties: Unknown.` |
 | **Category** | 优先选择 `User Interface`；如果该板块没有此分类，选最接近的 `Utilities` 或界面／易用性类别。以表单中的实际选项为准。 |
-| **Version** | `0.1.32`，以 [版本配置](<../../../src/Directory.Build.props>)（仅源码树有此文件）和本次上传 ZIP 的版本为准。 |
+| **Version** | `0.1.33`，以 [版本配置](<../../../src/Directory.Build.props>)（仅源码树有此文件）和本次上传 ZIP 的版本为准。 |
 | **Languages** | `English`, `Simplified Chinese`（NEI 界面）。 |
 | **Full Description** | 在 BBCode 模式粘贴 [NEXUS_DESCRIPTION_BBCODE.txt](<NEXUS_DESCRIPTION_BBCODE.txt>)，预览后保存；[NEXUS_DESCRIPTION.md](<NEXUS_DESCRIPTION.md>) 是便于维护的 Markdown 版。 |
 
@@ -51,9 +51,9 @@ Thanks to the GTNewHorizons NotEnoughItems contributors for the bookmark and rec
 
 | Nexus 字段 | 建议填写 |
 |---|---|
-| **Archive** | `dist/NotEnoughItems-0.1.32.zip`（从源码树构建后生成） |
-| **Display Name** | `Not Enough Items 0.1.32 (Mono)` |
-| **Version** | `0.1.32` |
+| **Archive** | `dist/NotEnoughItems-0.1.33.zip`（从源码树构建后生成） |
+| **Display Name** | `Not Enough Items 0.1.33 (Mono)` |
+| **Version** | `0.1.33` |
 | **File Category** | `Main Files` |
 | **File Description** | `Extract the NotEnoughItems folder into BepInEx/plugins/. Requires BepInEx 5 (Mono) and CUCoreLib 1.1 or newer.` |
 | **Changelog** | 粘贴 [CHANGELOG_NEXUS.md](<CHANGELOG_NEXUS.md>) 中与 ZIP 版本一致的条目。 |
