@@ -9,19 +9,16 @@
 
 ## 合成所用的现有素材
 
-生成脚本按 `src/NotEnoughItems/UI/Styling/ModernityFrames.cs` 中模组自身使用的帧坐标，从 [`Assets/NotEnoughItems/textures/gui/`](../../../Assets/NotEnoughItems/textures/gui/) 切出各控件帧，在 GUI 缩放 1 下拼成一幅模拟的 NEI 游戏界面（物品栏面板、配方查看器、物品目录栏、搜索框、工具条、提示框），再以整数倍最近邻放大；九宫格拉伸只复制源像素，不重绘任何图标。所用素材：
+脚本直接解析 [ModernityFrames.cs](../../../src/NotEnoughItems/UI/Styling/ModernityFrames.cs#L32-L79) 的帧坐标和资源路径，从 [GUI 资源目录](../../../Assets/NotEnoughItems/textures/gui/) 裁切原始 RGBA 像素。发布图按默认 1280×720（GUI 缩放 1）的书签、物品目录与配方面板布局离线复现；使用最近邻缩放和九宫格固定边框，不重绘控件图标。侧栏在默认皮肤下透明，没有背景格或目录滚动条；配方九格使用状态图集内的 `recipe_slot`。
 
-- `panels/inventory.png`
-- `panels/recipe_background.png`
-- `panels/potion_editor.png`
-- `panels/catalyst_tab.png`
-- `panels/recipe_slot.png`
-- `panels/repair_recipe.png`
-- `sprites/interface_states.png`
-- `sprites/button_backgrounds.png`
-- `sprites/search_and_tooltip.png`
-- `sprites/toggle_and_radio.png`
-- `sprites/language_dropdown.png`
+发布图使用的原始 PNG：
+
+- [recipe_background.png](../../../Assets/NotEnoughItems/textures/gui/panels/recipe_background.png)
+- [interface_states.png](../../../Assets/NotEnoughItems/textures/gui/sprites/interface_states.png)
+- [button_backgrounds.png](../../../Assets/NotEnoughItems/textures/gui/sprites/button_backgrounds.png)
+- [search_and_tooltip.png](../../../Assets/NotEnoughItems/textures/gui/sprites/search_and_tooltip.png)
+
+完整帧导出还包括 [toggle_and_radio.png](../../../Assets/NotEnoughItems/textures/gui/sprites/toggle_and_radio.png) 和 [language_dropdown.png](../../../Assets/NotEnoughItems/textures/gui/sprites/language_dropdown.png) 中的其他控件状态。另有可选的本机原版物品示例，所含游戏贴图不进入默认导出 ZIP 或 Nexus 发布图。
 
 其中 `interface_states.png` 是含有 Modernity 与 AE2 图案并经过本地组装/修改的混合图集；发布配图中出现的状态图案应按混合图集的全部适用来源核对，不能仅凭文件名推断单一版权来源。
 

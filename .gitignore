@@ -3,6 +3,7 @@
 /.agents/worktrees/
 /dist/
 TestResults/
+__pycache__/
 .vs/
 .idea/
 .vscode/
