@@ -17,6 +17,8 @@ TestResults/
 *.bak
 .env
 .env.*
+!.env.example
+!.env.template
 .DS_Store
 Thumbs.db
 参考
