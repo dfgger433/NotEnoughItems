@@ -140,7 +140,7 @@ internal static class BookmarkChainBalance
     private const int MaximumExpansionDepth = 128;
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
 
-    /// <summary>Balances a group. Carried stock can replace upstream production for preferred ingredient choices.</summary>
+    /// <summary>Balances a group. Carried stock can replace upstream production for preferred or in-chain materials.</summary>
     /// <param name="catalog">Catalog used to normalize item IDs and resolve substitutions.</param>
     /// <param name="entries">The entries belonging to this group only, in bookmark order.</param>
     /// <param name="available">Optional snapshot of carried quantities.</param>
@@ -643,8 +643,7 @@ internal static class BookmarkChainBalance
             }
             foreach (var producer in input.Producers)
             {
-                double initial = At(_bookmarked, input.Key) +
-                    ((_targetOnly || _craftMode || _useCarriedFirst.Contains(input.Key)) ? At(_available, input.Key) : 0);
+                double initial = At(_bookmarked, input.Key) + At(_available, input.Key);
                 double shortage = At(_consumed, input.Key) + At(_retained, input.Key) - initial -
                     At(_production, input.Key) + At(_reserved, input.Key);
                 if (_active.Contains(producer))
@@ -683,8 +682,8 @@ internal static class BookmarkChainBalance
         {
             var active = _nodes.Where(node => node.Batches > 0).ToArray();
             var initial = new Dictionary<string, double>(_bookmarked, Ids);
-            // Group calculations prioritize bookmark materials, then reusable production, then carried supply.
-            // In a target craft plan, available stock is already accounted for during prerequisite sizing.
+            // Allocate saved materials and carried stock before consuming reusable production.
+            // In a target craft plan, carried stock was already accounted for during prerequisite sizing.
             if (_targetOnly && !_craftMode)
                 foreach (var pair in _available) Add(initial, pair.Key, pair.Value);
             var carried = _targetOnly && !_craftMode ? new Dictionary<string, double>(Ids) :
@@ -700,7 +699,8 @@ internal static class BookmarkChainBalance
             {
                 double gross = input.PerBatch * input.Owner.Batches;
                 double bookmarked = Take(initial, input.Key, gross);
-                double onHand = (_craftMode || _useCarriedFirst.Contains(input.Key)) ? Take(carried, input.Key, gross - bookmarked) : 0;
+                double onHand = (_craftMode || input.Producers.Length > 0 || _useCarriedFirst.Contains(input.Key))
+                    ? Take(carried, input.Key, gross - bookmarked) : 0;
                 double internalSupply = TakeProduction(input, gross - bookmarked - onHand, consume: true);
                 double external = gross - internalSupply;
                 onHand += Take(carried, input.Key, external - bookmarked - onHand);

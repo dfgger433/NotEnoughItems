@@ -32,6 +32,7 @@ internal static class BookmarkParityTests
             OrdinaryAndGroupedToolsFollowCarriedStock,
             GroupBalanceStaysWithinSavedRecipes,
             GroupBalanceReusesProductionAndTools,
+            GroupBalanceUsesCarriedIntermediateStock,
             GroupBalanceKeepsConditionAndTypeBoundaries,
             VariantSelectionKeepsSlotsAndTypes,
             ChainRequirementListsAndSwitchesAlternatives,
@@ -449,6 +450,36 @@ internal static class BookmarkParityTests
         Check(Rows(plan, "Links").Any(link => Property<int?>(link, "ProducerEntryIndex") == 2 &&
             Property<int?>(link, "ConsumerEntryIndex") == 0 && Property<string>(link, "ItemId") == "item:ingot" &&
             Property<double>(link, "Quantity") == 4), "Tree and folded subchains receive actual allocations, not catalog guesses.");
+    }
+
+    private static void GroupBalanceUsesCarriedIntermediateStock()
+    {
+        var smelt = Recipe("stock-smelt", [new RecipeIngredient("ore", 2)], [new RecipeOutput("ingot", 3)]);
+        var gear = Recipe("stock-gear", [new RecipeIngredient("ingot", 2)], [new RecipeOutput("gear")]);
+        var entries = Entries(BalanceEntry("item:gear", 1, gear), BalanceEntry("item:ingot", 1, smelt));
+        var catalog = new Catalog();
+
+        object covered = Calculate(catalog, entries, new Dictionary<string, int> { ["item:ingot"] = 2 });
+
+        Check(Rows(covered, "Steps").Select(step => Property<int>(step, "EntryIndex")).SequenceEqual(new[] { 0 }),
+            "Carried intermediate stock fully covering a consumer must suppress its producer step.");
+        Check(!Rows(covered, "Inputs").Any(input => Property<string>(input, "ItemId") == "item:ore"),
+            "Carried intermediate stock must remove its producer's raw-material bill.");
+        Check(Rows(covered, "Missing").Length == 0,
+            "Covered intermediate stock must leave no missing raw ingredients.");
+        Amount(covered, "Inputs", "item:ingot", 2);
+        Amount(covered, "Inputs", "item:ingot", 2, "AvailableQuantity");
+
+        object partial = Calculate(catalog, entries, new Dictionary<string, int> { ["item:ingot"] = 1 });
+
+        var steps = Rows(partial, "Steps");
+        Check(steps.Select(step => Property<int>(step, "EntryIndex")).SequenceEqual(new[] { 1, 0 }) &&
+            Property<int>(steps[0], "Batches") == 1,
+            "A partial carried intermediate stack must expand only the producer needed for the remaining unit.");
+        Amount(partial, "Inputs", "item:ore", 2);
+        Amount(partial, "Missing", "item:ore", 2);
+        Amount(Rows(partial, "Steps").Single(step => Property<int>(step, "EntryIndex") == 0),
+            "Inputs", "item:ingot", 2, "AvailableQuantity");
     }
 
     private static void GroupBalanceKeepsConditionAndTypeBoundaries()
