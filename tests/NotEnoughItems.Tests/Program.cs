@@ -105,6 +105,8 @@ static int RunTests()
         ("NEI resolves inventory, terminal and bookmark-only crafting with native blockers first", SurfaceSmoke.Run),
         ("native inventory bounds are screen-anchored and scale with the canvas", NativeInventoryAnchor),
         ("catalog search preserves definition order and keeps all matching types", CatalogListingTests.Run),
+        ("catalog groups vanilla first, then orders mods by name without reshuffling search results", CatalogListingTests.SourceOrder),
+        ("browse items stay in provider registration order after refresh and replacement", CatalogListingTests.RegistrationOrder),
         ("catalog tooltip previews start dry without using a live item", TooltipSmoke.DryPreview),
         ("the built assembly contains all namespaced fallback GUI textures", EmbeddedGuiTextures),
         ("embedded Back keeps its two-tone art and crafting tabs use states atlas frames", GuiArtworkTests.BackAndRectangularTabs),

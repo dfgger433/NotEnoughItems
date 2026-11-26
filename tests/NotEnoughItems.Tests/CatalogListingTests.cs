@@ -1,3 +1,4 @@
+using System.Reflection;
 using NotEnoughItems;
 
 internal static class CatalogListingTests
@@ -37,6 +38,73 @@ internal static class CatalogListingTests
             var actual = CatalogListing.Filter(items, query, null).Select(item => item.BrowseId);
             if (!actual.SequenceEqual(expected))
                 throw new InvalidOperationException($"Unexpected catalog order for '{query}': {string.Join(", ", actual)}");
+        }
+    }
+
+    internal static void RegistrationOrder()
+    {
+        const string source = "test.provider-order";
+        var catalog = new Catalog();
+        catalog.RegisterItem(new CatalogItem("z-tool", source: source));
+        catalog.RegisterItem(new CatalogItem("other-tool", source: "test.other-provider"));
+        catalog.RegisterItem(new CatalogItem("a-fluid", kind: CatalogItemKind.Liquid, source: source));
+        catalog.RegisterItem(new CatalogItem("z-tool", "Updated tool", source: source));
+        catalog.Refresh();
+
+        var browseItems = (IReadOnlyList<CatalogItem>)typeof(Catalog)
+            .GetProperty("BrowseItems", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(catalog)!;
+        var actual = CatalogListing.Filter(browseItems, "@" + source, null);
+        if (!actual.Select(item => item.BrowseId).SequenceEqual(["item:z-tool", "liquid:a-fluid"]) ||
+            actual[0].DisplayName != "Updated tool")
+            throw new InvalidOperationException("Browsing must keep registration order, even when a provider item is updated.");
+    }
+
+    internal static void SourceOrder()
+    {
+        CatalogItem[] items =
+        [
+            new("tenth", source: "zz.ten"),
+            new("z-last-by-id", source: "zz.first", tags: ["drop"]),
+            new("native-water", kind: CatalogItemKind.Liquid, source: "Native"),
+            new("other", source: "aa.second"),
+            new("digit-first", source: "aa.digit"),
+            new("native-stone"),
+            new("a-first-by-id", source: "ZZ.FIRST"),
+            new("zebra", source: "aa.zebra"),
+            new("fallback", source: "Middle"),
+            new("second-digit", source: "second-digit"),
+            new("a-only", source: "prefix"),
+            new("zero", source: "zero")
+        ];
+        string SourceName(string source) => source switch
+        {
+            "zz.ten" => "A10",
+            "zz.first" or "ZZ.FIRST" => " a B ",
+            "aa.second" => "Ab",
+            "aa.digit" => "0Start",
+            "aa.zebra" => "Zebra",
+            "second-digit" => "A2",
+            "prefix" => "a",
+            "zero" => "A0",
+            _ => source
+        };
+
+        string[] fullOrder =
+        [
+            "native-water", "native-stone", "a-only", "z-last-by-id", "a-first-by-id", "other",
+            "zero", "tenth", "second-digit", "fallback", "zebra", "digit-first"
+        ];
+        Expect("", fullOrder);
+        Expect("-$drop", fullOrder.Where(id => id != "z-last-by-id").ToArray());
+        Expect("@ab", "z-last-by-id", "a-first-by-id", "other");
+        Expect("@CasualtiesUnknown", "native-water", "native-stone");
+        Expect("", fullOrder);
+
+        void Expect(string query, params string[] expected)
+        {
+            var actual = CatalogListing.Filter(items, query, null, SourceName).Select(item => item.Id).ToArray();
+            if (!actual.SequenceEqual(expected))
+                throw new InvalidOperationException($"Unexpected source order for '{query}': {string.Join(", ", actual)}");
         }
     }
 }

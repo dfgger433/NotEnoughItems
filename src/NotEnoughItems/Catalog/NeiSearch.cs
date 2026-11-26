@@ -57,7 +57,7 @@ internal static class NeiSearch
             CompactSource(displayName).IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    private static string CompactSource(string value)
+    internal static string CompactSource(string value)
     {
         int first = 0;
         while (first < value.Length && !char.IsWhiteSpace(value[first])) first++;

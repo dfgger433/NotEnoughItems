@@ -530,6 +530,7 @@ namespace NotEnoughItems
         private readonly Dictionary<string, CatalogItem> _itemsById = new Dictionary<string, CatalogItem>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CatalogItem> _itemsByBrowseId = new Dictionary<string, CatalogItem>(StringComparer.OrdinalIgnoreCase);
         private IReadOnlyList<CatalogItem> _itemSnapshot = Array.Empty<CatalogItem>();
+        private IReadOnlyList<CatalogItem> _browseItemSnapshot = Array.Empty<CatalogItem>();
         private IReadOnlyList<Recipe> _recipeSnapshot = Array.Empty<Recipe>();
         private IReadOnlyList<RecipeCategory> _categorySnapshot = Array.Empty<RecipeCategory>();
         private readonly Dictionary<string, List<Recipe>> _producedBy = new Dictionary<string, List<Recipe>>(StringComparer.OrdinalIgnoreCase);
@@ -553,6 +554,7 @@ namespace NotEnoughItems
 
         /// <summary>Gets the current item snapshot, refreshing when game counts changed.</summary>
         public IReadOnlyList<CatalogItem> Items { get { EnsureFresh(); return _itemSnapshot; } }
+        internal IReadOnlyList<CatalogItem> BrowseItems { get { EnsureFresh(); return _browseItemSnapshot; } }
         /// <summary>Gets native and provider recipe categories.</summary>
         public IReadOnlyList<RecipeCategory> RecipeCategories { get { EnsureFresh(); return _categorySnapshot; } }
         /// <summary>Gets native and provider recipes.</summary>
@@ -571,7 +573,9 @@ namespace NotEnoughItems
             _producedBy.Clear();
             _usedIn.Clear();
 
-            BuildNativeItems();
+            var registeredItemIds = ItemRegistry.GetRegisteredItemIds().ToArray();
+            var registeredLiquidIds = LiquidRegistry.GetRegisteredLiquidIds().ToArray();
+            BuildNativeItems(registeredItemIds, registeredLiquidIds);
             foreach (CatalogItem item in _providerItems.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
                 AddItem(item);
 
@@ -594,6 +598,7 @@ namespace NotEnoughItems
                 IndexRecipe(recipe, categoriesById.TryGetValue(recipe.CategoryId, out var category) ? category.MachineId : string.Empty);
             _categories.AddRange(categoriesById.Values.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase));
             _itemSnapshot = Array.AsReadOnly(_items.ToArray());
+            _browseItemSnapshot = BuildBrowseSnapshot(registeredItemIds, registeredLiquidIds);
             _recipeSnapshot = Array.AsReadOnly(_recipes.ToArray());
             _categorySnapshot = Array.AsReadOnly(_categories.ToArray());
             _lastItemCount = global::Item.GlobalItems?.Count ?? 0;
@@ -809,14 +814,14 @@ namespace NotEnoughItems
                 Refresh();
         }
 
-        private void BuildNativeItems()
+        private void BuildNativeItems(string[] registeredItemIds, string[] registeredLiquidIds)
         {
             var itemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var liquidIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (global::Item.GlobalItems is { } gameItems) itemIds.UnionWith(gameItems.Keys);
             if (global::Liquids.Registry is { } gameLiquids) liquidIds.UnionWith(gameLiquids.Keys);
-            itemIds.UnionWith(ItemRegistry.GetRegisteredItemIds());
-            liquidIds.UnionWith(LiquidRegistry.GetRegisteredLiquidIds());
+            itemIds.UnionWith(registeredItemIds);
+            liquidIds.UnionWith(registeredLiquidIds);
 
             foreach (string id in itemIds.Where(x => !string.IsNullOrWhiteSpace(x)).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
             {
@@ -850,6 +855,22 @@ namespace NotEnoughItems
                     ReadLocale(id + "dsc", true) ?? custom?.description, "Liquid", CatalogItemKind.Liquid, droplet,
                     tags: tags, source: source, qualities: type?.qualities ?? custom?.qualities, iconColor: type?.color ?? custom?.color));
             }
+        }
+
+        private IReadOnlyList<CatalogItem> BuildBrowseSnapshot(string[] registeredItemIds, string[] registeredLiquidIds)
+        {
+            // Keep recipe lookups in definition order; only browsing follows the mod registries.
+            var ordered = new List<CatalogItem>(_items.Count);
+            var seen = new HashSet<CatalogItem>();
+            var registrationOrder = registeredItemIds.Select(id => "item:" + id.Trim())
+                .Concat(registeredLiquidIds.Select(id => "liquid:" + id.Trim()))
+                .Concat(_providerItems.Keys);
+            foreach (string key in registrationOrder)
+                if (_itemsByBrowseId.TryGetValue(key, out var item) && !SameId(item.Source, NativeSource) && seen.Add(item))
+                    ordered.Add(item);
+            foreach (CatalogItem item in _items)
+                if (seen.Add(item)) ordered.Add(item);
+            return ordered.AsReadOnly();
         }
 
         private static string Fallback(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value;

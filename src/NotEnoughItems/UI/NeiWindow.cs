@@ -300,7 +300,7 @@ internal sealed partial class NeiWindow
 
     private void ApplyFilter()
     {
-        _filtered = CatalogListing.Filter(_catalog.Items, _query, _plugin.Pinyin, NativeTooltip.SourceName);
+        _filtered = CatalogListing.Filter(_catalog.BrowseItems, _query, _plugin.Pinyin, NativeTooltip.SourceName);
         _catalogFilterDirty = false;
     }
 
