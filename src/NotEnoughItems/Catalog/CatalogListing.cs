@@ -29,13 +29,46 @@ internal static class CatalogListing
     private static int CompareNames(string? left, string? right)
     {
         if (left == null || right == null) return StringComparer.Ordinal.Compare(left, right);
-        for (int i = 0; i < Math.Min(left.Length, right.Length); i++)
+        int leftIndex = 0, rightIndex = 0;
+        while (leftIndex < left.Length && rightIndex < right.Length)
         {
-            int comparison = CharacterRank(left[i]).CompareTo(CharacterRank(right[i]));
-            if (comparison != 0) return comparison;
+            if (IsDigit(left[leftIndex]) && IsDigit(right[rightIndex]))
+            {
+                int leftEnd = leftIndex;
+                while (leftEnd < left.Length && IsDigit(left[leftEnd])) leftEnd++;
+                int rightEnd = rightIndex;
+                while (rightEnd < right.Length && IsDigit(right[rightEnd])) rightEnd++;
+
+                int leftSignificant = leftIndex;
+                while (leftSignificant < leftEnd && left[leftSignificant] == '0') leftSignificant++;
+                int rightSignificant = rightIndex;
+                while (rightSignificant < rightEnd && right[rightSignificant] == '0') rightSignificant++;
+                int comparison = (leftEnd - leftSignificant).CompareTo(rightEnd - rightSignificant);
+                if (comparison != 0) return comparison;
+                for (int offset = 0; offset < leftEnd - leftSignificant; offset++)
+                {
+                    comparison = left[leftSignificant + offset].CompareTo(right[rightSignificant + offset]);
+                    if (comparison != 0) return comparison;
+                }
+                leftIndex = leftEnd;
+                rightIndex = rightEnd;
+                continue;
+            }
+
+            int characterComparison = CharacterRank(left[leftIndex]).CompareTo(CharacterRank(right[rightIndex]));
+            if (characterComparison != 0) return characterComparison;
+            leftIndex++;
+            rightIndex++;
         }
-        return left.Length.CompareTo(right.Length);
+        return (leftIndex == left.Length, rightIndex == right.Length) switch
+        {
+            (true, true) => 0,
+            (true, false) => -1,
+            _ => 1
+        };
     }
+
+    private static bool IsDigit(char c) => c >= '0' && c <= '9';
 
     private static int CharacterRank(char c) => c switch
     {

@@ -92,13 +92,37 @@ internal static class CatalogListingTests
         string[] fullOrder =
         [
             "native-water", "native-stone", "a-only", "z-last-by-id", "a-first-by-id", "other",
-            "zero", "tenth", "second-digit", "fallback", "zebra", "digit-first"
+            "zero", "second-digit", "tenth", "fallback", "zebra", "digit-first"
         ];
         Expect("", fullOrder);
         Expect("-$drop", fullOrder.Where(id => id != "z-last-by-id").ToArray());
         Expect("@ab", "z-last-by-id", "a-first-by-id", "other");
         Expect("@CasualtiesUnknown", "native-water", "native-stone");
         Expect("", fullOrder);
+
+        CatalogItem[] numericItems =
+        [
+            new("ten", source: "numeric-ten"),
+            new("two", source: "numeric-two"),
+            new("zero-padded", source: "numeric-zero-padded"),
+            new("zero-equal", source: "numeric-zero-equal"),
+            new("suffix-short", source: "numeric-suffix-short"),
+            new("suffix-long", source: "numeric-suffix-long")
+        ];
+        string NumericSourceName(string source) => source switch
+        {
+            "numeric-ten" => "A10B1",
+            "numeric-two" => "A2B9",
+            "numeric-zero-padded" => "A02B10",
+            "numeric-zero-equal" => "A2B9",
+            "numeric-suffix-short" => "A02",
+            "numeric-suffix-long" => "A2b",
+            _ => source
+        };
+        string[] numericOrder = ["suffix-short", "suffix-long", "two", "zero-equal", "zero-padded", "ten"];
+        var numericActual = CatalogListing.Filter(numericItems, string.Empty, null, NumericSourceName).Select(item => item.Id);
+        if (!numericActual.SequenceEqual(numericOrder))
+            throw new InvalidOperationException($"Unexpected numeric source order: {string.Join(", ", numericActual)}");
 
         void Expect(string query, params string[] expected)
         {
