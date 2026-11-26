@@ -24,7 +24,19 @@ pwsh -File ./scripts/Build.ps1
 pwsh -File ./scripts/Install.ps1
 ```
 
-[Build.ps1](<scripts/Build.ps1>) 和 [Install.ps1](<scripts/Install.ps1>) 默认使用项目目录上两级作为游戏根；也可通过 `-GameRoot` 指定。构建生成 `dist/NotEnoughItems/` 和 `dist/NotEnoughItems-<版本>.zip`。未压缩的 `NotEnoughItems` 文件夹也可直接拖入 `BepInEx/plugins/`。
+[Build.ps1](<scripts/Build.ps1>) 和 [Install.ps1](<scripts/Install.ps1>) 默认使用项目目录上两级作为游戏根；也可通过 `-GameRoot` 指定。未压缩的 `dist/NotEnoughItems/` 文件夹也可直接拖入 `BepInEx/plugins/`。
+
+## 一键生成发布 ZIP
+
+在源码根目录运行：
+
+```powershell
+pwsh -File ./scripts/Release.ps1
+# 源码不在游戏的 mods/ 目录下时，可指定游戏根目录：
+pwsh -File ./scripts/Release.ps1 -GameRoot 'D:\Games\Casualties Unknown'
+```
+
+[Release.ps1](<scripts/Release.ps1>) 复用构建流程：以 Release 配置编译并运行回归测试，全部通过后，根据 [版本配置](<src/Directory.Build.props>) 中写入 DLL 的版本生成 `dist/NotEnoughItems-<版本>.zip`。ZIP 顶层只有 `NotEnoughItems/`。脚本会打印 ZIP 的 SHA-256，并在旁边生成 `.zip.sha256` 校验文件。它不会安装 Mod 或上传文件；用同一版本重跑会替换该版本的本地产物。
 
 ## Nexus Mods 发布资料
 

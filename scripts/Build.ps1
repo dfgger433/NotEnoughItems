@@ -25,10 +25,19 @@ try {
     }
     $version = (Get-Item -LiteralPath $stagedDll).VersionInfo.ProductVersion.Split('+')[0]
     $zipName = "NotEnoughItems-$version.zip"
+    $zipPath = Join-Path $dist $zipName
+    $checksumPath = "$zipPath.sha256"
     $stagedZip = Join-Path $stagingDir $zipName
+    $stagedChecksum = "$stagedZip.sha256"
     # Archive the directory itself, not its contents: drag it into BepInEx/plugins.
     Compress-Archive -LiteralPath $stagedPackage -DestinationPath $stagedZip
+    $sha256 = (Get-FileHash -LiteralPath $stagedZip -Algorithm SHA256).Hash.ToLowerInvariant()
+    # Use the sha256sum format with an archive filename relative to the checksum file.
+    Set-Content -LiteralPath $stagedChecksum -Value "$sha256  $zipName`n" -Encoding ascii -NoNewline
 
+    foreach ($file in @($zipPath, $checksumPath)) {
+        if (Test-Path -LiteralPath $file -PathType Container) { throw "Expected a file, not a directory: $file" }
+    }
     if (Test-Path -LiteralPath $packageDir -PathType Container) {
         $previousPackage = Get-Item -LiteralPath $packageDir -Force
         if ($previousPackage.Attributes -band [IO.FileAttributes]::ReparsePoint) {
@@ -37,9 +46,12 @@ try {
         Remove-Item -LiteralPath $packageDir -Recurse -Force
     }
     Move-Item -LiteralPath $stagedPackage -Destination $packageDir
-    Move-Item -LiteralPath $stagedZip -Destination (Join-Path $dist $zipName) -Force
+    [IO.File]::Move($stagedZip, $zipPath, $true)
+    [IO.File]::Move($stagedChecksum, $checksumPath, $true)
     Write-Output "Package directory: $packageDir"
-    Write-Output "Package archive: $(Join-Path $dist $zipName)"
+    Write-Output "Package archive: $zipPath"
+    Write-Output "SHA-256: $sha256"
+    Write-Output "Checksum file: $checksumPath"
 } finally {
     if (Test-Path -LiteralPath $stagingDir -PathType Container) { Remove-Item -LiteralPath $stagingDir -Recurse -Force }
 }
