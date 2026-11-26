@@ -9,16 +9,16 @@
 
 ## 合成所用的现有素材
 
-脚本直接解析 [ModernityFrames.cs](../../../src/NotEnoughItems/UI/Styling/ModernityFrames.cs#L32-L79) 的帧坐标和资源路径，从 [GUI 资源目录](../../../Assets/NotEnoughItems/textures/gui/) 裁切原始 RGBA 像素。发布图按默认 1280×720（GUI 缩放 1）的书签、物品目录与配方面板布局离线复现；使用最近邻缩放和九宫格固定边框，不重绘控件图标。侧栏在默认皮肤下透明，没有背景格或目录滚动条；配方九格使用状态图集内的 `recipe_slot`。
+脚本直接解析 [ModernityFrames.cs](../../../src/NotEnoughItems/UI/Styling/ModernityFrames.cs#L32-L79) 的帧坐标和资源路径，从 [GUI 资源目录](../../../assets/notenoughitems/textures/gui/) 裁切原始 RGBA 像素。发布图按默认 1280×720（GUI 缩放 1）的书签、物品目录与配方面板布局离线复现；使用最近邻缩放和九宫格固定边框，不重绘控件图标。侧栏在默认皮肤下透明，没有背景格或目录滚动条；配方九格使用状态图集内的 `recipe_slot`。
 
 发布图使用的原始 PNG：
 
-- [recipe_background.png](../../../Assets/NotEnoughItems/textures/gui/panels/recipe_background.png)
-- [interface_states.png](../../../Assets/NotEnoughItems/textures/gui/sprites/interface_states.png)
-- [button_backgrounds.png](../../../Assets/NotEnoughItems/textures/gui/sprites/button_backgrounds.png)
-- [search_and_tooltip.png](../../../Assets/NotEnoughItems/textures/gui/sprites/search_and_tooltip.png)
+- [recipe_background.png](../../../assets/notenoughitems/textures/gui/panels/recipe_background.png)
+- [interface_states.png](../../../assets/notenoughitems/textures/gui/sprites/interface_states.png)
+- [button_backgrounds.png](../../../assets/notenoughitems/textures/gui/sprites/button_backgrounds.png)
+- [search_and_tooltip.png](../../../assets/notenoughitems/textures/gui/sprites/search_and_tooltip.png)
 
-完整帧导出还包括 [toggle_and_radio.png](../../../Assets/NotEnoughItems/textures/gui/sprites/toggle_and_radio.png) 和 [language_dropdown.png](../../../Assets/NotEnoughItems/textures/gui/sprites/language_dropdown.png) 中的其他控件状态。另有可选的本机原版物品示例，所含游戏贴图不进入默认导出 ZIP 或 Nexus 发布图。
+完整帧导出还包括 [toggle_and_radio.png](../../../assets/notenoughitems/textures/gui/sprites/toggle_and_radio.png) 和 [language_dropdown.png](../../../assets/notenoughitems/textures/gui/sprites/language_dropdown.png) 中的其他控件状态。另有可选的本机原版物品示例，所含游戏贴图不进入默认导出 ZIP 或 Nexus 发布图。
 
 其中 `interface_states.png` 是含有 Modernity 与 AE2 图案并经过本地组装/修改的混合图集；发布配图中出现的状态图案应按混合图集的全部适用来源核对，不能仅凭文件名推断单一版权来源。
 
@@ -37,7 +37,7 @@
 3. **标示修改**：应说明图片是由本项目现有 UI 贴图裁切、缩放、编排合成的界面模拟图（非游戏内实际截图，物品格为空、不含任何物品图标），且 `interface_states.png` 为混合/本地修改图集。
 4. **相同方式共享**：若将配图作为改编素材再分发，应遵守适用的 ShareAlike 条件，并保留本说明与上游许可证信息。
 5. **权利链待确认**：`docs/THIRD_PARTY_NOTICES.md` 记录 Modernity 许可版本冲突和混合图集核查事项；在上游确认前，不应把配图作为无条件、清权利的商业宣传素材。
-6. **避免未确认控件**：本次配图没有使用 `Assets/NotEnoughItems/textures/gui/controls/vertical_buttons_background*.png` 或 `贴图/vertical_buttons_bg*`，因为其来源与授权尚未确认。
+6. **避免未确认控件**：本次配图没有使用 `assets/notenoughitems/textures/gui/controls/vertical_buttons_background*.png` 或 `贴图/vertical_buttons_bg*`，因为其来源与授权尚未确认。
 
 ## 建议的发布页署名文本
 

@@ -109,7 +109,7 @@
 [i]注：包含第三方非商业素材的构建包不可用于商业目的。[/i]
 
 [b]发布配图素材声明 / Release Artwork Asset Notice[/b]
-本页配图由项目现有 [i]Assets/NotEnoughItems/textures/gui/[/i] 界面贴图裁切、缩放和编排合成，未新增手绘图标或外部图片；[i]interface_states.png[/i] 为含多来源图案和本地编辑的混合图集。配图须保留原作者署名，按适用的 [b]CC BY-NC-SA[/b] 条款仅作非商业分享，标示改编并遵守相同方式共享。完整来源与许可约束见 [i]docs/release/nexus/NEXUS_ASSET_CREDITS.md[/i]。
+本页配图由项目现有 [i]assets/notenoughitems/textures/gui/[/i] 界面贴图裁切、缩放和编排合成，未新增手绘图标或外部图片；[i]interface_states.png[/i] 为含多来源图案和本地编辑的混合图集。配图须保留原作者署名，按适用的 [b]CC BY-NC-SA[/b] 条款仅作非商业分享，标示改编并遵守相同方式共享。完整来源与许可约束见 [i]docs/release/nexus/NEXUS_ASSET_CREDITS.md[/i]。
 
 [line]
 

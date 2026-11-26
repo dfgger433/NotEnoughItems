@@ -11,7 +11,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 STYLE = ROOT / "src/NotEnoughItems/UI/Styling"
-BUNDLED = ROOT / "Assets/NotEnoughItems/textures"
+BUNDLED = ROOT / "assets/notenoughitems/textures"
 ATLAS_GRID = {(255, 0, 170, 255), (255, 190, 170, 255)}
 
 

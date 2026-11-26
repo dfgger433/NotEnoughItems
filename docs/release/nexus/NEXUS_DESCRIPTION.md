@@ -191,7 +191,7 @@ RecipeApi.RegisterRecipe(new NotEnoughItems.Recipe(
 *特别提示：代码采用 LGPL 并不代表内含非商业授权贴图的整包可以进行商业化使用。请在遵守 CC BY-NC-SA 协议的前提下分享与再创作。*
 
 ### 发布配图的素材声明 / Release Artwork Asset Notice
-本页配图由项目现有 `Assets/NotEnoughItems/textures/gui/` 界面贴图裁切、缩放和编排合成，未新增手绘图标或外部图片；`interface_states.png` 为含多来源图案和本地编辑的混合图集。配图及其中第三方贴图须保留原作者署名，按适用的 **CC BY-NC-SA** 条款仅作非商业分享，标示改编并遵守相同方式共享。完整文件清单、来源链接、许可文本和发布前限制见 [`NEXUS_ASSET_CREDITS.md`](<NEXUS_ASSET_CREDITS.md>)；Modernity 许可版本冲突及混合图集权利链仍待上游确认。
+本页配图由项目现有 `assets/notenoughitems/textures/gui/` 界面贴图裁切、缩放和编排合成，未新增手绘图标或外部图片；`interface_states.png` 为含多来源图案和本地编辑的混合图集。配图及其中第三方贴图须保留原作者署名，按适用的 **CC BY-NC-SA** 条款仅作非商业分享，标示改编并遵守相同方式共享。完整文件清单、来源链接、许可文本和发布前限制见 [`NEXUS_ASSET_CREDITS.md`](<NEXUS_ASSET_CREDITS.md>)；Modernity 许可版本冲突及混合图集权利链仍待上游确认。
 
 ---
 
