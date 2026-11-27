@@ -28,37 +28,30 @@ pwsh -File ./scripts/Install.ps1
 
 ## 一键生成发布 ZIP
 
-在源码根目录运行：
+发布打包需要带提交历史的 Git 工作区。从源码根目录运行：
 
 ```powershell
-# 只构建当前版本
-pwsh -File ./scripts/Release.ps1
-
-# 升到指定版本，再构建、测试并生成 ZIP（推荐）
-pwsh -File ./scripts/Release.ps1 -Bump <版本>
+# 写完两份更新记录后，自动升补丁版、构建、测试并生成 ZIP
+pwsh -File ./scripts/Release.ps1 -Bump patch
 
 # 源码不在游戏的 mods/ 目录下时，可指定游戏根目录：
-pwsh -File ./scripts/Release.ps1 -Bump <版本> -GameRoot 'D:\Games\Casualties Unknown'
+pwsh -File ./scripts/Release.ps1 -Bump patch -GameRoot 'D:\Games\Casualties Unknown'
+
+# 重跑已同步好版本和日志的构建（不再升版）
+pwsh -File ./scripts/Release.ps1
 ```
 
-[Release.ps1](<scripts/Release.ps1>) 复用构建流程：以 Release 配置编译并运行回归测试，全部通过后，根据 [版本配置](<src/Directory.Build.props>) 中写入 DLL 的版本生成 `dist/NotEnoughItems-<版本>.zip`。ZIP 顶层只有 `NotEnoughItems/`。脚本会打印 ZIP 的 SHA-256，并在旁边生成 `.zip.sha256` 校验文件。它不会安装 Mod 或上传文件；用同一版本重跑会替换该版本的本地产物。
+[Release.ps1](<scripts/Release.ps1>) 复用构建流程：以 Release 配置编译并运行回归测试，全部通过后，根据 [版本配置](<src/Directory.Build.props>) 中写入 DLL 的版本生成 `dist/NotEnoughItems-<版本>.zip`。ZIP 顶层只有 `NotEnoughItems/`。脚本会打印 ZIP 的 SHA-256，并在旁边生成 `.zip.sha256` 校验文件。它不会安装 Mod 或上传文件；重跑会替换该版本的本地产物。没有 Git 历史或只想试编译时，使用 [Build.ps1](<scripts/Build.ps1>)；它不执行发布门禁。
 
-### 每次升版的固定步骤
+### 每次修改都要升版并补日志
 
-先在两份更新记录的 `## 未发布` 下写好本次内容，再用一条命令升版打包：
+代码、资源、脚本、测试和文档的修改都适用。把同一次交付的改动作为一批，**在提交或交付前主动升版、补齐两份更新记录**，无需另行提醒。细则见源码树中的 [AGENTS.md](<AGENTS.md>)。
 
-1. [docs/CHANGELOG.md](<docs/CHANGELOG.md>)：在 `## 未发布` 下按「新增 / 修复 / 打包与文档」等分节写中文条目。
-2. [Nexus 更新记录](<docs/release/nexus/CHANGELOG_NEXUS.md>)：在 `## 未发布` 下写 `### English` 和 `### 中文` 条目。
-3. 运行 `pwsh -File ./scripts/Release.ps1 -Bump <版本>`；也可以写 `patch`、`minor`、`major`，由脚本计算下一个版本。
+1. 在 [项目更新记录](<docs/CHANGELOG.md>) 顶部的 `## 未发布` 下写本批变更的中文条目，可按「新增 / 修复 / 打包与文档」分节。
+2. 在 [Nexus 更新记录](<docs/release/nexus/CHANGELOG_NEXUS.md>) 顶部的 `## 未发布` 下分别写 `### English` 和 `### 中文` 条目。
+3. 提交前运行 `pwsh -File ./scripts/Release.ps1 -Bump patch`。普通修复和文档改动用 `patch`，兼容性新增功能用 `minor`，不兼容变更用 `major`；也可指定更高的 `MAJOR.MINOR.PATCH` 版本。将版本配置、两份更新记录和同步后的 [Nexus 页面字段](<docs/release/nexus/NEXUS_METADATA.md>) 与本批改动一起交付。
 
-`-Bump` 一次完成这些改动，然后才打包：
-
-- 把两份更新记录顶部的 `## 未发布` 改名为 `## <版本>`；
-- 更新 [src/Directory.Build.props](<src/Directory.Build.props>) 的 `<Version>`；
-- 更新 [Nexus 页面字段](<docs/release/nexus/NEXUS_METADATA.md>) 中的页面版本、ZIP 文件名、显示名和主文件版本；
-- 校验两份更新记录的首个标题、上述各处版本和版本配置完全一致，且没有遗留的 `## 未发布`，再构建、运行回归测试并生成 ZIP 与校验文件。
-
-任一检查不通过时脚本会停止，不生成 ZIP；不带 `-Bump` 时也只做同样的版本校验和打包，方便重跑或本地验证。
+`-Bump` 会把两份 `## 未发布` 标题改为新版本号，并同步版本配置和 Nexus 页面字段。发布脚本会在构建前拦截版本倒退、日志缺失或版本不一致。相对当前 Git `HEAD` 有已暂存、未暂存或未忽略的新增文件时，版本必须高于 `HEAD` 的版本；Git 忽略的构建产物不算改动。不带 `-Bump` 可重跑干净的已提交版本，或已升版且日志齐全的当前工作区。
 
 ## Nexus Mods 发布资料
 
