@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using CUCoreLib.Helpers;
 using CUCoreLib.Registries;
 using UnityEngine;
@@ -158,6 +160,68 @@ internal static class NeiActions
     internal static Vector2 SpawnPosition(Vector2 player, int index, bool vanilla) => vanilla
         ? player : player + new Vector2((index % 7 - 3) * .10f, .4f);
 
+    // A chain bill measures liquids in mL, not bottles, and can contain unresolved
+    // requirements. Only concrete solid shortages can use the ordinary give path.
+    internal static string? BuildMissingMaterialBatch(Catalog catalog, BookmarkChainBalanceResult plan,
+        out List<MissingMaterialSpawn> batch) => MissingMaterialSpawnPolicy.Build(catalog, plan, MaxGiveAmount,
+            (key, args) => NeiText.Get(key, Plugin.Instance?.Chinese == true, args), out batch);
+
+    internal static string SpawnMissingMaterials(Catalog catalog, Func<Body, BookmarkChainBalanceResult> calculate)
+    {
+        var blocked = GetContext(out var camera, out var session);
+        if (blocked != null) return blocked;
+        if (camera.dragItem) return Text("actions.error.finish_drag");
+
+        try
+        {
+            var error = BuildMissingMaterialBatch(catalog, calculate(camera.body), out var batch);
+            if (error != null) return error;
+            if (session.Access != CheatAccess.Offline)
+            {
+                var command = CheatPermission.GiveBatchCommand(batch.Select(row => (row.Item.Id, row.Amount)), MaxGiveAmount);
+                if (command == null) return Text("actions.error.invalid_multiplayer_item");
+                foreach (var row in batch)
+                    if (!IsResourceItem(row.Item.Id)) return Text("chain.spawn.unsupported_item", row.Item.DisplayName);
+                return Submit(session, "give", command, out _) ?? Text("item.give_submitted");
+            }
+
+            // Resolve every prefab before creating anything. A factory can still fail
+            // at runtime; report what was delivered and stop rather than retrying.
+            var prepared = new List<(CatalogItem Item, int Amount, string PrefabId, bool Custom)>();
+            foreach (var row in batch)
+            {
+                error = PrepareOfflineGive(row.Item, out var prefabId, out bool custom);
+                if (error != null) return error;
+                prepared.Add((row.Item, row.Amount, prefabId, custom));
+            }
+            int delivered = 0, dropped = 0;
+            foreach (var (item, amount, prefabId, custom) in prepared)
+            {
+                error = GiveOffline(camera, item, amount, prefabId, custom, out int given, out int left);
+                delivered += given;
+                dropped += left;
+                if (error != null)
+                {
+                    Plugin.Instance?.RefreshBookmarkStock();
+                    return Text("chain.spawn.partial", delivered, dropped, error);
+                }
+            }
+            Plugin.Instance?.RefreshBookmarkStock();
+            return Text("chain.spawn.complete", delivered, dropped);
+        }
+        catch (Exception error)
+        {
+            LogFailure("Spawn missing materials", error);
+            return Text("chain.spawn.failed");
+        }
+    }
+
+    private static bool IsResourceItem(string id)
+    {
+        var prefab = Resources.Load<GameObject>(id);
+        return prefab && prefab.TryGetComponent<Item>(out _);
+    }
+
     /// <summary>Gives registered items or full temporary bottles to the local player. Returns null on success.</summary>
     private static string? Give(CatalogItem entry, int amount, out int dropped, out bool submitted)
     {
@@ -180,31 +244,48 @@ internal static class NeiActions
                 return Text("actions.error.together_liquid");
             var command = MultiplayerGiveCommand(itemId, amount);
             if (command == null) return Text("actions.error.invalid_multiplayer_item");
-            var prefab = Resources.Load<GameObject>(itemId);
-            if (!prefab || !prefab.TryGetComponent<Item>(out _))
-                return Text("actions.error.together_resource_items");
+            if (!IsResourceItem(itemId)) return Text("actions.error.together_resource_items");
             return Submit(session, "give", command, out submitted);
         }
-        var world = WorldGeneration.world;
-        var body = camera.body;
-        GameObject? instance = null;
-        int delivered = 0;
+        var error = PrepareOfflineGive(entry, out var prefabId, out bool custom);
+        if (error != null) return error;
+        return GiveOffline(camera, entry, amount, prefabId, custom, out _, out dropped);
+    }
+
+    private static string? PrepareOfflineGive(CatalogItem entry, out string prefabId, out bool custom)
+    {
+        bool liquid = entry.IsLiquid;
+        prefabId = liquid ? TemporaryBottleId : entry.Id;
+        custom = false;
         try
         {
-            // The catalog distinguishes item and liquid IDs, but the game registries decide what can be spawned.
-            bool liquid = entry.IsLiquid;
-            if (liquid && (Liquids.Registry == null || !Liquids.Registry.TryGetValue(itemId, out var type) || type == null))
-                return Text("actions.error.liquid_unregistered", itemId);
-
-            string prefabId = liquid ? TemporaryBottleId : itemId;
+            // The game registries decide what can be spawned, not the catalog alone.
+            if (liquid && (Liquids.Registry == null || !Liquids.Registry.TryGetValue(entry.Id, out var type) || type == null))
+                return Text("actions.error.liquid_unregistered", entry.Id);
             var prefab = Resources.Load<GameObject>(prefabId);
-            bool custom = !liquid && !prefab && ItemRegistry.TryGetCustomInfo(itemId, out _);
-            if (custom) prefab = CustomInstantiate.ResolvePrefab(itemId);
+            custom = !liquid && !prefab && ItemRegistry.TryGetCustomInfo(entry.Id, out _);
+            if (custom) prefab = CustomInstantiate.ResolvePrefab(entry.Id);
             if (liquid && (!prefab || !prefab.TryGetComponent<WaterContainerItem>(out _)))
                 return Text("actions.error.temporary_bottle_unavailable");
-            if (!prefab || !prefab.TryGetComponent<Item>(out _))
-                return Text("actions.error.prefab_missing", prefabId);
+            return !prefab || !prefab.TryGetComponent<Item>(out _) ? Text("actions.error.prefab_missing", prefabId) : null;
+        }
+        catch (Exception error)
+        {
+            LogFailure("Resolve give prefab", error);
+            return Text("actions.error.prefab_missing", prefabId);
+        }
+    }
 
+    private static string? GiveOffline(PlayerCamera camera, CatalogItem entry, int amount, string prefabId, bool custom,
+        out int delivered, out int dropped)
+    {
+        var world = WorldGeneration.world;
+        var body = camera.body;
+        string itemId = entry.Id;
+        GameObject? instance = null;
+        delivered = dropped = 0;
+        try
+        {
             // Follow `spawn … player` in single-player without opening or writing to the console.
             bool vanilla = UsesVanillaPickup(Plugin.Instance?.ItemSpawnMode ?? SpawnMode.Nei, entry.Kind);
             Vector2 playerPosition = vanilla ? (Vector2)body.transform.position : default;
@@ -218,7 +299,7 @@ internal static class NeiActions
                 if (!instance || !instance.TryGetComponent<Item>(out var item))
                     throw new InvalidOperationException("The item factory did not return an item.");
 
-                if (liquid)
+                if (entry.IsLiquid)
                 {
                     // Fill before checking carry capacity so stowing sees the full bottle's weight.
                     if (!instance.TryGetComponent<WaterContainerItem>(out var bottle))

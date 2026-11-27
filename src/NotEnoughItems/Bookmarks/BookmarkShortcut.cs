@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace NotEnoughItems;
 
-internal enum BookmarkShortcut { None, Tree, OrderTree, OrderFavorite, Pull, PullMissing, Craft, CraftMissing, Share, ShareRecipe, Copy, Paste, OpenNative }
+internal enum BookmarkShortcut { None, Tree, OrderTree, OrderFavorite, Pull, PullMissing, Craft, CraftMissing, SpawnMissing, Share, ShareRecipe, Copy, Paste, OpenNative }
 internal enum BookmarkBracketClick { None, ToggleLayout, ToggleChain, ToggleCollapse, Ungroup }
 internal enum BookmarkSlotClick { None, Default, Split, ExpandLane, ToggleRecipeCollapse }
 
@@ -43,6 +43,7 @@ internal static class BookmarkKeys
         (KeyCode.V, false, true) => BookmarkShortcut.PullMissing,
         (KeyCode.C, false, true) => BookmarkShortcut.Craft,
         (KeyCode.C, true, true) => BookmarkShortcut.CraftMissing,
+        (KeyCode.M, true, true) => BookmarkShortcut.SpawnMissing,
         (KeyCode.L, true, false) => BookmarkShortcut.Share,
         (KeyCode.L, true, true) => BookmarkShortcut.ShareRecipe,
         (KeyCode.C, true, false) => BookmarkShortcut.Copy,

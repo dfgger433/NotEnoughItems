@@ -34,6 +34,7 @@ internal static class BookmarkParityTests
             GroupBalanceReusesProductionAndTools,
             GroupBalanceUsesCarriedIntermediateStock,
             GroupBalanceKeepsConditionAndTypeBoundaries,
+            RetainedToolsCountOneQualifyingCopy,
             VariantSelectionKeepsSlotsAndTypes,
             ChainRequirementListsAndSwitchesAlternatives,
             LiquidBookmarkPreviewsRotateWithoutSavingOrChangingChainAllocation,
@@ -46,6 +47,7 @@ internal static class BookmarkParityTests
             ProductionKeepsVariantsOfDuplicateRecipes,
             ProductionDoesNotDoubleCountStock,
             CircularProductionReportsCycle,
+            MissingMaterialSpawnPolicyIsBoundedAndConservative,
 #endif
         ];
 
@@ -439,10 +441,15 @@ internal static class BookmarkParityTests
         Amount(plan, "Surplus", "item:slag", 3);
         Amount(plan, "Inputs", "item:ore", 4);
         Amount(plan, "Missing", "item:ore", 3);
-        Amount(plan, "Inputs", "item:tool", 2);
-        Amount(plan, "Missing", "item:tool", 1);
+        Amount(plan, "Inputs", "item:tool", 1);
+        Check(!Rows(plan, "Missing").Any(row => Property<string>(row, "ItemId") == "item:tool"),
+            "One carried retained tool satisfies every slot and batch of the same recipe.");
         Check(Property<bool>(Material(plan, "Inputs", "item:tool"), "IsCatalyst") &&
-            Rows(plan, "Inputs").Length == 2, "Two retained tool slots require separate copies, reusable across batches and other steps.");
+            Rows(plan, "Inputs").Length == 2, "Retained tools stay a separate summary row from consumed materials.");
+        var toolSlots = Rows(steps[1], "Inputs").Where(row => Property<string>(row, "ItemId") == "item:tool").ToArray();
+        Check(toolSlots.Length == 2 && toolSlots.All(row => Property<double>(row, "Quantity") == 1 &&
+            Property<double>(row, "AvailableQuantity") == 1 && Property<double>(row, "NetQuantity") == 0),
+            "Both tool slots show the one retained copy supplying them.");
         Amount(steps[1], "Inputs", "item:ingot", 4);
         Amount(steps[1], "Inputs", "item:ingot", 0, "NetQuantity");
         Amount(steps[0], "Outputs", "item:slag", 4);
@@ -496,6 +503,39 @@ internal static class BookmarkParityTests
         Amount(plan, "Results", "liquid:metal", 1);
         Amount(plan, "Results", "item:plate", 1);
         Check(Rows(plan, "Surplus").Length == 0, "Incompatible condition or type leaves both producers' own results intact.");
+    }
+
+    private static void RetainedToolsCountOneQualifyingCopy()
+    {
+        const string quality = "parity-hammering";
+        const string hammer = "parity-hammer";
+        const string mallet = "parity-mallet";
+        var catalog = new Catalog();
+        catalog.RegisterItem(new CatalogItem(hammer, "Hammer", qualities: [new CraftingQuality(quality, 4)]));
+        catalog.RegisterItem(new CatalogItem(mallet, "Mallet", qualities: [new CraftingQuality(quality, 4)]));
+        var craft = Recipe("retained-tool", [
+            new RecipeIngredient("", 4, isCatalyst: true, qualityId: quality),
+            new RecipeIngredient("", 4, isCatalyst: true, qualityId: quality)],
+            [new RecipeOutput("retained-result")]);
+        var entries = Entries(BalanceEntry("item:retained-result", 2, craft));
+
+        object covered = Calculate(catalog, entries, new Dictionary<string, int> { [hammer] = 1 });
+
+        var tool = Material(covered, "Inputs", "item:" + hammer);
+        Check(Property<bool>(tool, "IsCatalyst") && Property<double>(tool, "Quantity") == 1 &&
+            Property<double>(tool, "AvailableQuantity") == 1,
+            "A tool's quality amount is a threshold for one qualifying copy, not a number of items.");
+        Check(!Rows(covered, "Missing").Any(row => Property<string>(row, "ItemId") == "item:" + hammer),
+            "A carried tool must not also appear in the shortage list.");
+        var toolSlots = Rows(Rows(covered, "Steps").Single(), "Inputs")
+            .Where(row => Property<string>(row, "ItemId") == "item:" + hammer).ToArray();
+        Check(toolSlots.Length == 2 && toolSlots.All(row => Property<double>(row, "AvailableQuantity") == 1 &&
+            Property<double>(row, "NetQuantity") == 0), "Every slot of a step reuses the same retained copy.");
+
+        object empty = Calculate(catalog, entries, new Dictionary<string, int>());
+        var requirement = Rows(empty, "Missing").Single();
+        Check(Property<bool>(requirement, "IsRequirement") && Property<double>(requirement, "Quantity") == 1,
+            "Two slots of one unselected retained tool ask for one copy, not its quality amount.");
     }
 
     private static void VariantSelectionKeepsSlotsAndTypes()
@@ -950,6 +990,73 @@ internal static class BookmarkParityTests
         var withPlainBookmark = Entries(BalanceEntry("item:assembly", 1, assembly), BalanceEntry("item:part", 5));
         object production = PlanCraft(catalog, withPlainBookmark, 0, topUp: false, new Dictionary<string, int> { ["part"] = 2 });
         Amount(production, "Missing", "item:part", 3);
+    }
+
+    private static void MissingMaterialSpawnPolicyIsBoundedAndConservative()
+    {
+        const string oreId = "parity-spawn-ore";
+        var catalog = new Catalog();
+        catalog.RegisterItem(new CatalogItem(oreId, "Spawn ore"));
+        object Plan(ProviderRecipe recipe) => PlanCraft(catalog,
+            Entries(BalanceEntry("item:" + recipe.Outputs[0].ItemId, 1, recipe)), 0, topUp: false,
+            new Dictionary<string, int>());
+        string? CheckPlan(object plan, int maximum, out (string Id, int Amount)[] batch)
+        {
+            var policy = PluginType("MissingMaterialSpawnPolicy");
+            var method = policy.GetMethod("Build", BindingFlags.Static | BindingFlags.NonPublic)!;
+            object?[] args = [catalog, plan, maximum,
+                (Func<string, object[], string>)((key, _) => key), null];
+            string? error = (string?)method.Invoke(null, args);
+            batch = ((IEnumerable)args[4]!).Cast<object>().Select(row =>
+            {
+                var type = row.GetType();
+                var item = (CatalogItem)type.GetProperty("Item", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(row)!;
+                int amount = (int)type.GetProperty("Amount", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(row)!;
+                return (Id: item.Id, Amount: amount);
+            }).ToArray();
+            return error;
+        }
+
+        var target = Recipe("spawn-target", [new RecipeIngredient(oreId, 2)], [new RecipeOutput("spawn-result")]);
+        var plan = Plan(target);
+        Check(CheckPlan(plan, 64, out var batch) == null && batch.SequenceEqual(new[] { (oreId, 2) }),
+            "A concrete normally-conditioned shortage becomes one bounded spawn entry.");
+        Check(CheckPlan(plan, 1, out batch) == "chain.spawn.limit" && batch.Length == 0,
+            "A shortage over the action cap is rejected atomically.");
+
+        var liquid = Recipe("spawn-liquid-target", [new RecipeIngredient("spawn-fluid", 2, isLiquid: true)],
+            [new RecipeOutput("spawn-liquid-result")]);
+        Check(CheckPlan(Plan(liquid), 64, out batch) == "chain.spawn.solid_only" && batch.Length == 0,
+            "Liquid milliliters are rejected instead of being interpreted as bottle counts.");
+
+        var generic = Recipe("spawn-generic-target", [new RecipeIngredient("", requiredTag: "unselected-tag")],
+            [new RecipeOutput("spawn-generic-result")]);
+        Check(CheckPlan(Plan(generic), 64, out batch) == "chain.spawn.choose_material" && batch.Length == 0,
+            "Unresolved generic requirements are not guessed or partially spawned.");
+
+        var damagedOnly = new RecipeIngredient(oreId, 1, minimumCondition: .5f);
+        typeof(RecipeIngredient).GetProperty("NoMaxCondition", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.SetValue(damagedOnly, true);
+        var damaged = Recipe("spawn-damaged-target", [damagedOnly], [new RecipeOutput("spawn-damaged-result")]);
+        Check(CheckPlan(Plan(damaged), 64, out batch) == "chain.spawn.unsupported_item" && batch.Length == 0,
+            "A spawned full-condition item cannot satisfy a damaged-only requirement.");
+
+        var tool = Recipe("spawn-tool-target", [new RecipeIngredient(oreId, 1, isCatalyst: true)],
+            [new RecipeOutput("spawn-tool-result")]);
+        var toolPlan = Plan(tool);
+        Check(Rows(toolPlan, "Missing").Any(row => Property<string>(row, "ItemId") == "item:" + oreId),
+            "A missing retained tool is reported as a spawnable external shortage.");
+        Check(CheckPlan(toolPlan, 64, out batch) == null && batch.SequenceEqual(new[] { (oreId, 1) }),
+            "A concrete retained tool shortage can be included in a bounded spawn batch.");
+
+        const string hammerId = "spawn-quality-hammer";
+        catalog.RegisterItem(new CatalogItem(hammerId, "Spawn hammer", qualities: [new CraftingQuality("hammering", 4)]));
+        var qualityTool = Recipe("spawn-quality-tool-target",
+            [new RecipeIngredient(hammerId, 4, isCatalyst: true)],
+            [new RecipeOutput("spawn-quality-tool-result")]);
+        var qualityPlan = Plan(qualityTool);
+        Amount(qualityPlan, "Missing", "item:" + hammerId, 1);
+        Check(CheckPlan(qualityPlan, 64, out batch) == null && batch.SequenceEqual(new[] { (hammerId, 1) }),
+            "A spawned retained tool is one copy; its quality amount is not a quantity of items.");
     }
 
     private static void CircularProductionReportsCycle()

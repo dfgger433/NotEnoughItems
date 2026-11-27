@@ -113,6 +113,12 @@ internal sealed partial class NeiWindow
             y += 24;
         }
 
+        if (_treeView == TreeView.Bill && !_plugin.IsCrafting)
+        {
+            NeiSkin.Label(new Rect(x, y, w, 18), L("chain.spawn.hotkey_hint"), muted: true);
+            y += 20;
+        }
+
         var viewport = new Rect(x, y, w, panel.yMax - y - 7);
         if (viewport.height <= 0) return;
         if (viewport.height > 105)

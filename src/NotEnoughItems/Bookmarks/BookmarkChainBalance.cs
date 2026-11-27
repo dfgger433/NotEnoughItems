@@ -628,7 +628,9 @@ internal static class BookmarkChainBalance
             }
             foreach (var group in node.Inputs.Where(input => input.Ingredient.IsCatalyst).GroupBy(input => input.Key, Ids))
             {
-                _retained[group.Key] = Math.Max(At(_retained, group.Key), group.Sum(input => input.PerBatch));
+                // A retained tool is one physical copy, no matter how large its quality
+                // requirement or how many slots of this recipe name it.
+                _retained[group.Key] = Math.Max(At(_retained, group.Key), 1d);
                 GrowProducers(group.First());
             }
             _active.Remove(node);
@@ -710,30 +712,23 @@ internal static class BookmarkChainBalance
                 input.Amount = input.CreateAmount(gross, external, available + internalSupply);
                 Accumulate(input, external, available);
             }
-            // The same tools can be reused across steps, but several slots of one recipe may need
-            // distinct copies. Use the largest remaining requirement, rather than summing all batches.
+            // Retained tools are reused by every slot and every batch of a recipe, matching the
+            // native crafting check. A quality amount is a threshold one qualifying copy must
+            // meet, not a number of items, so count one copy per tool key instead of summing
+            // slots or multiplying quality amounts.
             foreach (var group in active.SelectMany(node => node.Inputs).Where(input => input.Ingredient.IsCatalyst).GroupBy(input => (input.Owner, input.Key)))
             {
-                double fromInitial = At(initial, group.Key.Key) + At(carried, group.Key.Key);
-                double prior = 0;
-                foreach (var input in group)
-                {
-                    double gross = input.PerBatch;
-                    double stockFirst = (_craftMode || _useCarriedFirst.Contains(input.Key)) ? Math.Min(fromInitial, gross) : 0;
-                    double internalSupply = TakeProduction(input, gross - stockFirst, consume: false, skip: prior);
-                    prior += internalSupply;
-                    double external = gross - internalSupply;
-                    double available = Math.Min(fromInitial, external);
-                    fromInitial -= available;
-                    input.Amount = input.CreateAmount(gross, external, available + internalSupply);
-                }
                 var first = group.First();
+                double stock = At(initial, first.Key) + At(carried, first.Key);
+                // A retained copy is never consumed, so ask for production only when no real
+                // copy exists; taking it once keeps the producer link and its batches correct.
+                bool available = stock > Epsilon || TakeProduction(first, 1, consume: false) > Epsilon;
+                foreach (var input in group)
+                    input.Amount = input.CreateAmount(1, available ? 0 : 1, available ? 1 : 0);
                 var key = (first.Key, true);
                 if (!required.TryGetValue(key, out var total)) required[key] = total = new Total(first);
-                double externalTools = group.Sum(input => input.Amount!.NetQuantity);
-                double missingTools = group.Sum(input => input.Amount!.Quantity - input.Amount.AvailableQuantity);
-                total.Quantity = Math.Max(total.Quantity, externalTools);
-                total.Missing = Math.Max(total.Missing, missingTools);
+                total.Quantity = Math.Max(total.Quantity, 1);
+                if (!available) total.Missing = Math.Max(total.Missing, 1);
             }
 
             var results = OutputAmounts(active.Where(node => node.IsResult));

@@ -74,6 +74,8 @@ static int RunTests()
                 BookmarkKeys.Resolve(KeyCode.C, false, false) == BookmarkShortcut.None &&
                 BookmarkKeys.Resolve(KeyCode.V, true, false) == BookmarkShortcut.Paste &&
                 BookmarkKeys.Resolve(KeyCode.V, false, true) == BookmarkShortcut.PullMissing &&
+                BookmarkKeys.Resolve(KeyCode.M, true, true) == BookmarkShortcut.SpawnMissing &&
+                BookmarkKeys.Resolve(KeyCode.M, false, false) == BookmarkShortcut.None &&
                 BookmarkKeys.Resolve(KeyCode.S, false, true) == BookmarkShortcut.OpenNative, "Only explicit crafting chords can start an order.");
         }),
         ("bookmark shortcut help follows chain, page, crafting and rebound-key contexts", BookmarkShortcutHelp),
@@ -498,7 +500,8 @@ static void BookmarkShortcutHelp()
     var active = BookmarkHelp.Rows(page: false, hasEntries: true, chain: true, crafting: false, chinese: false, bookmarkKey: "Q").Split('\n');
     Check(ordinary.Contains("Right click: enable chain") && !ordinary.Any(line => line.StartsWith("T:")), "Only an enabled chain opens a tree.");
     Check(active.Contains("Right click: disable chain") && active.Contains("T: inspect the crafting tree") &&
-        active.Contains("Hold Shift: pin totals and show steps"), "Enabled chains retain shortcut help alongside their totals view.");
+        active.Contains("Hold Shift: pin totals and show steps") &&
+        active.Contains("Ctrl+Shift+M: spawn missing materials"), "Enabled chains retain shortcut help alongside their totals view.");
     Check(active.All(line => line.Count(character => character == ':') == 1) &&
         active.Contains("Alt+left click: ungroup without deleting") && active.Contains("Ctrl+right click: ungroup without deleting"),
         "Each gesture has a separate display row, even when two gestures do the same thing.");
@@ -508,7 +511,8 @@ static void BookmarkShortcutHelp()
     Check(page.Contains("右键：关闭未分组合成链") && page.Contains("Ctrl＋右键：切换整页合成链") &&
         page.Contains("Ctrl＋C：复制整页"), "Do not confuse ungrouped chain actions with entire-page actions.");
     Check(page.Contains("Shift＋C：制作目标") && page.Contains("Ctrl＋Shift＋C：补齐目标数量") &&
-        !page.Any(line => line.StartsWith("T：") || line.Contains("删除")), "Crafting uses production shortcuts; unbound actions are hidden.");
+        !page.Any(line => line.StartsWith("T：") || line.Contains("删除") || line.Contains("刷取缺失原料")),
+        "Crafting uses production shortcuts; unbound actions are hidden and spawning stays out of page and crafting help.");
     var empty = BookmarkHelp.Rows(page: true, hasEntries: false, chain: true, crafting: false, chinese: false, bookmarkKey: "A");
     Check(empty == "Left click: switch grid / queue\nCtrl+V: paste into this page", "Empty pages still allow paste, but no chain actions.");
 }
@@ -721,6 +725,11 @@ static void MultiplayerGiveCommand()
         "Only quantities from 1 to 64 are valid.");
     Check(CheatPermission.GiveCommand("rope", 64, 64)?.Split(' ').Skip(2).SequenceEqual(Enumerable.Repeat("rope", 64)) == true,
         "A full batch sends all 64 items to the caller.");
+    Check(CheatPermission.GiveBatchCommand(new[] { ("rope", 3), ("cloth", 2) }, 64) ==
+        "give @m rope rope rope cloth cloth", "A batch command contains only the requested caller-bound resource IDs.");
+    Check(CheatPermission.GiveBatchCommand(new[] { ("rope", 64), ("cloth", 1) }, 64) == null &&
+        CheatPermission.GiveBatchCommand(new[] { ("rope 1", 1) }, 64) == null,
+        "A mixed batch cannot exceed its aggregate cap or inject command tokens.");
 }
 
 #if RECIPE_TESTS

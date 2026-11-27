@@ -40,6 +40,7 @@ internal static class BookmarkHelp
                 {
                     Add(page ? "bookmark.help.page.inspect_ungrouped" : "bookmark.help.group.inspect_tree");
                     Add("bookmark.help.pin_totals");
+                    if (!page) Add("bookmark.help.spawn_missing");
                 }
                 else
                 {

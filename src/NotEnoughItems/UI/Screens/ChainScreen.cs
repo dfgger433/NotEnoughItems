@@ -30,7 +30,7 @@ internal sealed partial class NeiWindow
     private Dictionary<string, int> _bookmarkStock = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<(string Id, float Condition)> _carriedBookmarkTools = new();
 
-    private void RefreshBookmarkStock()
+    internal void RefreshBookmarkStock()
     {
         RefreshCarriedBookmarkTools();
         if (!ShowLeft || !_book.Page(_group).Any(entry => _book.IsChainEnabled(_group, entry.Group))) return;
@@ -357,7 +357,9 @@ internal sealed partial class NeiWindow
             var items = (entry == null ? amounts.GroupBy(amount => (amount.ItemId, amount.IsCatalyst)).Select(row =>
             {
                 var a = row.First();
-                return new BookmarkChainBalanceAmount(a.ItemId, row.Sum(m => m.Quantity), 0, 0, a.IsLiquid, a.IsRequirement, a.Ingredient);
+                // Retained tools are reused across independent lanes; one copy covers every group.
+                double quantity = a.IsCatalyst ? row.Max(m => m.Quantity) : row.Sum(m => m.Quantity);
+                return new BookmarkChainBalanceAmount(a.ItemId, quantity, 0, 0, a.IsLiquid, a.IsRequirement, a.Ingredient);
             }) : amounts).ToArray();
             if (items.Length > 0) blocks.Add((label, items, tint, entry));
         }

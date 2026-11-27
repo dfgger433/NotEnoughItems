@@ -173,6 +173,8 @@ public sealed class Plugin : BaseUnityPlugin
     /// <summary>Retries the catalog scan from the settings diagnostics page.</summary>
     internal void RetryCatalogRefresh() => _window.RetryCatalogRefresh(Logger);
 
+    internal void RefreshBookmarkStock() => _window.RefreshBookmarkStock();
+
     internal static ConfigEntry<SpawnMode> BindSpawnMode(ConfigFile config) => config.Bind("NotEnoughItems", "SpawnMode",
         SpawnMode.Nei, "Single-player cheat delivery. Nei stows without replacing gear; SpawnToPlayer uses vanilla automatic pickup.");
 
@@ -412,7 +414,7 @@ public sealed class Plugin : BaseUnityPlugin
         CaptureKey();
     }
 
-    private static readonly KeyCode[] BookmarkActionKeys = { KeyCode.T, KeyCode.F, KeyCode.V, KeyCode.C, KeyCode.L, KeyCode.S };
+    private static readonly KeyCode[] BookmarkActionKeys = { KeyCode.T, KeyCode.F, KeyCode.V, KeyCode.C, KeyCode.M, KeyCode.L, KeyCode.S };
 
     private bool TryBookmarkKey(Vector2 mouse, bool control, bool shift)
     {
@@ -420,7 +422,7 @@ public sealed class Plugin : BaseUnityPlugin
         {
             if (!Input.GetKeyDown(key)) continue;
             var action = BookmarkKeys.Resolve(key, control, shift);
-            if (IsCrafting && action is BookmarkShortcut.Tree or BookmarkShortcut.OrderTree or BookmarkShortcut.OrderFavorite or BookmarkShortcut.Pull or BookmarkShortcut.PullMissing) continue;
+            if (IsCrafting && action is BookmarkShortcut.Tree or BookmarkShortcut.OrderTree or BookmarkShortcut.OrderFavorite or BookmarkShortcut.Pull or BookmarkShortcut.PullMissing or BookmarkShortcut.SpawnMissing) continue;
             bool handled = action switch
             {
                 BookmarkShortcut.Tree => _window.OpenBookmarkTree(mouse),
@@ -428,6 +430,7 @@ public sealed class Plugin : BaseUnityPlugin
                 BookmarkShortcut.OrderFavorite => _window.OrderFavoriteAt(mouse),
                 BookmarkShortcut.Pull or BookmarkShortcut.PullMissing => _window.HandleBookmarkPull(mouse, shift),
                 BookmarkShortcut.Craft or BookmarkShortcut.CraftMissing => _window.HandleBookmarkCraft(mouse, control),
+                BookmarkShortcut.SpawnMissing => _window.HandleBookmarkSpawnMissing(mouse),
                 BookmarkShortcut.Share or BookmarkShortcut.ShareRecipe => _window.ShareBookmark(mouse, shift),
                 BookmarkShortcut.Copy => _window.HandleBookmarkClipboard(mouse, copy: true),
                 BookmarkShortcut.Paste => _window.HandleBookmarkClipboard(mouse, copy: false),
