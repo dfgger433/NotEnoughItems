@@ -1,5 +1,13 @@
 # 更新记录
 
+## 0.1.35
+
+### 打包与文档
+
+- 发布流程固化：`scripts/Release.ps1` 新增 `-Bump <版本>`（也接受 `patch`、`minor`、`major`），一次改写两份更新记录的 `## 未发布` 标题、[版本配置](<../src/Directory.Build.props>) 和 [Nexus 页面字段](<release/nexus/NEXUS_METADATA.md>) 中的版本号，并在打包前校验各处版本一致；版本不一致或仍留有未命名记录时停止，不生成 ZIP。
+- [README](<../README.md>) 与 [Nexus 发布指引](<release/nexus/README.md>) 写明每次升版的固定步骤：先补 `## 未发布` 条目，再用 `Release.ps1 -Bump` 一键升版打包。
+- 本次没有游戏内行为变化；0.1.35 的改动集中在发布脚本与发布文档。
+
 ## 0.1.34
 
 ### 新增

@@ -4,6 +4,16 @@
 
 ---
 
+## 0.1.35
+
+### English
+- **Release tooling:** `scripts/Release.ps1 -Bump <version>` now names the release in both changelogs, updates the package version and Nexus metadata in one step, and refuses to package when any version reference is stale or a `## 未发布` section is still pending.
+- **Documentation:** The per-version steps are written down: add entries under `## 未发布`, then run the bump command to build the versioned ZIP and its `.zip.sha256`. No in-game behavior changed in this update.
+
+### 中文
+- **发布工具：** `scripts/Release.ps1 -Bump <版本>` 现在会改写两份更新记录的标题、同步安装包版本与 Nexus 页面字段；任何版本引用不一致或仍留有 `## 未发布` 时都拒绝打包。
+- **文档：** 每次升版的步骤已写入发布文档：先在 `## 未发布` 下补条目，再运行升版命令生成带版本号的 ZIP 与 `.zip.sha256`。本次没有游戏内行为变化。
+
 ## 0.1.34
 
 ### English

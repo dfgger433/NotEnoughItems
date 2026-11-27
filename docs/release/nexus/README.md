@@ -51,5 +51,5 @@ python generate_nexus_assets.py --extract-only --game-data '..\..\CasualtiesUnkn
 
 1. **核对公开分发权限**：按[第三方鸣谢与许可](<../../THIRD_PARTY_NOTICES.md>)与[配图素材来源](<NEXUS_ASSET_CREDITS.md>)核对混合图集、Modernity 许可版本差异和应随包提供的源码／署名。未核清前只整理本地草稿，不公开上传。
 2. **填写页面与依赖**：按[页面字段表](<NEXUS_METADATA.md>)填写标题、短简介、分类、标签和权限。将 **BepInEx 5 (Mono)** 列为必需外部依赖，**CUCoreLib 1.1+** 列为必需站内依赖，其余列为可选。粘贴 [BBCode 描述](<NEXUS_DESCRIPTION_BBCODE.txt>) 后，在页面预览中检查排版和披露信息。
-3. **生成并核对 Main Files**：从源码根目录运行 `pwsh -File ./scripts/Release.ps1`。构建和回归测试通过后，脚本会生成 `dist/NotEnoughItems-<版本>.zip` 和配套 `.zip.sha256`，并打印 SHA-256。打开 ZIP，确认顶层只有 `NotEnoughItems/`，其中有 `NotEnoughItems.dll`、`LICENSE`、`COPYING` 和本清单列出的 `docs/release/nexus/` 文件。按[页面字段表](<NEXUS_METADATA.md>)设置主文件版本，并粘贴[更新记录](<CHANGELOG_NEXUS.md>)中同版本的条目。
+3. **升版并核对 Main Files**：先在[更新记录](<../../CHANGELOG.md>)与[本目录更新记录](<CHANGELOG_NEXUS.md>)顶部的 `## 未发布` 下写好本次内容，再从源码根目录运行 `pwsh -File ./scripts/Release.ps1 -Bump <版本>`。脚本会把 `## 未发布` 改名为版本号，同步[页面字段表](<NEXUS_METADATA.md>)中的版本、ZIP 名和显示名，校验各处版本一致后构建、运行回归测试，并生成 `dist/NotEnoughItems-<版本>.zip` 和配套 `.zip.sha256`（并打印 SHA-256）。打开 ZIP，确认顶层只有 `NotEnoughItems/`，其中有 `NotEnoughItems.dll`、`LICENSE`、`COPYING` 和本清单列出的 `docs/release/nexus/` 文件。按[页面字段表](<NEXUS_METADATA.md>)设置主文件版本，并粘贴[更新记录](<CHANGELOG_NEXUS.md>)中同版本的条目。
 4. **准备 Media / Images**：从源码树取用上方两张发布图，按[配图素材来源](<NEXUS_ASSET_CREDITS.md>)署名，并标注为离线界面示意图。确认许可后再上传。

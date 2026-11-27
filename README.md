@@ -31,12 +31,34 @@ pwsh -File ./scripts/Install.ps1
 在源码根目录运行：
 
 ```powershell
+# 只构建当前版本
 pwsh -File ./scripts/Release.ps1
+
+# 升到指定版本，再构建、测试并生成 ZIP（推荐）
+pwsh -File ./scripts/Release.ps1 -Bump <版本>
+
 # 源码不在游戏的 mods/ 目录下时，可指定游戏根目录：
-pwsh -File ./scripts/Release.ps1 -GameRoot 'D:\Games\Casualties Unknown'
+pwsh -File ./scripts/Release.ps1 -Bump <版本> -GameRoot 'D:\Games\Casualties Unknown'
 ```
 
 [Release.ps1](<scripts/Release.ps1>) 复用构建流程：以 Release 配置编译并运行回归测试，全部通过后，根据 [版本配置](<src/Directory.Build.props>) 中写入 DLL 的版本生成 `dist/NotEnoughItems-<版本>.zip`。ZIP 顶层只有 `NotEnoughItems/`。脚本会打印 ZIP 的 SHA-256，并在旁边生成 `.zip.sha256` 校验文件。它不会安装 Mod 或上传文件；用同一版本重跑会替换该版本的本地产物。
+
+### 每次升版的固定步骤
+
+先在两份更新记录的 `## 未发布` 下写好本次内容，再用一条命令升版打包：
+
+1. [docs/CHANGELOG.md](<docs/CHANGELOG.md>)：在 `## 未发布` 下按「新增 / 修复 / 打包与文档」等分节写中文条目。
+2. [Nexus 更新记录](<docs/release/nexus/CHANGELOG_NEXUS.md>)：在 `## 未发布` 下写 `### English` 和 `### 中文` 条目。
+3. 运行 `pwsh -File ./scripts/Release.ps1 -Bump <版本>`；也可以写 `patch`、`minor`、`major`，由脚本计算下一个版本。
+
+`-Bump` 一次完成这些改动，然后才打包：
+
+- 把两份更新记录顶部的 `## 未发布` 改名为 `## <版本>`；
+- 更新 [src/Directory.Build.props](<src/Directory.Build.props>) 的 `<Version>`；
+- 更新 [Nexus 页面字段](<docs/release/nexus/NEXUS_METADATA.md>) 中的页面版本、ZIP 文件名、显示名和主文件版本；
+- 校验两份更新记录的首个标题、上述各处版本和版本配置完全一致，且没有遗留的 `## 未发布`，再构建、运行回归测试并生成 ZIP 与校验文件。
+
+任一检查不通过时脚本会停止，不生成 ZIP；不带 `-Bump` 时也只做同样的版本校验和打包，方便重跑或本地验证。
 
 ## Nexus Mods 发布资料
 
