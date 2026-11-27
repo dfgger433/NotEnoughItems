@@ -4,6 +4,20 @@
 
 ---
 
+## 0.1.34
+
+### English
+- **Catalog ordering:** The item catalog now lists vanilla items first, then each mod's items as one continuous block sorted by the mod's display name. Names ignore case and surrounding spaces, and consecutive digits are compared numerically (so `A2` comes before `A10`). Items keep their registration order within a mod, and searching only filters results without reordering them.
+- **Debug material spawning (opt-in):** A new "Allow spawning missing chain materials" developer option, off by default, adds a "Spawn missing materials" button to bookmark chain bills in Cheat mode. It re-checks carried and nearby stock and gives only the concrete solid shortages without crafting; liquid requirements, unresolved ingredient choices, and unsupported damaged-only requirements reject the whole batch. Multiplayer uses the server's `give` permission and the existing per-command limit.
+- **Packaging:** `scripts/Release.ps1` builds, runs the regression tests, and produces a versioned install ZIP with a `.zip.sha256` checksum file. Asset folder casing is unified so the packaged texture paths no longer rely on Windows being case-insensitive.
+- **Installation:** Extract the ZIP’s single `NotEnoughItems` folder into `BepInEx/plugins/`. If you have customized translations, back them up before replacing files; the install script preserves existing language files.
+
+### 中文
+- **目录排序：** 物品目录先显示原版物品，再按模组显示名称把各模组的物品排成连续区块。名称忽略大小写和首尾空白，连续数字按数值比较（如 `A2` 在 `A10` 前）。模组内保持注册顺序，搜索只筛选结果，不改变顺序。
+- **调试刷取（默认关闭）：** 「开发调试」页新增可保存的「允许刷取合成链缺失原料」选项。开启后，作弊模式的书签合成链账单会显示「刷取缺失原料」按钮，重新核对随身和附近库存，只发放缺少的具体实物，不执行制作；液体需求、尚未选定的原料和无法满足的损坏要求会整批拒绝。联机沿用服务器的 `give` 权限和单批上限。
+- **打包：** `scripts/Release.ps1` 会构建、运行回归测试并生成带版本号的安装 ZIP 与 `.zip.sha256` 校验文件；资源目录大小写已统一，包内贴图路径不再依赖 Windows 的大小写不敏感行为。
+- **安装：** 将 ZIP 中唯一的 `NotEnoughItems` 文件夹解压至 `BepInEx/plugins/`。手动覆盖前请备份自定义翻译；安装脚本会保留已有语言文件。
+
 ## 0.1.33
 
 ### English
