@@ -51,7 +51,7 @@ pwsh -File ./scripts/Release.ps1
 2. 在 [Nexus 更新记录](<docs/release/nexus/CHANGELOG_NEXUS.md>) 顶部的 `## 未发布` 下分别写 `### English` 和 `### 中文` 条目。
 3. 提交前运行 `pwsh -File ./scripts/Release.ps1 -Bump patch`。普通修复和文档改动用 `patch`，兼容性新增功能用 `minor`，不兼容变更用 `major`；也可指定更高的 `MAJOR.MINOR.PATCH` 版本。将版本配置、两份更新记录和同步后的 [Nexus 页面字段](<docs/release/nexus/NEXUS_METADATA.md>) 与本批改动一起交付。
 
-`-Bump` 会把两份 `## 未发布` 标题改为新版本号，并同步版本配置和 Nexus 页面字段。发布脚本会在构建前拦截版本倒退、日志缺失或版本不一致。相对当前 Git `HEAD` 有已暂存、未暂存或未忽略的新增文件时，版本必须高于 `HEAD` 的版本；Git 忽略的构建产物不算改动。不带 `-Bump` 可重跑干净的已提交版本，或已升版且日志齐全的当前工作区。
+`-Bump` 会把两份 `## 未发布` 标题改为新版本号，并同步版本配置和 Nexus 页面字段。发布脚本会在构建前拦截版本倒退、日志缺失或版本不一致，并校验 [CHANGELOG_NEXUS_PLAIN.txt](<docs/release/nexus/CHANGELOG_NEXUS_PLAIN.txt>) 只有英文和中文两行纯文本，不含 Markdown、BBCode、列表符号或引用前缀。相对当前 Git `HEAD` 有已暂存、未暂存或未忽略的新增文件时，版本必须高于 `HEAD` 的版本；Git 忽略的构建产物不算改动。不带 `-Bump` 可重跑干净的已提交版本，或已升版且日志齐全的当前工作区。
 
 ## Nexus Mods 发布资料
 

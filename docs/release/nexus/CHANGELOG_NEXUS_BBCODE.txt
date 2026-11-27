@@ -6,12 +6,12 @@
 
 [b]English[/b]
 [list]
-[*] [b]Release documentation:[/b] Added a bilingual Nexus BBCode changelog and completed the historical notes for the [i]Ctrl+Shift+M[/i] chain-shortage shortcut and reusable-tool counts. No in-game behavior changed in this update.
+[*] [b]Release documentation:[/b] Added bilingual Nexus changelog sources and a plain-text version for the Nexus Changelog field; release packaging validates that it contains only two unformatted lines. The Markdown and BBCode files remain for maintenance or editors that support those formats. No in-game behavior changed in this update.
 [/list]
 
 [b]中文[/b]
 [list]
-[*] [b]发布文档：[/b] 新增中英双语 Nexus BBCode 更新记录，补齐 [i]Ctrl+Shift+M[/i] 合成链缺料快捷刷取和不消耗工具计数修复的历史条目。本次不改变游戏内行为。
+[*] [b]发布文档：[/b] 新增中英双语 Nexus 更新记录源文件和供 Nexus Changelog 字段使用的纯文本版本；发布打包会校验该文件仅含两行无格式文本。Markdown 与 BBCode 文件继续用于维护或支持对应格式的编辑器。本次不改变游戏内行为。
 [/list]
 
 [size=4][b]0.1.37[/b][/size]

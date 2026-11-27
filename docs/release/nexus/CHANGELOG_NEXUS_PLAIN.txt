@@ -1,0 +1,2 @@
+Release documentation: Added bilingual Nexus changelog sources and a plain-text version for the Nexus Changelog field; the Markdown and BBCode files remain for maintenance or editors that support those formats. No in-game behavior changed.
+发布文档：新增中英双语 Nexus 更新记录源文件和供 Nexus Changelog 字段使用的纯文本版本；Markdown 与 BBCode 文件继续用于维护或支持对应格式的编辑器。本次不改变游戏内行为。

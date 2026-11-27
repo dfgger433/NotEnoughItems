@@ -11,6 +11,7 @@ $propsRelativePath = 'src/Directory.Build.props'
 $propsPath = Join-Path $projectRoot $propsRelativePath
 $changelogPath = Join-Path $projectRoot 'docs/CHANGELOG.md'
 $nexusChangelogPath = Join-Path $projectRoot 'docs/release/nexus/CHANGELOG_NEXUS.md'
+$nexusPlainChangelogPath = Join-Path $projectRoot 'docs/release/nexus/CHANGELOG_NEXUS_PLAIN.txt'
 $nexusMetadataPath = Join-Path $projectRoot 'docs/release/nexus/NEXUS_METADATA.md'
 $changelogs = @(
     @{ Path = $changelogPath; Label = 'docs/CHANGELOG.md'; Languages = @() },
@@ -53,6 +54,21 @@ function Assert-WorkspaceVersion([string]$version) {
     $changes = Invoke-ReleaseGit @('status', '--porcelain=v1', '--untracked-files=normal', '--ignore-submodules=none')
     if ($changes -and [version]$version -eq [version]$headVersion) {
         throw "The Git working tree has changes, but the release version is still $headVersion (Git HEAD). Update both changelogs and run Release.ps1 -Bump patch (or use a higher version); do not commit the changes at the old version."
+    }
+}
+
+function Assert-PlainNexusChangelog([string]$version) {
+    if (-not (Test-Path -LiteralPath $nexusPlainChangelogPath -PathType Leaf)) {
+        throw "docs/release/nexus/CHANGELOG_NEXUS_PLAIN.txt is required for the Nexus Changelog field."
+    }
+    $lines = @(Get-Content -LiteralPath $nexusPlainChangelogPath)
+    if ($lines.Count -ne 2) {
+        throw "docs/release/nexus/CHANGELOG_NEXUS_PLAIN.txt must contain exactly two non-empty lines: English followed by Chinese."
+    }
+    foreach ($line in $lines) {
+        if ([string]::IsNullOrWhiteSpace($line) -or $line -match '[\[\]`*_>#]|^\s*[-+*]\s|^\s*\d+[.)]\s') {
+            throw "docs/release/nexus/CHANGELOG_NEXUS_PLAIN.txt must contain plain text without Markdown, BBCode, list markers, or quote prefixes."
+        }
     }
 }
 
@@ -104,6 +120,7 @@ function Resolve-NewVersion([string]$requested, [string]$current) {
 
 # Read-only checks run before any file is rewritten, so a failed preflight leaves the tree untouched.
 function Assert-BumpInputs([string]$current, [string]$next) {
+    Assert-PlainNexusChangelog $current
     if ([version]$next -le [version]$current) {
         throw "New version $next is not greater than the current version $current."
     }
@@ -157,6 +174,7 @@ function Set-SourceVersion([string]$current, [string]$next) {
 
 # The release rule: every version reference must agree with src/Directory.Build.props.
 function Assert-ReleaseMetadata([string]$version) {
+    Assert-PlainNexusChangelog $version
     $problems = [System.Collections.Generic.List[string]]::new()
 
     foreach ($entry in $changelogs) {

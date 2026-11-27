@@ -11,8 +11,9 @@
 | [NEXUS_METADATA.md](<NEXUS_METADATA.md>) | 标题、短简介、分类、版本、标签、依赖、许可与主文件字段 |
 | [NEXUS_DESCRIPTION_BBCODE.txt](<NEXUS_DESCRIPTION_BBCODE.txt>) | 粘贴到 Nexus 的 BBCode 描述编辑器 |
 | [NEXUS_DESCRIPTION.md](<NEXUS_DESCRIPTION.md>) | 便于阅读和维护的 Markdown 页面描述 |
-| [CHANGELOG_NEXUS.md](<CHANGELOG_NEXUS.md>) | 对应版本的中英文 Markdown 更新记录 |
-| [CHANGELOG_NEXUS_BBCODE.txt](<CHANGELOG_NEXUS_BBCODE.txt>) | 可直接粘贴到 Nexus 编辑器的中英文 BBCode 更新记录 |
+| [CHANGELOG_NEXUS.md](<CHANGELOG_NEXUS.md>) | 对应版本的中英文 Markdown 维护记录 |
+| [CHANGELOG_NEXUS_PLAIN.txt](<CHANGELOG_NEXUS_PLAIN.txt>) | 可直接粘贴到 Nexus Changelog 字段的中英文纯文本变更正文，每条一行 |
+| [CHANGELOG_NEXUS_BBCODE.txt](<CHANGELOG_NEXUS_BBCODE.txt>) | 仅供已确认支持 BBCode 的其他编辑器使用的中英文富文本记录 |
 | [NEXUS_ASSET_CREDITS.md](<NEXUS_ASSET_CREDITS.md>) | 配图的来源、署名、许可与发布限制 |
 
 ---
@@ -51,6 +52,6 @@ python generate_nexus_assets.py --extract-only --game-data '..\..\CasualtiesUnkn
 ## 发布步骤建议 / Recommended Release Workflow
 
 1. **核对公开分发权限**：按[第三方鸣谢与许可](<../../THIRD_PARTY_NOTICES.md>)与[配图素材来源](<NEXUS_ASSET_CREDITS.md>)核对混合图集、Modernity 许可版本差异和应随包提供的源码／署名。未核清前只整理本地草稿，不公开上传。
-2. **填写页面与依赖**：按[页面字段表](<NEXUS_METADATA.md>)填写标题、短简介、分类、标签和权限。将 **BepInEx 5 (Mono)** 列为必需外部依赖，**CUCoreLib 1.1+** 列为必需站内依赖，其余列为可选。粘贴 [BBCode 描述](<NEXUS_DESCRIPTION_BBCODE.txt>) 后，在页面预览中检查排版和披露信息。
-3. **升版并核对 Main Files**：按[每次修改的升版规则](<../../../README.md#每次修改都要升版并补日志>)，先补好[项目更新记录](<../../CHANGELOG.md>)与[本目录中英更新记录](<CHANGELOG_NEXUS.md>)，再从 Git 源码工作区运行 `pwsh -File ./scripts/Release.ps1 -Bump patch`（按变更选择 `patch`、`minor`、`major` 或指定更高版本）。脚本会同步两份更新记录和[页面字段表](<NEXUS_METADATA.md>)的版本，有改动却没升版、缺少日志条目或各处版本不一致时会在构建前停止。通过检查后构建、运行回归测试，并生成 `dist/NotEnoughItems-<版本>.zip` 和配套 `.zip.sha256`（并打印 SHA-256）。打开 ZIP，确认顶层只有 `NotEnoughItems/`，其中有 `NotEnoughItems.dll`、`LICENSE`、`COPYING` 和本清单列出的 `docs/release/nexus/` 文件。按[页面字段表](<NEXUS_METADATA.md>)设置主文件版本，并粘贴[更新记录](<CHANGELOG_NEXUS.md>)中同版本的条目。
+2. **填写页面与依赖**：按[页面字段表](<NEXUS_METADATA.md>)填写标题、短简介、分类、标签和权限。将 **BepInEx 5 (Mono)** 列为必需外部依赖，**CUCoreLib 1.1+** 列为必需站内依赖，其余列为可选。粘贴 [BBCode 描述](<NEXUS_DESCRIPTION_BBCODE.txt>) 后，在页面预览中检查排版和披露信息；Changelog 字段使用[纯文本版更新记录](<CHANGELOG_NEXUS_PLAIN.txt>)，不要粘贴 BBCode 或 `>` 引用前缀。
+3. **升版并核对 Main Files**：按[每次修改的升版规则](<../../../README.md#每次修改都要升版并补日志>)，先补好[项目更新记录](<../../CHANGELOG.md>)与[本目录中英更新记录](<CHANGELOG_NEXUS.md>)，再从 Git 源码工作区运行 `pwsh -File ./scripts/Release.ps1 -Bump patch`（按变更选择 `patch`、`minor`、`major` 或指定更高版本）。脚本会同步两份更新记录和[页面字段表](<NEXUS_METADATA.md>)的版本，有改动却没升版、缺少日志条目或各处版本不一致时会在构建前停止。通过检查后构建、运行回归测试，并生成 `dist/NotEnoughItems-<版本>.zip` 和配套 `.zip.sha256`（并打印 SHA-256）。打开 ZIP，确认顶层只有 `NotEnoughItems/`，其中有 `NotEnoughItems.dll`、`LICENSE`、`COPYING` 和本清单列出的 `docs/release/nexus/` 文件。按[页面字段表](<NEXUS_METADATA.md>)设置主文件版本，并粘贴[纯文本更新记录](<CHANGELOG_NEXUS_PLAIN.txt>)中同版本的条目。
 4. **准备 Media / Images**：从源码树取用上方两张发布图，按[配图素材来源](<NEXUS_ASSET_CREDITS.md>)署名，并标注为离线界面示意图。确认许可后再上传。
