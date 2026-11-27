@@ -4,6 +4,14 @@
 
 ---
 
+## 0.1.37
+
+### English
+- **Debug tab:** Moved “Retry catalog refresh” directly below the heading, followed by “Allow spawning missing chain materials” and “Fill two pages of method tabs.”
+
+### 中文
+- **调试页：** 将「重试刷新目录」移到标题正下方，之后依次是「允许刷取合成链缺失原料」和「填充两页制作方式」开关。
+
 ## 0.1.36
 
 ### English
