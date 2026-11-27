@@ -1,0 +1,123 @@
+[size=5][b]Not Enough Items (NEI) — Changelog[/b][/size]
+
+[line]
+
+[size=4][b]0.1.38[/b][/size]
+
+[b]English[/b]
+[list]
+[*] [b]Release documentation:[/b] Added a bilingual Nexus BBCode changelog and completed the historical notes for the [i]Ctrl+Shift+M[/i] chain-shortage shortcut and reusable-tool counts. No in-game behavior changed in this update.
+[/list]
+
+[b]中文[/b]
+[list]
+[*] [b]发布文档：[/b] 新增中英双语 Nexus BBCode 更新记录，补齐 [i]Ctrl+Shift+M[/i] 合成链缺料快捷刷取和不消耗工具计数修复的历史条目。本次不改变游戏内行为。
+[/list]
+
+[size=4][b]0.1.37[/b][/size]
+
+[b]English[/b]
+[list]
+[*] [b]Debug tab:[/b] Moved the “Retry catalog refresh” button directly below the heading. The “Allow spawning missing chain materials” toggle now sits between that button and “Fill two pages of method tabs.”
+[/list]
+
+[b]中文[/b]
+[list]
+[*] [b]调试页：[/b] 将「重试刷新目录」按钮移到标题正下方；「允许刷取合成链缺失原料」开关放在该按钮与「填充两页制作方式」之间。
+[/list]
+
+[size=4][b]0.1.36[/b][/size]
+
+[b]English[/b]
+[list]
+[*] [b]Chain shortage spawning:[/b] Restored the opt-in Debug toggle and material bill button. The same toggle now gates [i]Ctrl+Shift+M[/i]. In single-player, missing liquid mL is converted into full vanilla temporary bottles with the usual five-minute in-game lifetime; bottles and solids share the 64-object batch limit. In Together, a batch with any liquid shortage gives nothing, while pure-solid batches continue to use the server’s [i]give[/i] permission.
+[/list]
+
+[b]中文[/b]
+[list]
+[*] [b]合成链缺料刷取：[/b] 恢复「调试」页默认关闭的合成链缺料刷取开关和材料账单按钮；[i]Ctrl+Shift+M[/i] 也受此开关控制。单机液体缺口按 mL 换算为装满的原版临时瓶，沿用 5 分钟游戏时间寿命和 64 件单批上限。Together 含液体缺口的批次不会发放任何物品，纯固体批次仍沿用服务端 [i]give[/i] 权限。
+[/list]
+
+[size=4][b]0.1.35[/b][/size]
+
+[b]English[/b]
+[list]
+[*] [b]Release tooling:[/b] [i]scripts/Release.ps1 -Bump &lt;version&gt;[/i] names the release in both changelogs, updates the package version and Nexus metadata in one step, and refuses to package when any version reference is stale or a [i]## 未发布[/i] section is still pending.
+[*] [b]Documentation:[/b] The per-version steps are documented: add entries under [i]## 未发布[/i], then run the bump command to build the versioned ZIP and its [i].zip.sha256[/i]. No in-game behavior changed in this update.
+[/list]
+
+[b]中文[/b]
+[list]
+[*] [b]发布工具：[/b] [i]scripts/Release.ps1 -Bump &lt;版本&gt;[/i] 会改写两份更新记录的标题、同步安装包版本与 Nexus 页面字段；任何版本引用不一致或仍留有 [i]## 未发布[/i] 时都拒绝打包。
+[*] [b]文档：[/b] 每次升版的步骤已写入发布文档：先在 [i]## 未发布[/i] 下补条目，再运行升版命令生成带版本号的 ZIP 与 [i].zip.sha256[/i]。本次没有游戏内行为变化。
+[/list]
+
+[size=4][b]0.1.34[/b][/size]
+
+[b]English[/b]
+[list]
+[*] [b]Catalog ordering:[/b] Vanilla items are listed first, followed by one continuous block for each mod sorted by its display name. Names ignore case and whitespace, and consecutive digit runs are compared numerically, so [i]A2[/i] comes before [i]A10[/i]. Items keep registration order within each mod; search filters results without reordering them.
+[*] [b]Release packaging:[/b] Added [i]scripts/Release.ps1[/i], which builds, runs regression tests, and creates a versioned install ZIP with a [i].zip.sha256[/i] checksum. [i]scripts/Build.ps1[/i] uses the same packaging flow and prints the checksum.
+[*] [b]Chain shortage shortcut:[/b] In Cheat mode, hover over an enabled green chain bracket or open that group’s dependency tree and press [i]Ctrl+Shift+M[/i]. NEI rechecks carried and nearby stock and spawns only the specific missing items without crafting. Liquid shortages, unresolved ingredient choices, and damage or property requirements the spawned items cannot satisfy reject the whole batch. Multiplayer uses the server’s [i]give[/i] permission, the per-batch limit, and resource-item validation.
+[*] [b]Reusable tools:[/b] Crafting chains no longer count a reusable tool’s quality value as item quantity. One qualifying tool covers all matching tool slots and all craft batches and appears only once in the tool list. A qualifying tool already in inventory or bookmarks is removed from the shortage list; a tool shortage counts as one item.
+[*] [b]Asset paths:[/b] Asset folders and code references now consistently use lowercase [i]assets/notenoughitems/…[/i] paths, so packaged texture paths no longer rely on Windows being case-insensitive.
+[/list]
+
+[b]中文[/b]
+[list]
+[*] [b]物品目录排序：[/b] NEI 物品目录先显示原版物品，再按模组显示名称连续排列各模组的物品。名称忽略大小写和空白，连续数字片段按数值比较（如 [i]A2[/i] 在 [i]A10[/i] 前）；模组内保持注册顺序，搜索只筛选，不重排。
+[*] [b]一键发布：[/b] 新增 [i]scripts/Release.ps1[/i]：构建和回归测试通过后生成带版本号的安装 ZIP，并附上 [i].zip.sha256[/i] 校验文件；[i]scripts/Build.ps1[/i] 以同样的方式打包并打印校验值。
+[*] [b]合成链缺料快捷刷取：[/b] 作弊模式下，把鼠标移到已启用的绿色合成链括号（或打开该组依赖树）按 [i]Ctrl+Shift+M[/i]，按当前随身与附近库存重新配平，只发放缺少的具体实物，不执行制作；液体、尚未选定物品的原料需求以及刷取后无法满足的损坏或性质要求会拒绝整批。联机沿用服务器的 [i]give[/i] 权限、单批上限和资源物品校验。
+[*] [b]不消耗工具的计数修复：[/b] 合成链不再把不消耗的工具按品质数值当作物品件数。同一工具可满足配方中的所有同类工具格和所有制作批数，工具栏只显示一件；随身或书签中有一件合格工具时，缺料清单不再重复列出该工具，工具缺口也只按一件计算。
+[*] [b]资源路径：[/b] 资源目录与代码引用统一使用小写的 [i]assets/notenoughitems/…[/i]，安装包内的贴图路径不再依赖 Windows 的大小写不敏感行为。
+[/list]
+
+[size=4][b]0.1.33[/b][/size]
+
+[b]English[/b]
+[list]
+[*] [b]Crafting chain fix:[/b] Bookmark chains now use intermediate items already in your inventory before scheduling prerequisite crafts. When stock covers the requirement, the chain skips that step and its raw materials. When stock is short, it schedules only the batches needed to cover the shortfall. The chain tooltip and dependency tree update their material and shortage lists accordingly.
+[*] [b]Installation:[/b] Extract the ZIP’s single [i]NotEnoughItems[/i] folder into [i]BepInEx/plugins/[/i]. If you have customized translations, back them up before replacing files; the install script preserves existing language files.
+[/list]
+
+[b]中文[/b]
+[list]
+[*] [b]合成链修复：[/b] 书签合成链优先使用背包已有的中间产物。库存足够时跳过对应前置步骤，不再计入其原料；库存不足时只为缺口安排所需批次。合成链提示与依赖树会显示重新计算的用料和缺料。
+[*] [b]安装：[/b] 将 ZIP 中唯一的 [i]NotEnoughItems[/i] 文件夹解压至 [i]BepInEx/plugins/[/i]。手动覆盖前请备份自定义翻译；安装脚本会保留已有语言文件。
+[/list]
+
+[size=4][b]0.1.32[/b][/size]
+
+[b]English[/b]
+[list]
+[*] [b]Streamlined packaging:[/b] The ZIP has one top-level [i]NotEnoughItems[/i] folder and can be extracted directly into [i]BepInEx/plugins/[/i]. Existing custom language files are preserved during installation.
+[*] [b]Unified documentation:[/b] License notices, upstream attributions, and asset sources are consolidated into [i]docs/[/i] and distributed alongside [i]NotEnoughItems.dll[/i].
+[*] [b]Standalone localization:[/b] UI strings are available in standalone JSON files under [i]Lang/[/i] and can be customized without recompiling; missing translations fall back to English.
+[*] [b]Texture standardization:[/b] GUI textures use the namespaced [i]assets/notenoughitems/textures/gui/[/i] layout while retaining custom resource-pack compatibility.
+[*] [b]Recipe tabs and controls:[/b] Selected and unselected crafting tabs, language dropdown arrows, button borders, hover states, and fractional-scale alignment were refined without changing click behavior.
+[*] [b]Together multiplayer crafting:[/b] [i]Shift+C[/i] and [i]Ctrl+Shift+C[/i] craft bookmark chains in compatible Together builds, waiting for server confirmation between batches. Orders with manually locked ingredients are not supported in multiplayer.
+[*] [b]Overlay and tooltip behavior:[/b] Native inventory tooltips remain in front when NEI overlaps the inventory. Shift-pinned chain previews, recipe navigation, ingredient candidates, and layout controls were refined for stable mouse interaction.
+[*] [b]Quantity and search:[/b] Cheat and bookmark actions share a multi-digit [i]1–64[/i] quantity selector. [i]@ModName[/i] searches ignore case and spaces, and optional Just-Unknown-Characters support adds Chinese Pinyin and initial-letter search.
+[*] [b]Fluid and property previews:[/b] Fluid quantities show accurate mL values with metric abbreviations; fluid candidates rotate in eligible slots, and [i]R[/i] can look up all items matching a hovered property ingredient.
+[*] [b]Recipe and crafting-chain workflow:[/b] Added recipe history navigation, Shift-pinned chain previews, inventory-aware chain balancing, automatic crafting and top-up shortcuts, native material validation, and clear missing-material diagnostics.
+[*] [b]Cheat fluids and display settings:[/b] Single-player Cheat mode can spawn selected fluids by amount or one full temporary bottle, while Together retains its existing item-giving rules. Display, language, layout, bookmark, and tooltip settings were expanded and persisted.
+[/list]
+
+[b]中文[/b]
+[list]
+[*] [b]精简安装包结构：[/b] ZIP 压缩包顶层直接为 [i]NotEnoughItems[/i] 单独目录，解压即可直接拖入 [i]BepInEx/plugins/[/i]；安装脚本保留已有语言配置文件。
+[*] [b]文档与授权规范化：[/b] 第三方鸣谢、开源许可证与素材溯源统一收录至 [i]docs/[/i]，并随 DLL 一并打包分发。
+[*] [b]独立外置本地化：[/b] 界面文本全面迁移至 [i]Lang/[/i] 目录下的 JSON 语言包，玩家可直接修改，缺失翻译回退到英文。
+[*] [b]现代贴图目录架构：[/b] 贴图资源按规范整理至 [i]assets/notenoughitems/textures/gui/[/i]，保留材质包覆盖接口。
+[*] [b]制作方式页签与控件优化：[/b] 重做选中和未选中页签背景，修复语言下拉栏、按钮边框、悬停状态及非整数缩放下的像素对齐问题，不改变点击行为。
+[*] [b]Together 联机批量制作：[/b] 在兼容版本中使用 [i]Shift+C[/i] 或 [i]Ctrl+Shift+C[/i] 制作合成链，每批等待服务器确认；不支持含手动锁定材料的联机自动制作订单。
+[*] [b]界面层级与悬浮提示：[/b] NEI 与原版背包重叠时保留原版物品提示；合成链固定预览、配方导航、候选原料和布局控件的鼠标交互更加稳定。
+[*] [b]数量选择与搜索语法：[/b] 数量选择框升级为多位数（[i]1–64[/i]），作弊与带量收藏共用；模组过滤 [i]@[/i] 忽略空格与大小写，并集成可选拼音首字母搜索。
+[*] [b]流体单位与性质候选：[/b] 流体容量精准显示 mL 及科学单位；候选格支持动态轮播，按 [i]R[/i] 可查询全游戏满足条件的容器或物品。
+[*] [b]配方与合成链工作流：[/b] 新增配方历史返回、Shift 固定合成链、按库存配平合成链、自动制作与补齐快捷键、原版材料核验及清晰的缺料提示。
+[*] [b]液体刷取与显示设置：[/b] 单机作弊模式可按数量刷取所选液体或右键刷取一瓶装满的临时瓶；Together 保留原有物品发放规则。显示、语言、布局、书签和悬浮框设置得到扩展并持久化。
+[/list]
+
+[line]
+
+[i]完整历史请参阅同目录的 CHANGELOG_NEXUS.md。[/i]

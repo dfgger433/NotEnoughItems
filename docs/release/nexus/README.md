@@ -11,7 +11,8 @@
 | [NEXUS_METADATA.md](<NEXUS_METADATA.md>) | 标题、短简介、分类、版本、标签、依赖、许可与主文件字段 |
 | [NEXUS_DESCRIPTION_BBCODE.txt](<NEXUS_DESCRIPTION_BBCODE.txt>) | 粘贴到 Nexus 的 BBCode 描述编辑器 |
 | [NEXUS_DESCRIPTION.md](<NEXUS_DESCRIPTION.md>) | 便于阅读和维护的 Markdown 页面描述 |
-| [CHANGELOG_NEXUS.md](<CHANGELOG_NEXUS.md>) | 对应版本的中英文更新记录 |
+| [CHANGELOG_NEXUS.md](<CHANGELOG_NEXUS.md>) | 对应版本的中英文 Markdown 更新记录 |
+| [CHANGELOG_NEXUS_BBCODE.txt](<CHANGELOG_NEXUS_BBCODE.txt>) | 可直接粘贴到 Nexus 编辑器的中英文 BBCode 更新记录 |
 | [NEXUS_ASSET_CREDITS.md](<NEXUS_ASSET_CREDITS.md>) | 配图的来源、署名、许可与发布限制 |
 
 ---
