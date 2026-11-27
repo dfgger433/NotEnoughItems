@@ -997,17 +997,18 @@ internal static class BookmarkParityTests
         const string oreId = "parity-spawn-ore";
         var catalog = new Catalog();
         catalog.RegisterItem(new CatalogItem(oreId, "Spawn ore"));
-        object Plan(ProviderRecipe recipe) => PlanCraft(catalog,
+        const string fluidId = "spawn-fluid", fluidKey = "liquid:spawn-fluid";
+        object Plan(ProviderRecipe recipe, Dictionary<string, int>? carried = null, Dictionary<string, int>? nearby = null) => PlanCraft(catalog,
             Entries(BalanceEntry("item:" + recipe.Outputs[0].ItemId, 1, recipe)), 0, topUp: false,
-            new Dictionary<string, int>());
-        string? CheckPlan(object plan, int maximum, out (string Id, int Amount)[] batch)
+            carried ?? new Dictionary<string, int>(), nearby: nearby);
+        string? CheckPlan(object plan, int maximum, out (string Id, int Amount)[] batch, Func<float>? getCapacity = null)
         {
             var policy = PluginType("MissingMaterialSpawnPolicy");
             var method = policy.GetMethod("Build", BindingFlags.Static | BindingFlags.NonPublic)!;
-            object?[] args = [catalog, plan, maximum,
+            object?[] args = [catalog, plan, maximum, getCapacity,
                 (Func<string, object[], string>)((key, _) => key), null];
             string? error = (string?)method.Invoke(null, args);
-            batch = ((IEnumerable)args[4]!).Cast<object>().Select(row =>
+            batch = ((IEnumerable)args[5]!).Cast<object>().Select(row =>
             {
                 var type = row.GetType();
                 var item = (CatalogItem)type.GetProperty("Item", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(row)!;
@@ -1024,10 +1025,35 @@ internal static class BookmarkParityTests
         Check(CheckPlan(plan, 1, out batch) == "chain.spawn.limit" && batch.Length == 0,
             "A shortage over the action cap is rejected atomically.");
 
-        var liquid = Recipe("spawn-liquid-target", [new RecipeIngredient("spawn-fluid", 2, isLiquid: true)],
-            [new RecipeOutput("spawn-liquid-result")]);
-        Check(CheckPlan(Plan(liquid), 64, out batch) == "chain.spawn.solid_only" && batch.Length == 0,
-            "Liquid milliliters are rejected instead of being interpreted as bottle counts.");
+        var liquid = Recipe("spawn-liquid-target",
+            [new RecipeIngredient(oreId, 2), new RecipeIngredient(fluidId, 1000, isLiquid: true),
+                new RecipeIngredient(fluidId, 851, isLiquid: true)], [new RecipeOutput("spawn-liquid-result")]);
+        var carried = new Dictionary<string, int> { [fluidKey] = 200 };
+        var nearby = new Dictionary<string, int> { [fluidKey] = 150 };
+        var liquidPlan = Plan(liquid, carried, nearby);
+        Amount(liquidPlan, "Missing", fluidKey, 1501);
+        Check(CheckPlan(liquidPlan, 64, out batch, () => 750f) == "chain.spawn.unsupported_item" && batch.Length == 0,
+            "Do not guess a bottle for an unknown liquid or spawn the solids from the same batch.");
+        catalog.RegisterItem(new CatalogItem(fluidId, "Spawn fluid", kind: CatalogItemKind.Liquid));
+        Check(CheckPlan(liquidPlan, 64, out batch, () => 750f) == null &&
+            batch.Contains((oreId, 2)) && batch.Contains((fluidId, 3)) && batch.Length == 2,
+            "Aggregate a concrete liquid's remaining mL after carried and nearby stock and round up by the actual bottle capacity.");
+        nearby[fluidKey] = 151;
+        Check(CheckPlan(Plan(liquid, carried, nearby), 4, out batch, () => 750f) == null && batch.Contains((fluidId, 2)),
+            "An exact multiple fits in that many bottles, and bottles and solids share the same cap.");
+        Check(CheckPlan(liquidPlan, 4, out batch, () => 750f) == "chain.spawn.limit" && batch.Length == 0,
+            "A combined solid/liquid batch beyond the object cap is rejected atomically.");
+        Check(CheckPlan(liquidPlan, 64, out batch) == "chain.spawn.together_liquid" && batch.Length == 0,
+            "Together rejects a mixed batch without giving even the solids.");
+        foreach (float badCapacity in new[] { 0f, -1f, float.NaN, float.PositiveInfinity })
+            Check(CheckPlan(liquidPlan, 64, out batch, () => badCapacity) == "actions.error.temporary_bottle_unavailable" && batch.Length == 0,
+                "An unusable bottle capacity must stop the entire batch.");
+        carried[fluidKey] = 1850;
+        Check(CheckPlan(Plan(liquid, carried), 3, out batch, () => 750f) == null && batch.Contains((fluidId, 1)),
+            "A positive shortage smaller than a bottle still gets one full bottle.");
+        carried[fluidKey] = 1851;
+        Check(CheckPlan(Plan(liquid, carried), 64, out batch) == null && batch.SequenceEqual(new[] { (oreId, 2) }),
+            "Together may give solids when the required liquid is already present.");
 
         var generic = Recipe("spawn-generic-target", [new RecipeIngredient("", requiredTag: "unselected-tag")],
             [new RecipeOutput("spawn-generic-result")]);

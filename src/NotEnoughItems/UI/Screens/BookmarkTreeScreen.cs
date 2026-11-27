@@ -113,10 +113,12 @@ internal sealed partial class NeiWindow
             y += 24;
         }
 
-        if (_treeView == TreeView.Bill && !_plugin.IsCrafting)
+        if (_treeView == TreeView.Bill && _plugin.DebugSpawnMissingMaterials && !_plugin.IsCrafting)
         {
-            NeiSkin.Label(new Rect(x, y, w, 18), L("chain.spawn.hotkey_hint"), muted: true);
-            y += 20;
+            bool enabled = !_producing && _bookmarkDrag == null && !_plugin.NativePointerActive && NeiActions.CanGive;
+            if (NeiSkin.Button(new Rect(x, y, w, 22), L("chain.spawn.button"), enabled, tooltip: L("chain.spawn.hotkey_hint")))
+                SpawnBookmarkGroupMissing(_treeGroup);
+            y += 26;
         }
 
         var viewport = new Rect(x, y, w, panel.yMax - y - 7);

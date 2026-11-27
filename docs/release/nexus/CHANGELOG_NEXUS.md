@@ -4,6 +4,14 @@
 
 ---
 
+## 未发布
+
+### English
+- **Chain shortage spawning:** The Debug opt-in (off by default) and bill button are back. The opt-in also gates `Ctrl+Shift+M`. Single-player converts missing liquid mL into full temporary bottles with the usual five-minute in-game lifetime. Bottles and solids share the 64-object cap. Together still uses the server's `give` permission for solids and rejects a batch with any liquid shortage before giving anything.
+
+### 中文
+- **合成链缺料刷取：** 恢复默认关闭的调试开关及账单按钮，并用同一个开关控制 `Ctrl+Shift+M`。单机按缺口 mL 刷取满临时瓶，沿用 5 分钟游戏时间寿命；瓶和固体共用 64 件上限。Together 的纯固体批次仍使用服务端 `give` 权限，含液体缺口时整批拒绝。
+
 ## 0.1.35
 
 ### English

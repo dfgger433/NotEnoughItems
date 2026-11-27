@@ -125,6 +125,7 @@ static int RunTests()
         ("catalog and bookmark giving share a 1–64 count and right click stays at one", SharedSlotGiveAmount),
         ("multi-digit quantities parse, clamp and survive config reload", CatalogQuantityTests.Run),
         ("spawn mode defaults to NEI and persists both choices in BepInEx config", SpawnModeConfig),
+        ("missing-material spawning is opt-in and the setting persists", MissingSpawnOptIn),
         ("vanilla spawning uses the player position for items and preserves NEI liquid delivery", SpawnPlacement),
         ("temporary bottles hold only the selected liquid at native capacity", FullTemporaryBottle),
         ("bookmark chain reports raw requirements and reuses byproducts across targets", BookmarkChainBalances),
@@ -497,7 +498,10 @@ static void BookmarkGroups()
 static void BookmarkShortcutHelp()
 {
     var ordinary = BookmarkHelp.Rows(page: false, hasEntries: true, chain: false, crafting: false, chinese: false, bookmarkKey: "Q").Split('\n');
-    var active = BookmarkHelp.Rows(page: false, hasEntries: true, chain: true, crafting: false, chinese: false, bookmarkKey: "Q").Split('\n');
+    var optedOut = BookmarkHelp.Rows(page: false, hasEntries: true, chain: true, crafting: false, chinese: false, bookmarkKey: "Q");
+    Check(!optedOut.Contains("Ctrl+Shift+M:"), "Do not advertise the disabled spawn shortcut.");
+    var active = BookmarkHelp.Rows(page: false, hasEntries: true, chain: true, crafting: false, chinese: false, bookmarkKey: "Q",
+        spawnMissingEnabled: true).Split('\n');
     Check(ordinary.Contains("Right click: enable chain") && !ordinary.Any(line => line.StartsWith("T:")), "Only an enabled chain opens a tree.");
     Check(active.Contains("Right click: disable chain") && active.Contains("T: inspect the crafting tree") &&
         active.Contains("Hold Shift: pin totals and show steps") &&
@@ -885,6 +889,28 @@ static void SpawnModeConfig()
     finally { File.Delete(path); }
 }
 
+static void MissingSpawnOptIn()
+{
+    string path = Path.Combine(AppContext.BaseDirectory, $"nei-spawn-opt-in-{Guid.NewGuid():N}.cfg");
+    const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+    var bind = typeof(Plugin).GetMethod("BindDebugSpawnMissingMaterials", flags)!;
+    BepInEx.Configuration.ConfigEntry<bool> Reload() => (BepInEx.Configuration.ConfigEntry<bool>)bind.Invoke(null,
+        [new BepInEx.Configuration.ConfigFile(path, saveOnInit: false)])!;
+
+    try
+    {
+        var entry = Reload();
+        Check(entry.Definition.Section == "NotEnoughItems" && entry.Definition.Key == "DebugSpawnMissingMaterials" && !entry.Value,
+            "Use the original settings key and leave the feature off by default.");
+        entry.Value = true;
+        entry = Reload();
+        Check(entry.Value, "Reload preserves the opt-in.");
+        entry.Value = false;
+        Check(!Reload().Value, "Reload preserves the opt-out.");
+    }
+    finally { File.Delete(path); }
+}
+
 static void SpawnPlacement()
 {
     var assembly = typeof(Catalog).Assembly;
@@ -918,6 +944,8 @@ static void FullTemporaryBottle()
     const System.Reflection.BindingFlags privateStatic = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
     var actions = typeof(Catalog).Assembly.GetType("NotEnoughItems.NeiActions", throwOnError: true)!;
     var fill = actions.GetMethod("FillTemporaryBottle", privateStatic)!;
+    var getCapacity = actions.GetMethod("GetTemporaryBottleCapacity", privateStatic)!;
+    float Capacity() => (float)getCapacity.Invoke(null, null)!;
     var prefabId = (string)actions.GetField("TemporaryBottleId", privateStatic)!.GetRawConstantValue()!;
     Equal(300f, (float)actions.GetField("TemporaryBottleLifetime", privateStatic)!.GetRawConstantValue()!, "Native crafting bottle lifetime");
     Check(prefabId == "craftingbottle", "Liquid giving uses the native temporary crafting bottle.");
@@ -932,6 +960,10 @@ static void FullTemporaryBottle()
     Item.GlobalItems = new Dictionary<string, ItemInfo> { [item.id] = stats };
     try
     {
+        Equal(750f, Capacity(), "Liquid shortage conversion uses the action-time native bottle capacity");
+        stats.capacity = float.NaN;
+        Check(Capacity() is float.NaN, "Capacity lookup does not cache a stale bottle record.");
+        stats.capacity = 750f;
         bottle.stack = [new LiquidStack("other", 12f), new LiquidStack("water", 25f)];
         fill.Invoke(null, [bottle, "water"]);
         Check(bottle.stack.Count == 1 && bottle.stack[0].liquidId == "water", "The bottle must not retain default or mixed contents.");

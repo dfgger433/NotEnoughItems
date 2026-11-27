@@ -5,7 +5,8 @@ namespace NotEnoughItems;
 // The data tooltip and the keyboard tutorial are separate views of the same bookmark target.
 internal static class BookmarkHelp
 {
-    internal static string Rows(bool page, bool hasEntries, bool chain, bool crafting, bool chinese, string? bookmarkKey)
+    internal static string Rows(bool page, bool hasEntries, bool chain, bool crafting, bool chinese, string? bookmarkKey,
+        bool spawnMissingEnabled = false)
     {
         var lines = new List<string>();
         void Add(string key, params object[] args) => lines.Add(NeiText.Get(key, chinese, args));
@@ -40,7 +41,7 @@ internal static class BookmarkHelp
                 {
                     Add(page ? "bookmark.help.page.inspect_ungrouped" : "bookmark.help.group.inspect_tree");
                     Add("bookmark.help.pin_totals");
-                    if (!page) Add("bookmark.help.spawn_missing");
+                    if (!page && spawnMissingEnabled) Add("bookmark.help.spawn_missing");
                 }
                 else
                 {

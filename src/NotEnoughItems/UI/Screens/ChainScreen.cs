@@ -304,7 +304,7 @@ internal sealed partial class NeiWindow
         var e = Event.current;
         if (e.type != EventType.Repaint || !BookmarkHelpHeld(e)) return false;
         _bookmarkHelp = (title, BookmarkHelp.Rows(page, hasEntries, chain, _plugin.IsCrafting, _plugin.Chinese,
-            _plugin.BookmarkKeyBound ? _plugin.BookmarkKey : null));
+            _plugin.BookmarkKeyBound ? _plugin.BookmarkKey : null, _plugin.DebugSpawnMissingMaterials));
         return true;
     }
 

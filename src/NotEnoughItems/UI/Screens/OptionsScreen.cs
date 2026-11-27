@@ -216,6 +216,9 @@ internal sealed partial class NeiWindow
     {
         NeiSkin.OptionsHeading(new Rect(row.x, row.y, row.width, 20), L("options.debug.title"));
         row.y += 28;
+        if (NeiSkin.Checkbox(row, L("options.debug.spawn_missing_materials"), _plugin.DebugSpawnMissingMaterials))
+            _plugin.DebugSpawnMissingMaterials = !_plugin.DebugSpawnMissingMaterials;
+        row.y += 30;
         if (NeiSkin.Button(row, L("options.debug.retry_catalog")))
         {
             _plugin.RetryCatalogRefresh();

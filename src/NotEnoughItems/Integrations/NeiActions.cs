@@ -160,23 +160,24 @@ internal static class NeiActions
     internal static Vector2 SpawnPosition(Vector2 player, int index, bool vanilla) => vanilla
         ? player : player + new Vector2((index % 7 - 3) * .10f, .4f);
 
-    // A chain bill measures liquids in mL, not bottles, and can contain unresolved
-    // requirements. Only concrete solid shortages can use the ordinary give path.
-    internal static string? BuildMissingMaterialBatch(Catalog catalog, BookmarkChainBalanceResult plan,
-        out List<MissingMaterialSpawn> batch) => MissingMaterialSpawnPolicy.Build(catalog, plan, MaxGiveAmount,
-            (key, args) => NeiText.Get(key, Plugin.Instance?.Chinese == true, args), out batch);
+    private static float GetTemporaryBottleCapacity() =>
+        Item.GlobalItems?.TryGetValue(TemporaryBottleId, out var info) == true && info is LiquidItemInfo bottle
+            ? bottle.capacity : 0f;
 
     internal static string SpawnMissingMaterials(Catalog catalog, Func<Body, BookmarkChainBalanceResult> calculate)
     {
+        if (Plugin.Instance?.DebugSpawnMissingMaterials != true) return Text("chain.spawn.opt_in_required");
         var blocked = GetContext(out var camera, out var session);
         if (blocked != null) return blocked;
         if (camera.dragItem) return Text("actions.error.finish_drag");
 
         try
         {
-            var error = BuildMissingMaterialBatch(catalog, calculate(camera.body), out var batch);
+            bool offline = session.Access == CheatAccess.Offline;
+            var error = MissingMaterialSpawnPolicy.Build(catalog, calculate(camera.body), MaxGiveAmount,
+                offline ? GetTemporaryBottleCapacity : null, Text, out var batch);
             if (error != null) return error;
-            if (session.Access != CheatAccess.Offline)
+            if (!offline)
             {
                 var command = CheatPermission.GiveBatchCommand(batch.Select(row => (row.Item.Id, row.Amount)), MaxGiveAmount);
                 if (command == null) return Text("actions.error.invalid_multiplayer_item");

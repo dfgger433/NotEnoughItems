@@ -33,6 +33,7 @@ public sealed class Plugin : BaseUnityPlugin
     private Harmony? _harmony;
     private ConfigEntry<bool> _enabled = null!;
     private ConfigEntry<bool> _allowCheats = null!;
+    private ConfigEntry<bool> _debugSpawnMissingMaterials = null!;
     private ConfigEntry<SpawnMode> _spawnMode = null!;
     private ConfigEntry<float> _scale = null!;
     private ConfigEntry<KeyCode> _toggle = null!;
@@ -140,6 +141,11 @@ public sealed class Plugin : BaseUnityPlugin
     private static bool SystemUsesChinese() => Application.systemLanguage is SystemLanguage.ChineseSimplified or SystemLanguage.ChineseTraditional;
 
     internal bool AllowCheats => _allowCheats.Value;
+    internal bool DebugSpawnMissingMaterials
+    {
+        get => _debugSpawnMissingMaterials.Value;
+        set => _debugSpawnMissingMaterials.Value = value;
+    }
     internal SpawnMode ItemSpawnMode
     {
         get => _spawnMode.Value == SpawnMode.SpawnToPlayer ? SpawnMode.SpawnToPlayer : SpawnMode.Nei;
@@ -182,11 +188,16 @@ public sealed class Plugin : BaseUnityPlugin
         new ConfigDescription("Shared quantity for left-click item giving in Cheat mode and bookmark quantity shortcuts.",
             new AcceptableValueRange<int>(1, NeiActions.MaxGiveAmount)));
 
+    internal static ConfigEntry<bool> BindDebugSpawnMissingMaterials(ConfigFile config) => config.Bind(
+        "NotEnoughItems", "DebugSpawnMissingMaterials", false,
+        "Enable the bookmark-chain missing-material button and shortcut. Still requires Cheat mode and authorized permissions.");
+
     private void Awake()
     {
         NeiText.Initialize(System.IO.Path.GetDirectoryName(typeof(Plugin).Assembly.Location), Logger.LogWarning);
         _enabled = Config.Bind("NotEnoughItems", "Enabled", true, "Show NEI beside inventory and the optional Inventory Terminal. Also changed by Game Settings and the toggle key.");
         _allowCheats = Config.Bind("NotEnoughItems", "AllowLocalCheats", false, "Opt in to cheats in single-player. Multiplayer mode uses the server's Together permissions instead.");
+        _debugSpawnMissingMaterials = BindDebugSpawnMissingMaterials(Config);
         _spawnMode = BindSpawnMode(Config);
         _scale = Config.Bind("NotEnoughItems", "Scale", 1f, new ConfigDescription("Sidebar scale multiplier.", new AcceptableValueRange<float>(0.7f, 1.4f)));
         _toggle = Config.Bind("NotEnoughItems", "Toggle", KeyCode.O, "Show or hide the NEI overlay on the open surface.");
