@@ -42,9 +42,7 @@ internal static class CatalogQuantityTests
         var plugin = typeof(Catalog).Assembly.GetType("NotEnoughItems.Plugin", throwOnError: true)!;
         var bind = plugin.GetMethod("BindSpawnAmount", InternalStatic)!;
         var slotAmount = Actions.GetMethod("SlotGiveAmount", InternalStatic)!;
-        var command = Actions.GetMethod("MultiplayerGiveCommand", InternalStatic)!;
         int FromSlot(int button, int value) => (int)slotAmount.Invoke(null, [button, value])!;
-        string? GiveCommand(int amount) => (string?)command.Invoke(null, ["food/energy-bar", amount]);
 
         string path = Path.Combine(AppContext.BaseDirectory, $"nei-catalog-quantity-{Guid.NewGuid():N}.cfg");
         ConfigEntry<int> Reload() => (ConfigEntry<int>)bind.Invoke(null, [new ConfigFile(path, saveOnInit: false)])!;
@@ -64,10 +62,6 @@ internal static class CatalogQuantityTests
         }
         finally { File.Delete(path); }
 
-        string[]? tokens = GiveCommand(64)?.Split(' ');
-        Check(tokens is { Length: 66 } && tokens[0] == "give" && tokens[1] == "@m" && tokens.Skip(2).All(token => token == "food/energy-bar"),
-            "The actual Together give path supports the full quantity as repeated resource IDs addressed only to the caller.");
-        Check(GiveCommand(0) == null && GiveCommand(65) == null, "The Together give path rejects counts outside the shared bounds.");
     }
 
     private static void CompactLayout()

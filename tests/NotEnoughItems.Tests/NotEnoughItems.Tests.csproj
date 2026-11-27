@@ -39,7 +39,10 @@
     <Reference Include="0Harmony" HintPath="$(GameRoot)/BepInEx/core/0Harmony.dll" />
     <Reference Include="UnityEngine.UI" HintPath="$(ManagedDir)/UnityEngine.UI.dll" />
     <Reference Include="Unity.TextMeshPro" HintPath="$(ManagedDir)/Unity.TextMeshPro.dll" />
-    <Compile Include="TooltipSmoke.cs;SurfaceSmoke.cs;CatalogQuantityTests.cs;GuiArtworkTests.cs" />
+    <Compile Include="TooltipSmoke.cs;SurfaceSmoke.cs;CatalogQuantityTests.cs;GuiArtworkTests.cs;TogetherCheatSmoke.cs" />
+    <None Include="$(GameRoot)/BepInEx/plugins/Together/CasualtiesMP.dll;$(GameRoot)/BepInEx/plugins/Together/LiteNetLib.dll"
+      Link="Together/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"
+      Condition="Exists('$(GameRoot)/BepInEx/plugins/Together/CasualtiesMP.dll') and Exists('$(GameRoot)/BepInEx/plugins/Together/LiteNetLib.dll')" />
     <None Include="$(GameRoot)/BepInEx/plugins/JustUnknownCharacters.dll" Link="JustUnknownCharacters.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('$(GameRoot)/BepInEx/plugins/JustUnknownCharacters.dll')" />
     <Compile Include="RecipeMethodsTests.cs;$(NeiSourceDir)Catalog/RecipeMethods.cs;CatalogListingTests.cs;$(NeiSourceDir)Catalog/CatalogListing.cs" />
   </ItemGroup>

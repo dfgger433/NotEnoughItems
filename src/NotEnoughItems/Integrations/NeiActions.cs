@@ -9,7 +9,7 @@ namespace NotEnoughItems;
 
 internal enum SpawnMode { Nei, SpawnToPlayer }
 
-/// <summary>Optional sandbox actions routed to the local game or the authorized Together command dispatcher.</summary>
+/// <summary>Optional sandbox actions routed to the local game or the server-authorized NEI channel.</summary>
 internal static class NeiActions
 {
     internal enum LocalMode
@@ -19,14 +19,13 @@ internal static class NeiActions
     }
 
     // Ordinary NEI item counts use 64 per stack. Keep at most one such batch per click:
-    // the native spawn loop and Together's give command each create one real object per item.
-    internal const int MaxGiveAmount = 64;
+    // the native spawn loop and NEI's Together channel create one real object per item.
+    internal const int MaxGiveAmount = CheatPermission.MaxItems;
     private const string TemporaryBottleId = "craftingbottle";
     private const float TemporaryBottleLifetime = 300f; // Same scaled lifetime as the native crafting output.
 
     internal static int ClampGiveAmount(int amount) => Math.Clamp(amount, 1, MaxGiveAmount);
     internal static int SlotGiveAmount(int button, int configuredAmount) => button == 1 ? 1 : ClampGiveAmount(configuredAmount);
-    internal static string? MultiplayerGiveCommand(string itemId, int amount) => CheatPermission.GiveCommand(itemId, amount, MaxGiveAmount);
 
     // A blank or zero draft doesn't replace the current setting. Saturate oversized
     // digit-only pastes while parsing, without overflowing even for very long input.
@@ -52,7 +51,7 @@ internal static class NeiActions
     internal static LocalMode Mode => _mode;
 
     /// <summary>Whether item-giving shortcuts are active for the current mode.</summary>
-    internal static bool CanGive => _mode == LocalMode.Cheat && GetContext(out _, out var session) == null && session.Supports("give");
+    internal static bool CanGive => _mode == LocalMode.Cheat && GetContext(out _, out _) == null;
 
     /// <summary>Whether a cheat mode can be entered. This deliberately excludes opt-in so the UI can explain it.</summary>
     internal static bool CanEnter => GetContext(out _, out _, requireEnabled: false, requireOptIn: false) == null;
@@ -67,6 +66,11 @@ internal static class NeiActions
     internal static void DisableOfflineCheats()
     {
         if (_enabledSession.Access == CheatAccess.Offline) SetMode(LocalMode.Recipe);
+    }
+
+    internal static void DisableMultiplayerCheats()
+    {
+        if (_enabledSession.Access is CheatAccess.Host or CheatAccess.GrantedClient) SetMode(LocalMode.Recipe);
     }
 
     /// <summary>Changes cheat mode for compatibility with existing shutdown/reset paths.</summary>
@@ -179,11 +183,12 @@ internal static class NeiActions
             if (error != null) return error;
             if (!offline)
             {
-                var command = CheatPermission.GiveBatchCommand(batch.Select(row => (row.Item.Id, row.Amount)), MaxGiveAmount);
-                if (command == null) return Text("actions.error.invalid_multiplayer_item");
+                var packet = CheatPermission.EncodeGive(batch.Select(row => (row.Item.Id, row.Amount)));
+                if (packet == null) return Text("actions.error.invalid_multiplayer_item");
                 foreach (var row in batch)
-                    if (!IsResourceItem(row.Item.Id)) return Text("chain.spawn.unsupported_item", row.Item.DisplayName);
-                return Submit(session, "give", command, out _) ?? Text("item.give_submitted");
+                    if (!TogetherCheats.IsResourceItem(row.Item.Id)) return Text("chain.spawn.unsupported_item", row.Item.DisplayName);
+                var submitError = Submit(session, camera.body, packet, out int left, out bool submitted);
+                return submitError ?? (submitted ? Text("item.give_submitted") : Text("chain.spawn.complete", batch.Sum(row => row.Amount), left));
             }
 
             // Resolve every prefab before creating anything. A factory can still fail
@@ -217,12 +222,6 @@ internal static class NeiActions
         }
     }
 
-    private static bool IsResourceItem(string id)
-    {
-        var prefab = Resources.Load<GameObject>(id);
-        return prefab && prefab.TryGetComponent<Item>(out _);
-    }
-
     /// <summary>Gives registered items or full temporary bottles to the local player. Returns null on success.</summary>
     private static string? Give(CatalogItem entry, int amount, out int dropped, out bool submitted)
     {
@@ -243,10 +242,10 @@ internal static class NeiActions
         {
             if (entry.IsLiquid)
                 return Text("actions.error.together_liquid");
-            var command = MultiplayerGiveCommand(itemId, amount);
-            if (command == null) return Text("actions.error.invalid_multiplayer_item");
-            if (!IsResourceItem(itemId)) return Text("actions.error.together_resource_items");
-            return Submit(session, "give", command, out submitted);
+            var packet = CheatPermission.EncodeGive([(itemId, amount)]);
+            if (packet == null) return Text("actions.error.invalid_multiplayer_item");
+            if (!TogetherCheats.IsResourceItem(itemId)) return Text("actions.error.together_resource_items");
+            return Submit(session, camera.body, packet, out dropped, out submitted);
         }
         var error = PrepareOfflineGive(entry, out var prefabId, out bool custom);
         if (error != null) return error;
@@ -428,19 +427,18 @@ internal static class NeiActions
         return null;
     }
 
-    private static string? Submit(CheatSession session, string name, string command, out bool submitted)
+    private static string? Submit(CheatSession session, Body body, byte[] packet, out int dropped, out bool submitted)
     {
+        dropped = 0;
         submitted = false;
         try
         {
-            if (!session.Supports(name)) return Text("actions.error.command_unavailable");
-            session.Dispatch(command);
-            submitted = true;
-            return null;
+            return TogetherCheats.Submit(session.Transport, body, packet, out dropped, out submitted)
+                ? null : Text("actions.error.submit_failed");
         }
         catch (Exception error)
         {
-            LogFailure(name, error);
+            LogFailure("Together NEI give", error);
             return Text("actions.error.submit_failed");
         }
     }

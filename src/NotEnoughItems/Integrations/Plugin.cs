@@ -18,6 +18,7 @@ namespace NotEnoughItems;
 [BepInDependency("net.cucorelib", "1.1")]
 [BepInDependency(GameSurface.TerminalGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency(PinyinSearch.PluginGuid, BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency(NativePlaySession.TogetherGuid, BepInDependency.DependencyFlags.SoftDependency)]
 [DefaultExecutionOrder(-300)]
 public sealed class Plugin : BaseUnityPlugin
 {
@@ -303,6 +304,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Update()
     {
+        if (_harmony is { } harmony) TogetherCheats.Update(harmony, Logger);
         ReadInput();
     }
 
@@ -574,6 +576,7 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void OnDisable()
     {
+        TogetherCheats.Suspend();
         _surface?.SetInputShield(transform, false);
         _window?.ResetView();
         _window?.Hide();
@@ -589,6 +592,7 @@ public sealed class Plugin : BaseUnityPlugin
         if (_enabled != null) _enabled.SettingChanged -= OnVisibilityChanged;
         BookmarkCrafting.Release();
         NativeTooltipPreview.Release();
+        TogetherCheats.Release();
         _harmony?.UnpatchSelf();
         NeiSkin.Release();
         NeiActions.Enabled = false;

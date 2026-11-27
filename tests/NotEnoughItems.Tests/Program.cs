@@ -94,11 +94,13 @@ static int RunTests()
         ("closing the inventory cancels a drag without cancelling ordinary radial transitions", DragInventoryClose),
         ("missed native release is cleared without stealing the release frame", MissedDragRelease),
         ("Together request receipts are owned, matched and collected at most once", TogetherCraftRequestTests.Run),
-        ("Together permissions distinguish hosts, authorized clients, and unknown sessions", MultiplayerPermissions),
-        ("multiplayer give only targets the caller and accepts bounded item tokens", MultiplayerGiveCommand),
+        ("Together cheat grants are server-session and player-instance scoped", MultiplayerPermissions),
+        ("NEI cheat packets accept only a bounded batch of resource IDs", MultiplayerGivePackets),
+        ("neiadmin matches one exact player or numeric ID and rejects ambiguous names", MultiplayerPlayerSelection),
         ("Tab key and character events do not transfer focus to NEI search", TabDoesNotFocusSearch),
 #if RECIPE_TESTS
         ("NEI exposes only recipe and cheat modes", NeiModeContract),
+        ("the installed Together binds the directional NEI cheat callbacks and native console input hook", TogetherCheatSmoke.Run),
         ("the installed JUC dictionary provides catalog pinyin", () =>
         {
             string provider = Path.Combine(AppContext.BaseDirectory, "JustUnknownCharacters.dll");
@@ -709,31 +711,51 @@ static void MissedDragRelease()
 
 static void MultiplayerPermissions()
 {
-    Check(CheatPermission.ForTogether(false, false, null, null, null, null) == CheatAccess.Offline, "No active transport is offline.");
-    Check(CheatPermission.ForTogether(false, true, false, true, true, true) == CheatAccess.Unavailable, "A connecting transport is not offline.");
-    Check(CheatPermission.ForTogether(null, false, null, null, true, true) == CheatAccess.Unavailable, "An unreadable network state fails closed.");
-    Check(CheatPermission.ForTogether(true, true, true, false, true, null) == CheatAccess.Host, "A host follows the server cheat rule.");
-    Check(CheatPermission.ForTogether(true, true, false, true, true, true) == CheatAccess.AdminClient, "An authorized client can submit through Together's admin dispatcher.");
-    Check(CheatPermission.ForTogether(true, true, false, true, true, false) == CheatAccess.Unavailable, "A client-cheats rule is not an admin grant.");
-    Check(CheatPermission.ForTogether(true, true, false, true, false, true) == CheatAccess.Unavailable, "Admin alone does not override a disabled cheat rule.");
-    Check(CheatPermission.ForTogether(true, true, true, true, true, true) == CheatAccess.Unavailable, "Inconsistent roles fail closed.");
+    var grants = new NeiCheatGrants<string>();
+    var transport = new object();
+    var connected = new string('a', 1);
+    var rejoined = new string('a', 1);
+    Check(!grants.Change(connected, true) && !grants.Allows(connected), "Without a server transport no grant can exist.");
+    grants.SetTransport(transport);
+    Check(!grants.TrySpend(connected, 2, query: false), "An ungranted player cannot submit a batch.");
+    Check(grants.Change(connected, true) && grants.Allows(connected) && !grants.Allows(rejoined), "Equal display names do not share a grant.");
+    Check(grants.TrySpend(connected, 2, query: true) && grants.TrySpend(connected, 2, query: false) &&
+        !grants.TrySpend(connected, 2.1f, query: false), "Status queries do not block the first batch, but bursts are limited.");
+    grants.SetTransport(transport);
+    Check(grants.Change(connected, false) && !grants.TrySpend(connected, 10, query: false), "Revocation stops the next request on the same connection.");
+    Check(grants.Change(connected, true), "A local host can grant again.");
+    grants.Change(connected, add: false); // The disconnect handler receives the departing instance.
+    Check(!grants.Allows(connected) && !grants.Allows(rejoined), "Disconnect removes the old object's grant; reconnect does not inherit it.");
+    Check(grants.Change(rejoined, true), "A new session member can be granted explicitly.");
+    grants.SetTransport(new object());
+    Check(!grants.Allows(rejoined), "No grant crosses rooms.");
 }
 
-static void MultiplayerGiveCommand()
+static void MultiplayerGivePackets()
 {
-    Check(CheatPermission.GiveCommand("food/energy-bar", 2, 64) == "give @m food/energy-bar food/energy-bar",
-        "Every item goes to the command caller as one bounded batch.");
-    foreach (string id in new[] { "", "rope 1", "@a", "rope\nheal", "rope;heal", "../rope", "//rope" })
-        Check(CheatPermission.GiveCommand(id, 1, 64) == null, $"Reject non-item or unsafe command token {id}.");
-    Check(CheatPermission.GiveCommand("rope", 0, 64) == null && CheatPermission.GiveCommand("rope", 65, 64) == null,
-        "Only quantities from 1 to 64 are valid.");
-    Check(CheatPermission.GiveCommand("rope", 64, 64)?.Split(' ').Skip(2).SequenceEqual(Enumerable.Repeat("rope", 64)) == true,
-        "A full batch sends all 64 items to the caller.");
-    Check(CheatPermission.GiveBatchCommand(new[] { ("rope", 3), ("cloth", 2) }, 64) ==
-        "give @m rope rope rope cloth cloth", "A batch command contains only the requested caller-bound resource IDs.");
-    Check(CheatPermission.GiveBatchCommand(new[] { ("rope", 64), ("cloth", 1) }, 64) == null &&
-        CheatPermission.GiveBatchCommand(new[] { ("rope 1", 1) }, 64) == null,
-        "A mixed batch cannot exceed its aggregate cap or inject command tokens.");
+    var batch = CheatPermission.EncodeGive([("food/energy-bar", 2), ("cloth", 62)]);
+    Check(batch != null && CheatPermission.DecodeGive(batch)?.SequenceEqual(
+        Enumerable.Repeat("food/energy-bar", 2).Concat(Enumerable.Repeat("cloth", 62))) == true,
+        "A full batch round-trips exactly, without a target or command field.");
+    foreach (string id in new[] { "", "rope 1", "@a", "rope\nheal", "rope;heal", "../rope", "//rope", new string('x', 129) })
+        Check(CheatPermission.EncodeGive([(id, 1)]) == null, $"Reject invalid resource token {id}.");
+    Check(CheatPermission.EncodeGive([("rope", 0)]) == null && CheatPermission.EncodeGive([("rope", 64), ("cloth", 1)]) == null,
+        "The aggregate item cap applies to both single- and mixed-item batches.");
+    Check(CheatPermission.DecodeGive([0]) is { Length: 0 }, "A permission query contains no item IDs.");
+    foreach (byte[] malformed in new byte[][] { [], [0, 1], [65], [1, 0], [1, 2, (byte)'a'], [1, 1, 255], [1, 1, (byte)'a', 0], new byte[CheatPermission.MaxPacketBytes + 1] })
+        Check(CheatPermission.DecodeGive(malformed) == null, "Truncated, oversized, non-ASCII and trailing payload data is rejected.");
+}
+
+static void MultiplayerPlayerSelection()
+{
+    var a = Tuple.Create("甲 玩家", (ushort)7);
+    var b = Tuple.Create("甲 玩家", (ushort)8);
+    var c = Tuple.Create("Alex Doe", (ushort)9);
+    var roster = new[] { a, b, c };
+    Tuple<string, ushort>? Find(string text) => CheatPermission.FindUniquePlayer(roster, text, p => p.Item1, p => p.Item2);
+    Check(Find("alex doe") == c && Find("id:8") == b, "Match a full display name with spaces or an explicit client ID.");
+    Check(Find("甲 玩家") == null && Find("Alex") == null && Find("@a") == null && Find("id:+8") == null,
+        "Reject ambiguous names, prefixes, selectors and malformed IDs.");
 }
 
 #if RECIPE_TESTS
