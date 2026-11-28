@@ -43,15 +43,19 @@ pwsh -File ./scripts/Release.ps1
 
 [Release.ps1](<scripts/Release.ps1>) 复用构建流程：以 Release 配置编译并运行回归测试，全部通过后，根据 [版本配置](<src/Directory.Build.props>) 中写入 DLL 的版本生成 `dist/NotEnoughItems-<版本>.zip`。ZIP 顶层只有 `NotEnoughItems/`。脚本会打印 ZIP 的 SHA-256，并在旁边生成 `.zip.sha256` 校验文件。它不会安装 Mod 或上传文件；重跑会替换该版本的本地产物。没有 Git 历史或只想试编译时，使用 [Build.ps1](<scripts/Build.ps1>)；它不执行发布门禁。
 
-### 每次修改都要升版并补日志
+### 何时升版并补日志
 
-代码、资源、脚本、测试和文档的修改都适用。把同一次交付的改动作为一批，**在提交或交付前主动升版、补齐两份更新记录**，无需另行提醒。细则见源码树中的 [AGENTS.md](<AGENTS.md>)。
+一批改动涉及 `src/` 的代码或构建配置、`assets/` 的贴图或相关资源、项目脚本或 `tests/` 的测试代码时，**提交或交付前只升一次补丁号（`patch`）**，即使同批也改了文档。只有用户明确指定时才升 `minor`、`major` 或指定的更高版本。只改 `docs/`、`README.md` 等纯文档时，不升版，不强制补发布日志，也不必重打发布包。细则见 [AGENTS.md](<AGENTS.md>)。
+
+需要升版时：
 
 1. 在 [项目更新记录](<docs/CHANGELOG.md>) 顶部的 `## 未发布` 下写本批变更的中文条目，可按「新增 / 修复 / 打包与文档」分节。
 2. 在 [Nexus 更新记录](<docs/release/nexus/CHANGELOG_NEXUS.md>) 顶部的 `## 未发布` 下分别写 `### English` 和 `### 中文` 条目。
-3. 提交前运行 `pwsh -File ./scripts/Release.ps1 -Bump patch`。普通修复和文档改动用 `patch`，兼容性新增功能用 `minor`，不兼容变更用 `major`；也可指定更高的 `MAJOR.MINOR.PATCH` 版本。将版本配置、两份更新记录和同步后的 [Nexus 页面字段](<docs/release/nexus/NEXUS_METADATA.md>) 与本批改动一起交付。
+3. 提交前默认运行 `pwsh -File ./scripts/Release.ps1 -Bump patch`，将同步后的版本配置、两份更新记录和 [Nexus 页面字段](<docs/release/nexus/NEXUS_METADATA.md>) 与本批改动一起交付。
 
-`-Bump` 会把两份 `## 未发布` 标题改为新版本号，并同步版本配置和 Nexus 页面字段。发布脚本会在构建前拦截版本倒退、日志缺失或版本不一致，并校验 [CHANGELOG_NEXUS_PLAIN.txt](<docs/release/nexus/CHANGELOG_NEXUS_PLAIN.txt>) 只有英文和中文两行纯文本，不含 Markdown、BBCode、列表符号或引用前缀。相对当前 Git `HEAD` 有已暂存、未暂存或未忽略的新增文件时，版本必须高于 `HEAD` 的版本；Git 忽略的构建产物不算改动。不带 `-Bump` 可重跑干净的已提交版本，或已升版且日志齐全的当前工作区。
+`-Bump` 会把两份 `## 未发布` 标题改为新版本号，并同步版本配置和 Nexus 页面字段。发布脚本会在构建前拦截版本倒退、日志缺失或版本不一致，并校验 [CHANGELOG_NEXUS_PLAIN.txt](<docs/release/nexus/CHANGELOG_NEXUS_PLAIN.txt>) 只有英文和中文两行纯文本，不含 Markdown、BBCode、列表符号或引用前缀。
+
+纯文档交付无需运行发布脚本。若手动运行该脚本打包，仍会检查 Git 工作区：有已暂存、未暂存或未忽略的新增文件时，版本必须高于 `HEAD` 的版本；Git 忽略的构建产物不算改动。不带 `-Bump` 可重跑干净的已提交版本，或已升版且日志齐全的当前工作区。
 
 ## Nexus Mods 发布资料
 
